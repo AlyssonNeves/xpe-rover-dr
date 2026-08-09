@@ -8,7 +8,7 @@ Educational and experimental mobile robotics platform based on LEGO MINDSTORMS E
 
 Rover-DR provides a modular foundation for the progressive development of monitoring, control, navigation and autonomous robotics capabilities on the LEGO EV3 platform.
 
-This increment centralizes Rover-DR configuration. Runtime defaults are exposed through a single application configuration module, while sensor and motor registry metadata is loaded from `config/rover_config.json` instead of being duplicated inside monitoring services.
+This increment connects the motor monitor to physical LEGO EV3 motors through `python-ev3dev2`. Motor definitions remain centralized in `config/rover_config.json`, while the monitoring service resolves `LargeMotor` and `MediumMotor` instances and publishes live read-only driver state without yet exposing movement commands.
 
 ## Platform
 
@@ -34,12 +34,15 @@ This increment centralizes Rover-DR configuration. Runtime defaults are exposed 
 - Basic CORS/OPTIONS support for read-only clients
 - Centralized REST, monitoring and lifecycle runtime defaults
 - JSON-based sensor and motor registry configuration
+- Read-only integration with physical `LargeMotor` and `MediumMotor` devices through `python-ev3dev2`
+- Live EV3 motor position, speed, duty cycle, state, driver name, maximum speed and polarity
+- Graceful fallback when EV3 motor hardware or the `ev3dev2` backend is unavailable
 - Startup validation of required configuration sections
 - Centralized application status/error logging
 - Coordinated startup and orderly shutdown
 - `SIGINT` and `SIGTERM` process handling
 
-> Motor execution commands, authentication and physical hardware control are intentionally deferred to later increments.
+> Physical motor **monitoring** is enabled in this increment. Motor execution commands, authentication and navigation remain intentionally deferred to later increments.
 
 ## Project structure
 
@@ -61,6 +64,7 @@ xpe-rover-dr/
 ├── config/
 │   └── rover_config.json
 ├── docs/
+│   ├── motor_hardware_validation.md
 │   └── rest_api_contract.md
 ├── ports/
 │   ├── controller_port.py
@@ -92,7 +96,7 @@ xpe-rover-dr/
 The project follows the initial boundaries of a Hexagonal Architecture:
 
 1. `rover_config.py` loads centralized runtime settings and registry metadata;
-2. monitoring services collect or produce state updates;
+2. monitoring services collect state updates, including read-only EV3 motor telemetry when hardware is available;
 3. dedicated `StateStore` repositories keep the latest thread-safe snapshots;
 4. output ports define sensor, motor, controller and Rover-state query contracts;
 5. output adapters read current state from those repositories;
@@ -137,13 +141,13 @@ GET /api/controller/status
 
 The API is read-only in this increment. Requests with `POST`, `PUT`, `PATCH` or `DELETE` return HTTP `405`.
 
-See [`docs/rest_api_contract.md`](docs/rest_api_contract.md) for the complete API and validation rules available in this increment.
+See [`docs/rest_api_contract.md`](docs/rest_api_contract.md) for the complete API and validation rules available in this increment. For physical motor verification, follow [`docs/motor_hardware_validation.md`](docs/motor_hardware_validation.md).
 
 Use `Ctrl+C` to request an orderly application shutdown.
 
 ## Status
 
-Centralized configuration with monitoring/state repositories, a validated read-only REST API and explicit application lifecycle management.
+Centralized configuration with live read-only EV3 motor integration, monitoring/state repositories, a validated REST API and explicit application lifecycle management.
 
 ## Author
 

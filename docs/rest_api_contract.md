@@ -103,6 +103,13 @@ is normalized to `TMP`.
 Known initial motor codes are `LLM`, `LMM`, `RMM` and `RLM`.
 Codes are case-insensitive at the application boundary.
 
+Motor snapshots are now populated from the configured `python-ev3dev2` motor
+classes when EV3 hardware is available. Complete snapshots include the
+configured class/address plus live `position`, `speed`, `duty_cycle`, `state`,
+`driver_name`, `max_speed`, `polarity`, `connected`, `source` and `error`
+fields. Hardware read failures do not stop the REST API; the affected motor is
+reported with `connected: false`.
+
 ## Controller
 
 | Method | Endpoint | Description |
@@ -140,7 +147,8 @@ lifecycle coordinator. Shutdown and restart are not exposed as REST commands.
 
 This API still contains no motor execution commands, navigation, sensor-mode
 changes, remote lifecycle operations, authentication, tokens or global
-hardware configuration. Those capabilities are introduced only in their
+hardware configuration. Read-only EV3 motor state is the only physical motor
+capability introduced in this increment. Those capabilities are introduced only in their
 respective later commits.
 
 
