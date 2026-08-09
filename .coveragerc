@@ -1,0 +1,20 @@
+[run]
+branch = True
+source =
+    app
+    services
+    adapters
+    ports
+    main
+
+[report]
+show_missing = True
+skip_covered = False
+precision = 0
+fail_under = 60
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+
+[xml]
+output = coverage.xml

@@ -198,3 +198,17 @@ This project is licensed under the MIT License. See `LICENSE` for details.
 ## Arquitetura hexagonal
 
 A camada REST foi separada do despacho de comandos. O transporte HTTP permanece em `adapters/in_rest_api_server.py`, o mapeamento de endpoints fica em `adapters/rest/command_routes.py` e o `CommandService` despacha comandos para handlers explícitos em `app/commands/`. Essa separação evita que detalhes HTTP se propaguem para os serviços e portas do Rover. Consulte `docs/hexagonal_architecture.md`.
+
+## Qualidade e testes automatizados
+
+A partir deste marco, o projeto possui uma suíte unitária organizada por domínio e
+quality gates executáveis localmente e no GitHub Actions. O pipeline verifica sintaxe,
+regras críticas de lint, complexidade ciclomática e cobertura automatizada mínima de 60%.
+
+```bash
+pip install -r requirements-dev.txt
+bash scripts/quality.sh
+```
+
+Os testes não exigem hardware EV3 físico; dependências de hardware são simuladas nas
+verificações automatizadas. Consulte `tests/README.md` para o escopo atual.
