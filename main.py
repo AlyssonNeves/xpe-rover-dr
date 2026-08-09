@@ -7,6 +7,7 @@ import signal
 
 from adapters.in_rest_api_server import RestApiServer
 from adapters.out_controller_monitor import ControllerMonitorAdapter
+from adapters.out_drive_service import DriveServiceAdapter
 from adapters.out_motor_monitor import MotorMonitorAdapter
 from adapters.out_rover_state_query import RoverStateQueryAdapter
 from adapters.out_sensor_monitor import SensorMonitorAdapter
@@ -16,6 +17,7 @@ from app.rover_config import REST_HOST, REST_PORT
 from services.app_logger import AppLogger
 from services.controller_monitor import ControllerMonitor
 from services.controller_state_store import ControllerStateStore
+from services.drive_service import DriveService
 from services.motor_monitor import MotorMonitor
 from services.motor_state_store import MotorStateStore
 from services.rover_state_service import RoverStateService
@@ -54,11 +56,15 @@ def build_application():
     )
     rover_state_port = RoverStateQueryAdapter(rover_state_service)
 
+    drive_service = DriveService(motor_port=motor_port)
+    drive_port = DriveServiceAdapter(drive_service)
+
     command_service = CommandService(
         sensor_port=sensor_port,
         motor_port=motor_port,
         controller_port=controller_port,
-        rover_state_port=rover_state_port
+        rover_state_port=rover_state_port,
+        drive_port=drive_port
     )
     rest_api = RestApiServer(command_service, REST_HOST, REST_PORT)
 

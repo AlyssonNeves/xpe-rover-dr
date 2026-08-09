@@ -100,5 +100,9 @@
         "max_speed_ratio": 1.0
       }
     }
+  },
+  "drive": {
+    "left_motor_code": "LLM",
+    "right_motor_code": "RLM"
   }
 }

@@ -128,6 +128,12 @@ class RestApiServer(object):
                         CommandActions.READ_ROVER_STATE
                     )
 
+                if path_parts == ["api", "drive", "status"]:
+                    return command_service.execute(
+                        CommandTargets.DRIVE,
+                        CommandActions.READ_DRIVE_STATUS
+                    )
+
                 if path_parts == ["api", "sensors"]:
                     return command_service.execute(
                         CommandTargets.SENSOR,
@@ -211,6 +217,20 @@ class RestApiServer(object):
                 return CommandResult.not_found("Endpoint not found")
 
             def _route_post(self, path_parts, body):
+                if path_parts == ["api", "drive", "tank"]:
+                    return command_service.execute(
+                        CommandTargets.DRIVE,
+                        CommandActions.DRIVE_TANK,
+                        body
+                    )
+
+                if path_parts == ["api", "drive", "stop"]:
+                    return command_service.execute(
+                        CommandTargets.DRIVE,
+                        CommandActions.STOP_DRIVE,
+                        body
+                    )
+
                 if path_parts == ["api", "motors", "synchronized"]:
                     return command_service.execute(
                         CommandTargets.MOTOR,

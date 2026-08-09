@@ -8,7 +8,7 @@ Educational and experimental mobile robotics platform based on LEGO MINDSTORMS E
 
 Rover-DR provides a modular foundation for the progressive development of monitoring, control, navigation and autonomous robotics capabilities on the LEGO EV3 platform.
 
-This increment adds motor safety supervision to the asynchronous command architecture. Every movement is now bounded by execution deadlines, continuous `run-forever` commands have an automatic watchdog, stalled motors are detected, safe-stop behavior is centralized and EV3 ramp parameters are applied before movement.
+This increment adds the first differential-drive abstraction above the motor command layer. The Rover can now treat the configured left and right traction motors as one drive subsystem, issue independent tank-style setpoints and stop both sides through a single application command while retaining the watchdog and motor-safety mechanisms introduced earlier.
 
 ## Platform
 
@@ -45,6 +45,9 @@ This increment adds motor safety supervision to the asynchronous command archite
 - Centralized default safe-stop action (`brake`)
 - Native EV3 acceleration/deceleration ramps before movement
 - Safety event metadata exposed in motor state snapshots
+- Differential-drive service using configured `LLM` and `RLM` traction motors
+- Independent left/right tank speed control through a synchronized motor batch
+- Unified drive status and two-motor stop operations
 - Consistent `400`, `404`, `405`, `500` and `503` API responses
 - Basic CORS/OPTIONS support
 - Graceful fallback when EV3 motor hardware or `ev3dev2` is unavailable
@@ -59,6 +62,7 @@ xpe-rover-dr/
 ├── adapters/
 │   ├── in_rest_api_server.py
 │   ├── out_controller_monitor.py
+│   ├── out_drive_service.py
 │   ├── out_motor_monitor.py
 │   ├── out_rover_state_query.py
 │   └── out_sensor_monitor.py
@@ -76,6 +80,7 @@ xpe-rover-dr/
 │   └── rest_api_contract.md
 ├── ports/
 │   ├── controller_port.py
+│   ├── drive_port.py
 │   ├── motor_port.py
 │   ├── rover_state_query_port.py
 │   └── sensor_port.py
@@ -86,6 +91,7 @@ xpe-rover-dr/
 │   ├── app_logger.py
 │   ├── controller_monitor.py
 │   ├── controller_state_store.py
+│   ├── drive_service.py
 │   ├── monitor_base.py
 │   ├── motor_monitor.py
 │   ├── motor_state_store.py
@@ -112,10 +118,11 @@ The project continues to follow Hexagonal Architecture boundaries:
 4. one priority queue and one worker are maintained per configured motor;
 5. thread-safe `StateStore` repositories keep current hardware snapshots;
 6. output ports define query and motor-orchestration contracts;
-7. adapters expose the stores and motor service to the application layer;
-8. `CommandService` validates requests before queue admission;
-9. `RestApiServer` maps HTTP requests to application commands;
-10. `RoverApplication` owns startup and orderly shutdown.
+7. adapters expose the stores, motor service and differential-drive service to the application layer;
+8. `DriveService` coordinates the configured left/right traction motors without accessing EV3 hardware directly;
+9. `CommandService` validates requests before queue admission;
+10. `RestApiServer` maps HTTP requests to application commands;
+11. `RoverApplication` owns startup and orderly shutdown.
 
 ![Hexagonal Architecture](assets/images/hexagonal_architecture.png)
 
@@ -152,6 +159,9 @@ POST /api/motors/LLM/run-to-rel-pos
 POST /api/motors/LLM/cancel
 POST /api/motors/LLM/stop
 POST /api/motors/synchronized
+GET  /api/drive/status
+POST /api/drive/tank
+POST /api/drive/stop
 GET  /api/motor-commands
 GET  /api/motor-commands/1
 GET  /api/motors/LLM/commands
@@ -165,7 +175,7 @@ Use `Ctrl+C` to request an orderly application shutdown.
 
 ## Status
 
-Centralized configuration, live EV3 motor integration, prioritized command orchestration, synchronized scheduling, monotonic deadlines, run-forever watchdogs, stall detection and safe motor shutdown.
+Centralized configuration, live EV3 motor integration, prioritized command orchestration, synchronized scheduling, motor safety supervision and initial differential-drive control.
 
 ## Author
 

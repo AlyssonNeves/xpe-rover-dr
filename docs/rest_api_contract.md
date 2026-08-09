@@ -121,7 +121,7 @@ Content-Type: application/json
 }
 ```
 
-A `run-forever` command remains `RUNNING` until cancelled or stopped. No watchdog exists yet in this increment.
+A `run-forever` command remains `RUNNING` until cancelled, stopped or terminated by the configured watchdog.
 
 ### Run to relative position
 
@@ -209,10 +209,66 @@ The server assigns a shared `batch_id` and `scheduled_start_at` timestamp. Indep
 - `watchdog_ms`: optional integer from `100` through `600000` milliseconds for `run-forever`;
 - request body: JSON object no larger than 8192 bytes.
 
+
+## Differential drive
+
+This increment introduces a drive-level abstraction above individual motor
+commands. The configured traction pair is `LLM` (left) and `RLM` (right).
+The drive service does not access `ev3dev2` directly; it delegates to the
+existing motor port and synchronized command machinery.
+
+### Drive status
+
+```http
+GET /api/drive/status
+```
+
+Returns the configured traction motor codes, current motor snapshots and the
+last drive-level request. No odometry or pose information is provided yet.
+
+### Tank control
+
+```http
+POST /api/drive/tank
+Content-Type: application/json
+```
+
+```json
+{
+  "left_speed_sp": 300,
+  "right_speed_sp": 250,
+  "priority": 60,
+  "watchdog_ms": 2000,
+  "stop_action": "brake"
+}
+```
+
+`left_speed_sp` and `right_speed_sp` are independent signed EV3 speed
+setpoints in the range `-2000` through `2000`. Zero is accepted at drive level
+so one side may remain stationary during a pivot. The pair is submitted as a
+synchronized `run-forever` batch and therefore normally returns `202 Accepted`
+with a shared `batch_id`. If both speeds are zero, the request is treated as a
+drive stop.
+
+### Stop differential drive
+
+```http
+POST /api/drive/stop
+Content-Type: application/json
+```
+
+```json
+{
+  "stop_action": "brake"
+}
+```
+
+The stop operation preempts pending work for both traction motors and requests
+an immediate safe stop on each side.
+
 ## Deliberately deferred capabilities
 
-This commit still does **not** provide differential drive, odometry/navigation or
-authentication/tokens. Those capabilities remain reserved for later commits.
+This commit provides the initial differential-drive abstraction, but still does **not** provide odometry, gyro-assisted heading control, geometric navigation or authentication/tokens. Those capabilities remain reserved for later commits.
 
 ## Motor safety supervision
 

@@ -27,12 +27,14 @@ class CommandService(object):
         sensor_port,
         motor_port,
         controller_port,
-        rover_state_port=None
+        rover_state_port=None,
+        drive_port=None
     ):
         self.sensor_port = sensor_port
         self.motor_port = motor_port
         self.controller_port = controller_port
         self.rover_state_port = rover_state_port
+        self.drive_port = drive_port
 
     def execute(self, target, action, params=None):
         validation = self._validate_envelope(target, action, params)
@@ -49,6 +51,8 @@ class CommandService(object):
             return self._execute_controller(action)
         if target == CommandTargets.ROVER:
             return self._execute_rover(action)
+        if target == CommandTargets.DRIVE:
+            return self._execute_drive(action, params)
 
         return CommandResult.bad_request(
             "Unsupported command target: {}".format(target)
@@ -515,3 +519,74 @@ class CommandService(object):
                 "Rover state query port is not configured"
             )
         return CommandResult.ok(self.rover_state_port.get_rover_state())
+
+    def _validate_drive_speed(self, value, parameter_name):
+        if not self._is_integer(value):
+            return CommandResult.bad_request(
+                "Parameter {} must be an integer".format(parameter_name)
+            )
+        if value < self.MIN_SPEED_SP or value > self.MAX_SPEED_SP:
+            return CommandResult.bad_request(
+                "Parameter {} must be between {} and {}".format(
+                    parameter_name, self.MIN_SPEED_SP, self.MAX_SPEED_SP
+                )
+            )
+        return None
+
+    def _execute_drive(self, action, params):
+        if self.drive_port is None:
+            return CommandResult.service_unavailable(
+                "Drive port is not configured"
+            )
+
+        if action == CommandActions.READ_DRIVE_STATUS:
+            return CommandResult.ok(self.drive_port.get_status())
+
+        if action == CommandActions.STOP_DRIVE:
+            validation = self._validate_stop_action(params.get("stop_action"))
+            if validation is not None:
+                return validation
+            data = self.drive_port.stop(params.get("stop_action"))
+            if not data.get("accepted"):
+                return CommandResult.service_unavailable(
+                    data.get("error") or "Drive could not be stopped"
+                )
+            return CommandResult.ok(data)
+
+        if action == CommandActions.DRIVE_TANK:
+            for parameter_name in ("left_speed_sp", "right_speed_sp"):
+                validation = self._validate_drive_speed(
+                    params.get(parameter_name), parameter_name
+                )
+                if validation is not None:
+                    return validation
+
+            validation = self._validate_priority(params.get("priority"))
+            if validation is not None:
+                return validation
+            validation = self._validate_stop_action(params.get("stop_action"))
+            if validation is not None:
+                return validation
+            validation = self._validate_safety_timeout(
+                params.get("watchdog_ms"), "watchdog_ms"
+            )
+            if validation is not None:
+                return validation
+
+            data = self.drive_port.drive_tank(
+                params["left_speed_sp"],
+                params["right_speed_sp"],
+                priority=params.get("priority"),
+                stop_action=params.get("stop_action"),
+                watchdog_ms=params.get("watchdog_ms")
+            )
+            if not data.get("accepted"):
+                return CommandResult.service_unavailable(
+                    data.get("error") or "Drive command could not be accepted"
+                )
+            status_code = 202 if data.get("batch_id") else 200
+            return CommandResult.ok(data, status_code=status_code)
+
+        return CommandResult.bad_request(
+            "Unsupported drive action: {}".format(action)
+        )

@@ -9,10 +9,11 @@ class CommandTargets(object):
     MOTOR = "motor"
     CONTROLLER = "controller"
     ROVER = "rover"
+    DRIVE = "drive"
 
     @classmethod
     def values(cls):
-        return (cls.SENSOR, cls.MOTOR, cls.CONTROLLER, cls.ROVER)
+        return (cls.SENSOR, cls.MOTOR, cls.CONTROLLER, cls.ROVER, cls.DRIVE)
 
 
 class CommandActions(object):
@@ -39,6 +40,10 @@ class CommandActions(object):
     READ_CONTROLLER_SYSTEM = "read_controller_system"
 
     READ_ROVER_STATE = "read_rover_state"
+
+    READ_DRIVE_STATUS = "read_drive_status"
+    DRIVE_TANK = "drive_tank"
+    STOP_DRIVE = "stop_drive"
 
 
 class CommandResult(object):

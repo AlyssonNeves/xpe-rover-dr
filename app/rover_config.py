@@ -85,6 +85,21 @@ MOTOR_RAMP_DOWN_MS = int(ROVER_JSON_CONFIG.get("motor_ramp_down_ms", 300))
 SENSOR_DEFINITIONS = ROVER_JSON_CONFIG.get("sensor_definitions", {})
 MOTOR_DEFINITIONS = ROVER_JSON_CONFIG.get("motor_definitions", {})
 
+DRIVE_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("drive", {}))
+DRIVE_LEFT_MOTOR_CODE = DRIVE_CONFIG.get("left_motor_code", "LLM")
+DRIVE_RIGHT_MOTOR_CODE = DRIVE_CONFIG.get("right_motor_code", "RLM")
+
+if DRIVE_LEFT_MOTOR_CODE not in MOTOR_DEFINITIONS:
+    raise RuntimeError("Configured left drive motor is not defined: {}".format(
+        DRIVE_LEFT_MOTOR_CODE
+    ))
+if DRIVE_RIGHT_MOTOR_CODE not in MOTOR_DEFINITIONS:
+    raise RuntimeError("Configured right drive motor is not defined: {}".format(
+        DRIVE_RIGHT_MOTOR_CODE
+    ))
+if DRIVE_LEFT_MOTOR_CODE == DRIVE_RIGHT_MOTOR_CODE:
+    raise RuntimeError("Left and right drive motors must be different.")
+
 
 def get_sensor_definitions():
     """Returns an isolated copy of the configured sensor registry."""
@@ -94,3 +109,8 @@ def get_sensor_definitions():
 def get_motor_definitions():
     """Returns an isolated copy of the configured motor registry."""
     return copy.deepcopy(MOTOR_DEFINITIONS)
+
+
+def get_drive_config():
+    """Returns an isolated copy of the differential-drive configuration."""
+    return copy.deepcopy(DRIVE_CONFIG)

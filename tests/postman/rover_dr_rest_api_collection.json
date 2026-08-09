@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Rover-DR REST API - Queues and Synchronization",
-    "description": "Validated Rover-DR API with asynchronous motor queues, priorities, command lifecycle tracking, cancellation and synchronized batches.",
+    "name": "Rover-DR REST API - Differential Drive",
+    "description": "Validated Rover-DR API with motor safety, asynchronous command orchestration and initial differential-drive control.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -246,6 +246,83 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/controller/system"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Drive",
+      "item": [
+        {
+          "name": "Drive Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/drive/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "drive",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Drive Tank",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"left_speed_sp\": 300,\n  \"right_speed_sp\": 250,\n  \"priority\": 60,\n  \"watchdog_ms\": 2000,\n  \"stop_action\": \"brake\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/drive/tank",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "drive",
+                "tank"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Drive Stop",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stop_action\": \"brake\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/drive/stop",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "drive",
+                "stop"
+              ]
+            }
           }
         }
       ]
