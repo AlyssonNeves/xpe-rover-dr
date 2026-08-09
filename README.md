@@ -8,7 +8,7 @@ Educational and experimental mobile robotics platform based on LEGO MINDSTORMS E
 
 Rover-DR provides a modular foundation for the progressive development of monitoring, control, navigation and autonomous robotics capabilities on the LEGO EV3 platform.
 
-This increment introduces the first functional services of the project: periodic monitoring of sensors, motors and the EV3 controller. The implementation establishes explicit output ports and adapters while keeping hardware access and external APIs outside this stage.
+This increment exposes the sensor, motor and controller monitoring capabilities through the first read-only REST API. HTTP concerns remain isolated in an input adapter, while application commands coordinate access to the existing output ports.
 
 ## Platform
 
@@ -23,22 +23,29 @@ This increment introduces the first functional services of the project: periodic
 - Sensor registry and state queries
 - Motor registry and state queries
 - Controller, network, battery and system status queries
-- Output ports for sensors, motors and controller information
-- Output adapters connecting the monitoring services to those ports
+- Output ports and adapters for monitored information
+- Application command service for read-only queries
+- HTTP/JSON REST API on TCP port `8080`
+- Initial REST API contract and Postman collection
 
-> Physical EV3 motor control, REST services, centralized configuration and dedicated state repositories are intentionally deferred to later increments.
+> Motor execution commands, centralized configuration, application lifecycle management, authentication and dedicated state repositories are intentionally deferred to later increments.
 
 ## Project structure
 
 ```text
 xpe-rover-dr/
 ├── adapters/
+│   ├── in_rest_api_server.py
 │   ├── out_controller_monitor.py
 │   ├── out_motor_monitor.py
 │   └── out_sensor_monitor.py
 ├── app/
+│   ├── command_service.py
+│   └── models.py
 ├── assets/
 │   └── images/
+├── docs/
+│   └── rest_api_contract.md
 ├── ports/
 │   ├── controller_port.py
 │   ├── motor_port.py
@@ -48,6 +55,9 @@ xpe-rover-dr/
 │   ├── monitor_base.py
 │   ├── motor_monitor.py
 │   └── sensor_monitor.py
+├── tests/
+│   └── postman/
+│       └── rover_dr_rest_api_collection.json
 ├── .vscode/
 ├── main.py
 ├── requirements.txt
@@ -57,13 +67,13 @@ xpe-rover-dr/
 
 ## Architecture
 
-The monitoring subsystem follows the initial boundaries of a Hexagonal Architecture:
+The project follows the initial boundaries of a Hexagonal Architecture:
 
 1. monitoring services maintain the current in-memory state;
-2. output ports define the contracts used by the application;
-3. output adapters expose each monitor through its corresponding port.
-
-Dedicated state repositories will be introduced later so that monitoring and state persistence can evolve independently.
+2. output ports define sensor, motor and controller query contracts;
+3. output adapters expose the monitoring services to the application layer;
+4. `CommandService` coordinates application queries;
+5. `RestApiServer` is an input adapter that translates HTTP requests into application commands.
 
 ![Hexagonal Architecture](assets/images/hexagonal_architecture.png)
 
@@ -81,22 +91,30 @@ pip install -r requirements.txt
 python3 main.py
 ```
 
-Expected startup output:
+The REST API will be available at:
 
 ```text
-Rover-DR
-Monitoring services initialized.
-Sensors: 5
-Motors: 4
-Controller: available
-Press Ctrl+C to stop.
+http://<EV3-IP>:8080
 ```
 
-Use `Ctrl+C` for an orderly shutdown of the monitoring threads.
+Example endpoints:
+
+```text
+GET /api/health
+GET /api/sensors
+GET /api/sensors/TMP
+GET /api/motors
+GET /api/motors/LLM
+GET /api/controller/status
+```
+
+See [`docs/rest_api_contract.md`](docs/rest_api_contract.md) for the complete API available in this increment.
+
+Use `Ctrl+C` to stop the application.
 
 ## Status
 
-Sensor, motor and controller monitoring implemented with in-memory state.
+Sensor, motor and controller monitoring exposed through an initial read-only REST API.
 
 ## Author
 

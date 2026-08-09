@@ -1,0 +1,107 @@
+{
+  "info": {
+    "name": "Rover-DR REST API - Initial Read-Only API",
+    "description": "Initial collection for the Rover-DR monitoring REST API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/health"
+      }
+    },
+    {
+      "name": "Sensors",
+      "item": [
+        {
+          "name": "List sensors",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/sensors"
+          }
+        },
+        {
+          "name": "Read all sensors",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/sensors/all"
+          }
+        },
+        {
+          "name": "Read sensor TMP",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/sensors/TMP"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Motors",
+      "item": [
+        {
+          "name": "List motors",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/motors"
+          }
+        },
+        {
+          "name": "Read all motors",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/motors/all"
+          }
+        },
+        {
+          "name": "Read motor LLM",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/motors/LLM"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Controller",
+      "item": [
+        {
+          "name": "Status",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/controller/status"
+          }
+        },
+        {
+          "name": "Network",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/controller/network"
+          }
+        },
+        {
+          "name": "Battery",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/controller/battery"
+          }
+        },
+        {
+          "name": "System",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/controller/system"
+          }
+        }
+      ]
+    }
+  ]
+}
