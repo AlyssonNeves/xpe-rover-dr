@@ -8,7 +8,7 @@ Educational and experimental mobile robotics platform based on LEGO MINDSTORMS E
 
 Rover-DR provides a modular foundation for the progressive development of monitoring, control, navigation and autonomous robotics capabilities on the LEGO EV3 platform.
 
-This increment connects the motor monitor to physical LEGO EV3 motors through `python-ev3dev2`. Motor definitions remain centralized in `config/rover_config.json`, while the monitoring service resolves `LargeMotor` and `MediumMotor` instances and publishes live read-only driver state without yet exposing movement commands.
+This increment adds direct execution of basic LEGO EV3 motor commands through `python-ev3dev2`. Motor definitions remain centralized in `config/rover_config.json`; the same motor service now reads physical state and executes validated `stop`, `run-timed`, `run-forever`, relative-position and reset operations.
 
 ## Platform
 
@@ -25,7 +25,7 @@ This increment connects the motor monitor to physical LEGO EV3 motors through `p
 - Controller, network, battery and system status queries
 - Output ports and adapters for monitored information
 - Dedicated thread-safe sensor, motor and controller state repositories
-- Read-only HTTP/JSON REST API on TCP port `8080`
+- HTTP/JSON REST API on TCP port `8080`
 - Consolidated Rover state through `GET /api/rover/state`
 - Validation of command target, action and parameters
 - Validation and normalization of sensor/motor resource codes
@@ -34,15 +34,17 @@ This increment connects the motor monitor to physical LEGO EV3 motors through `p
 - Basic CORS/OPTIONS support for read-only clients
 - Centralized REST, monitoring and lifecycle runtime defaults
 - JSON-based sensor and motor registry configuration
-- Read-only integration with physical `LargeMotor` and `MediumMotor` devices through `python-ev3dev2`
+- Physical integration with `LargeMotor` and `MediumMotor` devices through `python-ev3dev2`
 - Live EV3 motor position, speed, duty cycle, state, driver name, maximum speed and polarity
+- Immediate `stop`, `run-timed`, `run-forever`, `run-to-rel-pos` and `reset` motor execution
+- Validation of motor speed, duration, relative position and stop action
 - Graceful fallback when EV3 motor hardware or the `ev3dev2` backend is unavailable
 - Startup validation of required configuration sections
 - Centralized application status/error logging
 - Coordinated startup and orderly shutdown
 - `SIGINT` and `SIGTERM` process handling
 
-> Physical motor **monitoring** is enabled in this increment. Motor execution commands, authentication and navigation remain intentionally deferred to later increments.
+> Physical motor **monitoring and basic execution** are enabled in this increment. Command queues, priorities, synchronization, watchdogs, authentication and navigation remain intentionally deferred to later increments.
 
 ## Project structure
 
@@ -96,12 +98,12 @@ xpe-rover-dr/
 The project follows the initial boundaries of a Hexagonal Architecture:
 
 1. `rover_config.py` loads centralized runtime settings and registry metadata;
-2. monitoring services collect state updates, including read-only EV3 motor telemetry when hardware is available;
+2. monitoring services collect state updates and execute immediate EV3 motor operations when hardware is available;
 3. dedicated `StateStore` repositories keep the latest thread-safe snapshots;
-4. output ports define sensor, motor, controller and Rover-state query contracts;
-5. output adapters read current state from those repositories;
+4. output ports define sensor, motor query/control, controller and Rover-state contracts;
+5. output adapters expose current state and basic motor execution to the application layer;
 6. `RoverStateService` consolidates a point-in-time Rover snapshot;
-7. `CommandService` validates and coordinates read-only application queries;
+7. `CommandService` validates queries and basic motor execution requests;
 8. `RestApiServer` translates HTTP requests into commands and standardizes HTTP responses;
 9. `RoverApplication` owns startup and shutdown of runtime components.
 
@@ -130,16 +132,21 @@ http://<EV3-IP>:8080
 Example endpoints:
 
 ```text
-GET /api/health
-GET /api/rover/state
-GET /api/sensors
-GET /api/sensors/TMP
-GET /api/motors
-GET /api/motors/LLM
-GET /api/controller/status
+GET  /api/health
+GET  /api/rover/state
+GET  /api/sensors
+GET  /api/sensors/TMP
+GET  /api/motors
+GET  /api/motors/LLM
+POST /api/motors/LLM/run-timed
+POST /api/motors/LLM/run-forever
+POST /api/motors/LLM/run-to-rel-pos
+POST /api/motors/LLM/stop
+POST /api/motors/LLM/reset
+GET  /api/controller/status
 ```
 
-The API is read-only in this increment. Requests with `POST`, `PUT`, `PATCH` or `DELETE` return HTTP `405`.
+`POST` is accepted only by the motor-operation routes defined above. `PUT`, `PATCH` and `DELETE` return HTTP `405`.
 
 See [`docs/rest_api_contract.md`](docs/rest_api_contract.md) for the complete API and validation rules available in this increment. For physical motor verification, follow [`docs/motor_hardware_validation.md`](docs/motor_hardware_validation.md).
 
@@ -147,7 +154,7 @@ Use `Ctrl+C` to request an orderly application shutdown.
 
 ## Status
 
-Centralized configuration with live read-only EV3 motor integration, monitoring/state repositories, a validated REST API and explicit application lifecycle management.
+Centralized configuration with live EV3 motor monitoring and basic command execution, state repositories, a validated REST API and explicit application lifecycle management.
 
 ## Author
 

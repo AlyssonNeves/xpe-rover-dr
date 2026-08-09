@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Rover-DR REST API - Validation and Hardening",
-    "description": "Read-only Rover-DR API with command validation, standardized errors and method protection.",
+    "name": "Rover-DR REST API - Basic Motor Execution",
+    "description": "Validated Rover-DR API with read queries and immediate basic EV3 motor execution.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -74,6 +74,91 @@
             "method": "GET",
             "url": "{{baseUrl}}/api/motors/LLM"
           }
+        },
+        {
+          "name": "Run timed LLM",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"speed_sp\": 200,\n  \"time_sp\": 500,\n  \"stop_action\": \"brake\"\n}"
+            },
+            "url": "{{baseUrl}}/api/motors/LLM/run-timed"
+          }
+        },
+        {
+          "name": "Run forever LLM",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"speed_sp\": 150,\n  \"stop_action\": \"brake\"\n}"
+            },
+            "url": "{{baseUrl}}/api/motors/LLM/run-forever"
+          }
+        },
+        {
+          "name": "Stop LLM",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stop_action\": \"brake\"\n}"
+            },
+            "url": "{{baseUrl}}/api/motors/LLM/stop"
+          }
+        },
+        {
+          "name": "Move LLM relative position",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"speed_sp\": 200,\n  \"position_sp\": 180,\n  \"stop_action\": \"hold\"\n}"
+            },
+            "url": "{{baseUrl}}/api/motors/LLM/run-to-rel-pos"
+          }
+        },
+        {
+          "name": "Reset LLM",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/api/motors/LLM/reset"
+          }
         }
       ]
     },
@@ -142,9 +227,9 @@
           }
         },
         {
-          "name": "POST not allowed - 405",
+          "name": "PUT not allowed - 405",
           "request": {
-            "method": "POST",
+            "method": "PUT",
             "header": [
               {
                 "key": "Content-Type",
@@ -163,6 +248,23 @@
           "request": {
             "method": "OPTIONS",
             "url": "{{baseUrl}}/api/sensors"
+          }
+        },
+        {
+          "name": "Invalid motor speed - 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"speed_sp\": \"fast\",\n  \"time_sp\": 500\n}"
+            },
+            "url": "{{baseUrl}}/api/motors/LLM/run-timed"
           }
         }
       ]

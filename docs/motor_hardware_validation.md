@@ -25,3 +25,23 @@ the Rover.
 
 No movement command is part of this increment. Motor execution is introduced
 in the next commit.
+
+## Basic command validation (Commit 9)
+
+After confirming that each configured motor is detected, validate the new
+immediate execution routes one motor at a time with the Rover lifted so that
+wheels cannot propel the chassis unexpectedly.
+
+Recommended sequence for each motor:
+
+1. `POST /api/motors/{code}/reset` with `{}`;
+2. `POST /api/motors/{code}/run-timed` using a low `speed_sp` and short `time_sp`;
+3. verify encoder position through `GET /api/motors/{code}`;
+4. `POST /api/motors/{code}/run-to-rel-pos` with a small target;
+5. `POST /api/motors/{code}/run-forever` at low speed;
+6. immediately issue `POST /api/motors/{code}/stop`;
+7. confirm that `state` no longer reports the motor as running.
+
+This increment has no watchdog for `run-forever`. Continuous movement must
+therefore be tested only under direct operator supervision. Watchdog and motor
+safety mechanisms are introduced in a later commit.

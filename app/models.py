@@ -15,16 +15,11 @@ class CommandTargets(object):
     @classmethod
     def values(cls):
         """Returns the targets supported by this application increment."""
-        return (
-            cls.SENSOR,
-            cls.MOTOR,
-            cls.CONTROLLER,
-            cls.ROVER
-        )
+        return (cls.SENSOR, cls.MOTOR, cls.CONTROLLER, cls.ROVER)
 
 
 class CommandActions(object):
-    """Read-only actions exposed by the current REST API."""
+    """Query and basic motor-execution actions exposed by the application."""
 
     LIST_SENSORS = "list_sensors"
     READ_SENSOR = "read_sensor"
@@ -33,6 +28,11 @@ class CommandActions(object):
     LIST_MOTORS = "list_motors"
     READ_MOTOR = "read_motor"
     READ_ALL_MOTORS = "read_all_motors"
+    STOP_MOTOR = "stop_motor"
+    RUN_TIMED_MOTOR = "run_timed_motor"
+    RUN_FOREVER_MOTOR = "run_forever_motor"
+    RUN_TO_REL_POS_MOTOR = "run_to_rel_pos_motor"
+    RESET_MOTOR = "reset_motor"
 
     READ_CONTROLLER_STATUS = "read_controller_status"
     READ_CONTROLLER_NETWORK = "read_controller_network"
@@ -53,40 +53,30 @@ class CommandResult(object):
 
     @classmethod
     def ok(cls, data=None, status_code=200):
-        """Builds a successful command result."""
         return cls(True, status_code=status_code, data=data)
 
     @classmethod
     def bad_request(cls, message):
-        """Builds a validation failure result."""
         return cls(False, status_code=400, error=message)
 
     @classmethod
     def not_found(cls, message):
-        """Builds a resource-not-found result."""
         return cls(False, status_code=404, error=message)
 
     @classmethod
     def method_not_allowed(cls, message="Method not allowed"):
-        """Builds a method-not-allowed result."""
         return cls(False, status_code=405, error=message)
 
     @classmethod
     def service_unavailable(cls, message):
-        """Builds a service-unavailable result."""
         return cls(False, status_code=503, error=message)
 
     @classmethod
     def internal_error(cls, message="Internal server error"):
-        """Builds a generic internal failure result."""
         return cls(False, status_code=500, error=message)
 
     def to_dict(self):
-        """Returns a JSON-serializable representation of this result."""
-        payload = {
-            "success": self.success,
-            "status_code": self.status_code
-        }
+        payload = {"success": self.success, "status_code": self.status_code}
         if self.data is not None:
             payload["data"] = self.data
         if self.error:
