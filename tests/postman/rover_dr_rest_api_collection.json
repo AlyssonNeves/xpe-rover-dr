@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Rover-DR REST API - Initial Read-Only API",
-    "description": "Initial collection for the Rover-DR monitoring REST API.",
+    "name": "Rover-DR REST API - Lifecycle and Rover State",
+    "description": "Read-only Rover-DR API with consolidated Rover state query.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -16,6 +16,13 @@
       "request": {
         "method": "GET",
         "url": "{{baseUrl}}/api/health"
+      }
+    },
+    {
+      "name": "Rover State",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/rover/state"
       }
     },
     {

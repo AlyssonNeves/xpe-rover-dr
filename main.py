@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Main entry point for Rover-DR monitoring and its initial REST API."""
+"""Composition root and process lifecycle entry point for Rover-DR."""
+
+import signal
 
 from adapters.in_rest_api_server import RestApiServer
 from adapters.out_controller_monitor import ControllerMonitorAdapter
 from adapters.out_motor_monitor import MotorMonitorAdapter
+from adapters.out_rover_state_query import RoverStateQueryAdapter
 from adapters.out_sensor_monitor import SensorMonitorAdapter
 from app.command_service import CommandService
+from app.rover_application import RoverApplication
+from services.app_logger import AppLogger
 from services.controller_monitor import ControllerMonitor
 from services.motor_monitor import MotorMonitor
+from services.rover_state_service import RoverStateService
 from services.sensor_monitor import SensorMonitor
 
 
@@ -17,8 +23,8 @@ REST_HOST = "0.0.0.0"
 REST_PORT = 8080
 
 
-def main():
-    """Starts the monitoring services and exposes them through HTTP."""
+def build_application():
+    """Builds the current Rover-DR application dependency graph."""
     sensor_monitor = SensorMonitor()
     motor_monitor = MotorMonitor()
     controller_monitor = ControllerMonitor()
@@ -28,37 +34,44 @@ def main():
     motor_port = MotorMonitorAdapter(motor_monitor)
     controller_port = ControllerMonitorAdapter(controller_monitor)
 
-    command_service = CommandService(
+    rover_state_service = RoverStateService(
         sensor_port=sensor_port,
         motor_port=motor_port,
         controller_port=controller_port
     )
+    rover_state_port = RoverStateQueryAdapter(rover_state_service)
+
+    command_service = CommandService(
+        sensor_port=sensor_port,
+        motor_port=motor_port,
+        controller_port=controller_port,
+        rover_state_port=rover_state_port
+    )
     rest_api = RestApiServer(command_service, REST_HOST, REST_PORT)
 
-    for monitor in monitors:
-        monitor.start()
+    return RoverApplication(monitors=monitors, rest_api=rest_api)
 
-    print("Rover-DR")
-    print("Monitoring services initialized.")
-    print("Sensors: {}".format(len(sensor_port.list_sensors())))
-    print("Motors: {}".format(len(motor_port.list_motors())))
-    print("Controller: {}".format(
-        controller_port.read_controller_status().get("status")
-    ))
-    print("Press Ctrl+C to stop.")
+
+def main():
+    """Starts Rover-DR and handles normal process termination signals."""
+    application = build_application()
+
+    def request_shutdown(signum, _frame):
+        AppLogger.status("Shutdown requested by signal {}.".format(signum))
+        application.stop()
+
+    signal.signal(signal.SIGINT, request_shutdown)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, request_shutdown)
 
     try:
-        rest_api.start()
+        application.start()
+        application.wait()
     except KeyboardInterrupt:
-        print("Stopping Rover-DR...")
+        application.stop()
     finally:
-        rest_api.stop()
-        for monitor in monitors:
-            monitor.stop()
-        for monitor in monitors:
-            monitor.join(2.0)
+        application.stop()
 
-    print("Rover-DR stopped.")
     return 0
 
 

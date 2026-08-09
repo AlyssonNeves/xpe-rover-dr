@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Initial HTTP input adapter for the Rover-DR read-only REST API."""
+"""HTTP input adapter for the Rover-DR read-only REST API."""
 
 import json
 import threading
@@ -10,10 +10,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
 from app.models import CommandActions, CommandResult, CommandTargets
+from services.app_logger import AppLogger
 
 
 class RestApiServer(object):
-    """Exposes monitoring queries through a small HTTP/JSON API."""
+    """Exposes application queries through a small HTTP/JSON API."""
 
     def __init__(self, command_service, host="0.0.0.0", port=8080):
         self.command_service = command_service
@@ -21,25 +22,36 @@ class RestApiServer(object):
         self.port = port
         self.http_server = None
         self._server_lock = threading.Lock()
+        self._stop_requested = threading.Event()
 
     def start(self):
         """Starts the HTTP server and blocks until it is stopped."""
         handler_class = self._create_handler_class()
-        with self._server_lock:
-            self.http_server = HTTPServer((self.host, self.port), handler_class)
+        server = HTTPServer((self.host, self.port), handler_class)
 
-        print("REST API listening on http://{}:{}".format(self.host, self.port))
-        try:
-            self.http_server.serve_forever()
-        finally:
+        with self._server_lock:
+            self.http_server = server
+
+        if self._stop_requested.is_set():
+            server.server_close()
             with self._server_lock:
-                server = self.http_server
                 self.http_server = None
-            if server is not None:
-                server.server_close()
+            return
+
+        AppLogger.status(
+            "REST API listening on http://{}:{}".format(self.host, self.port)
+        )
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+            with self._server_lock:
+                if self.http_server is server:
+                    self.http_server = None
 
     def stop(self):
         """Requests shutdown when the HTTP server is running."""
+        self._stop_requested.set()
         with self._server_lock:
             server = self.http_server
         if server is not None:
@@ -64,6 +76,12 @@ class RestApiServer(object):
             def _route_get(self, path_parts):
                 if path_parts == ["api", "health"]:
                     return CommandResult(True, data={"status": "ok"})
+
+                if path_parts == ["api", "rover", "state"]:
+                    return command_service.execute(
+                        CommandTargets.ROVER,
+                        CommandActions.READ_ROVER_STATE
+                    )
 
                 if path_parts == ["api", "sensors"]:
                     return command_service.execute(
@@ -119,9 +137,13 @@ class RestApiServer(object):
                 return CommandResult(False, 404, error="Endpoint not found")
 
             def _send_result(self, result):
-                payload = json.dumps(result.to_dict(), sort_keys=True).encode("utf-8")
+                payload = json.dumps(
+                    result.to_dict(), sort_keys=True
+                ).encode("utf-8")
                 self.send_response(result.status_code)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header(
+                    "Content-Type", "application/json; charset=utf-8"
+                )
                 self.send_header("Content-Length", str(len(payload)))
                 self.send_header("Connection", "close")
                 self.end_headers()
@@ -129,6 +151,10 @@ class RestApiServer(object):
                 self.close_connection = True
 
             def log_message(self, format_string, *args):
-                print("REST {} - {}".format(self.address_string(), format_string % args))
+                AppLogger.status(
+                    "REST {} - {}".format(
+                        self.address_string(), format_string % args
+                    )
+                )
 
         return RoverRequestHandler

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Initial application service used to query Rover-DR monitoring ports."""
+"""Application service used to query Rover-DR state and monitoring ports."""
 
 from app.models import CommandActions, CommandResult, CommandTargets
 
@@ -9,13 +9,20 @@ from app.models import CommandActions, CommandResult, CommandTargets
 class CommandService(object):
     """Coordinates read-only commands without depending on HTTP details."""
 
-    def __init__(self, sensor_port, motor_port, controller_port):
+    def __init__(
+        self,
+        sensor_port,
+        motor_port,
+        controller_port,
+        rover_state_port=None
+    ):
         self.sensor_port = sensor_port
         self.motor_port = motor_port
         self.controller_port = controller_port
+        self.rover_state_port = rover_state_port
 
     def execute(self, target, action, params=None):
-        """Executes a command against one of the monitoring output ports."""
+        """Executes a query against one of the application output ports."""
         params = params or {}
 
         if target == CommandTargets.SENSOR:
@@ -24,6 +31,8 @@ class CommandService(object):
             return self._execute_motor(action, params)
         if target == CommandTargets.CONTROLLER:
             return self._execute_controller(action)
+        if target == CommandTargets.ROVER:
+            return self._execute_rover(action)
 
         return CommandResult(
             success=False,
@@ -95,4 +104,20 @@ class CommandService(object):
             False,
             400,
             error="Unsupported controller action: {}".format(action)
+        )
+
+    def _execute_rover(self, action):
+        if (
+            action == CommandActions.READ_ROVER_STATE and
+            self.rover_state_port is not None
+        ):
+            return CommandResult(
+                True,
+                data=self.rover_state_port.get_rover_state()
+            )
+
+        return CommandResult(
+            False,
+            400,
+            error="Unsupported Rover action: {}".format(action)
         )

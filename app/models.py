@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Initial application command models used by the Rover-DR REST API."""
+"""Application command models used by the Rover-DR REST API."""
 
 
 class CommandTargets(object):
-    """Logical targets available in this initial API increment."""
+    """Logical targets available to the application service."""
 
     SENSOR = "sensor"
     MOTOR = "motor"
     CONTROLLER = "controller"
+    ROVER = "rover"
 
 
 class CommandActions(object):
-    """Read-only actions exposed by the initial REST API."""
+    """Read-only actions exposed by the current REST API."""
 
     LIST_SENSORS = "list_sensors"
     READ_SENSOR = "read_sensor"
@@ -27,6 +28,8 @@ class CommandActions(object):
     READ_CONTROLLER_NETWORK = "read_controller_network"
     READ_CONTROLLER_BATTERY = "read_controller_battery"
     READ_CONTROLLER_SYSTEM = "read_controller_system"
+
+    READ_ROVER_STATE = "read_rover_state"
 
 
 class CommandResult(object):

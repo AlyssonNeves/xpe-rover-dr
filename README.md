@@ -8,7 +8,7 @@ Educational and experimental mobile robotics platform based on LEGO MINDSTORMS E
 
 Rover-DR provides a modular foundation for the progressive development of monitoring, control, navigation and autonomous robotics capabilities on the LEGO EV3 platform.
 
-This increment exposes the sensor, motor and controller monitoring capabilities through the first read-only REST API. HTTP concerns remain isolated in an input adapter, while application commands coordinate access to the existing output ports.
+This increment introduces explicit application lifecycle management and a consolidated Rover state query. Startup and shutdown of monitoring and HTTP components are now coordinated by `RoverApplication`, while `RoverStateService` aggregates the snapshots already maintained by the monitors.
 
 ## Platform
 
@@ -24,11 +24,13 @@ This increment exposes the sensor, motor and controller monitoring capabilities 
 - Motor registry and state queries
 - Controller, network, battery and system status queries
 - Output ports and adapters for monitored information
-- Application command service for read-only queries
-- HTTP/JSON REST API on TCP port `8080`
-- Initial REST API contract and Postman collection
+- Read-only HTTP/JSON REST API on TCP port `8080`
+- Consolidated Rover state through `GET /api/rover/state`
+- Centralized application status/error logging
+- Coordinated startup and orderly shutdown
+- `SIGINT` and `SIGTERM` process handling
 
-> Motor execution commands, centralized configuration, application lifecycle management, authentication and dedicated state repositories are intentionally deferred to later increments.
+> Dedicated state repositories, motor execution commands, centralized configuration, authentication and hardware control are intentionally deferred to later increments.
 
 ## Project structure
 
@@ -38,10 +40,12 @@ xpe-rover-dr/
 │   ├── in_rest_api_server.py
 │   ├── out_controller_monitor.py
 │   ├── out_motor_monitor.py
+│   ├── out_rover_state_query.py
 │   └── out_sensor_monitor.py
 ├── app/
 │   ├── command_service.py
-│   └── models.py
+│   ├── models.py
+│   └── rover_application.py
 ├── assets/
 │   └── images/
 ├── docs/
@@ -49,11 +53,14 @@ xpe-rover-dr/
 ├── ports/
 │   ├── controller_port.py
 │   ├── motor_port.py
+│   ├── rover_state_query_port.py
 │   └── sensor_port.py
 ├── services/
+│   ├── app_logger.py
 │   ├── controller_monitor.py
 │   ├── monitor_base.py
 │   ├── motor_monitor.py
+│   ├── rover_state_service.py
 │   └── sensor_monitor.py
 ├── tests/
 │   └── postman/
@@ -70,10 +77,12 @@ xpe-rover-dr/
 The project follows the initial boundaries of a Hexagonal Architecture:
 
 1. monitoring services maintain the current in-memory state;
-2. output ports define sensor, motor and controller query contracts;
-3. output adapters expose the monitoring services to the application layer;
-4. `CommandService` coordinates application queries;
-5. `RestApiServer` is an input adapter that translates HTTP requests into application commands.
+2. output ports define sensor, motor, controller and Rover-state query contracts;
+3. output adapters expose those services to the application layer;
+4. `RoverStateService` consolidates a point-in-time Rover snapshot;
+5. `CommandService` coordinates read-only application queries;
+6. `RestApiServer` translates HTTP requests into application commands;
+7. `RoverApplication` owns startup and shutdown of runtime components.
 
 ![Hexagonal Architecture](assets/images/hexagonal_architecture.png)
 
@@ -101,6 +110,7 @@ Example endpoints:
 
 ```text
 GET /api/health
+GET /api/rover/state
 GET /api/sensors
 GET /api/sensors/TMP
 GET /api/motors
@@ -110,11 +120,11 @@ GET /api/controller/status
 
 See [`docs/rest_api_contract.md`](docs/rest_api_contract.md) for the complete API available in this increment.
 
-Use `Ctrl+C` to stop the application.
+Use `Ctrl+C` to request an orderly application shutdown.
 
 ## Status
 
-Sensor, motor and controller monitoring exposed through an initial read-only REST API.
+Monitoring and REST queries with consolidated Rover state and explicit application lifecycle management.
 
 ## Author
 
