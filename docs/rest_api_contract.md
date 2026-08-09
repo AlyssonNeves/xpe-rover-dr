@@ -325,8 +325,8 @@ planning remain deferred.
 ## Deliberately deferred capabilities
 
 This increment still does **not** provide advanced closed-loop navigation,
-autonomous path planning, the expanded `ev3dev2.motor` gateway or
-authentication/tokens. Those capabilities remain reserved for later commits.
+autonomous path planning or authentication/tokens. Those capabilities remain
+reserved for later commits.
 
 ## Motor safety supervision
 
@@ -349,3 +349,96 @@ Example:
 ```
 
 Accepted safety timeout values range from 100 to 600000 milliseconds.
+
+## Expanded `ev3dev2.motor` gateway
+
+The API now exposes a safety-managed subset of the public `ev3dev2.motor`
+domain. Only allowlisted classes, methods and writable properties are exposed,
+and created objects must bind exclusively to motor ports already configured for
+the Rover.
+
+> Authentication is intentionally not part of this increment and will be added
+> in a later commit. Use these endpoints only on a controlled development
+> network.
+
+### Catalog
+
+```http
+GET /api/ev3dev2/motor/catalog
+```
+
+Returns supported classes, methods, properties, constants and operation kinds.
+
+### Create and list managed objects
+
+```http
+POST /api/ev3dev2/motor/objects
+Content-Type: application/json
+
+{
+  "class": "LargeMotor",
+  "args": ["outA"],
+  "object_id": "left-drive"
+}
+```
+
+```http
+GET /api/ev3dev2/motor/objects
+```
+
+Only configured motor addresses are accepted.
+
+### Invoke methods
+
+```http
+POST /api/ev3dev2/motor/objects/{object_id}/methods/{method}
+Content-Type: application/json
+
+{
+  "args": [],
+  "kwargs": {
+    "speed_sp": 300,
+    "rover_watchdog_ms": 2000
+  }
+}
+```
+
+Continuous methods require `rover_watchdog_ms`. Non-blocking operations and
+`wait*` methods require a bounded `rover_timeout_ms` when applicable.
+
+### Read and write safe properties
+
+```http
+GET /api/ev3dev2/motor/objects/{object_id}/properties/{property}
+POST /api/ev3dev2/motor/objects/{object_id}/properties/{property}
+```
+
+Property write body:
+
+```json
+{"value": "brake"}
+```
+
+Direct writes to dangerous command/setpoint properties are rejected.
+
+### Module members and operations
+
+```http
+GET /api/ev3dev2/motor/members/{name}
+GET /api/ev3dev2/motor/operations
+```
+
+### Delete a managed object
+
+```http
+DELETE /api/ev3dev2/motor/objects/{object_id}
+```
+
+Deletion performs a best-effort physical stop before releasing the object's
+motor reservation.
+
+## Deliberately deferred capabilities after this increment
+
+Authentication/tokens, the later architectural route refactoring, expanded
+quality gates and deployment-specific hardware enable/disable controls remain
+reserved for subsequent commits.

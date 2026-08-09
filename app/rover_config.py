@@ -82,6 +82,20 @@ MOTOR_DEFAULT_STOP_ACTION = ROVER_JSON_CONFIG.get(
 MOTOR_RAMP_UP_MS = int(ROVER_JSON_CONFIG.get("motor_ramp_up_ms", 300))
 MOTOR_RAMP_DOWN_MS = int(ROVER_JSON_CONFIG.get("motor_ramp_down_ms", 300))
 
+# Safety-managed EV3Dev2 motor gateway limits.
+MOTOR_GATEWAY_MAX_OBJECTS = int(
+    ROVER_JSON_CONFIG.get("motor_gateway_max_objects", 32)
+)
+MOTOR_GATEWAY_OBJECT_TTL_SECONDS = int(
+    ROVER_JSON_CONFIG.get("motor_gateway_object_ttl_seconds", 1800)
+)
+MOTOR_GATEWAY_MAX_WATCHDOG_MS = int(
+    ROVER_JSON_CONFIG.get("motor_gateway_max_watchdog_ms", 60000)
+)
+MOTOR_GATEWAY_WAIT_MAX_TIMEOUT_MS = int(
+    ROVER_JSON_CONFIG.get("motor_gateway_wait_max_timeout_ms", 60000)
+)
+
 SENSOR_DEFINITIONS = ROVER_JSON_CONFIG.get("sensor_definitions", {})
 MOTOR_DEFINITIONS = ROVER_JSON_CONFIG.get("motor_definitions", {})
 

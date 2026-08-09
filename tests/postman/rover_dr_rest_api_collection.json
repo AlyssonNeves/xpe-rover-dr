@@ -525,6 +525,90 @@
           }
         }
       ]
+    },
+    {
+      "name": "EV3Dev2 Motor Gateway",
+      "item": [
+        {
+          "name": "Gateway Catalog",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/ev3dev2/motor/catalog"
+          }
+        },
+        {
+          "name": "List Gateway Objects",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/ev3dev2/motor/objects"
+          }
+        },
+        {
+          "name": "Create LargeMotor Object",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"class\": \"LargeMotor\",\n  \"args\": [\n    \"outA\"\n  ],\n  \"object_id\": \"postman-llm\"\n}"
+            },
+            "url": "{{baseUrl}}/api/ev3dev2/motor/objects"
+          }
+        },
+        {
+          "name": "Set Safe Property",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": \"brake\"\n}"
+            },
+            "url": "{{baseUrl}}/api/ev3dev2/motor/objects/postman-llm/properties/stop_action"
+          }
+        },
+        {
+          "name": "Run Forever with Watchdog",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kwargs\": {\n    \"speed_sp\": 300,\n    \"rover_watchdog_ms\": 2000\n  }\n}"
+            },
+            "url": "{{baseUrl}}/api/ev3dev2/motor/objects/postman-llm/methods/run_forever"
+          }
+        },
+        {
+          "name": "List Gateway Operations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/ev3dev2/motor/operations"
+          }
+        },
+        {
+          "name": "Delete Gateway Object",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/ev3dev2/motor/objects/postman-llm"
+          }
+        }
+      ]
     }
   ]
 }

@@ -63,3 +63,20 @@ class MotorMonitorAdapter(MotorPort):
 
     def run_synchronized_motors(self, commands):
         return self.motor_monitor.run_synchronized_motors(commands)
+
+
+    def execute_guarded_operation(self, motor_codes, operation_name, operation):
+        return self.motor_monitor.execute_guarded_operation(
+            motor_codes, operation_name, operation
+        )
+
+    def begin_guarded_operation(self, motor_codes, operation_name, operation_id):
+        return self.motor_monitor.begin_guarded_operation(
+            motor_codes, operation_name, operation_id
+        )
+
+    def end_guarded_operation(self, operation_id, status="COMPLETED",
+                              error=None, stop=False):
+        return self.motor_monitor.end_guarded_operation(
+            operation_id, status=status, error=error, stop=stop
+        )

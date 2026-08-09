@@ -65,3 +65,19 @@ class MotorPort(object, metaclass=ABCMeta):
     @abstractmethod
     def run_synchronized_motors(self, commands):
         raise NotImplementedError
+    @abstractmethod
+    def execute_guarded_operation(self, motor_codes, operation_name, operation):
+        """Executes a native EV3Dev2 operation inside the motor safety boundary."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def begin_guarded_operation(self, motor_codes, operation_name, operation_id):
+        """Reserves motors for a persistent native EV3Dev2 operation."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def end_guarded_operation(self, operation_id, status="COMPLETED",
+                              error=None, stop=False):
+        """Releases a persistent native EV3Dev2 operation."""
+        raise NotImplementedError
+

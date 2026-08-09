@@ -6,6 +6,10 @@
   "motor_default_stop_action": "brake",
   "motor_ramp_up_ms": 300,
   "motor_ramp_down_ms": 300,
+  "motor_gateway_max_objects": 32,
+  "motor_gateway_object_ttl_seconds": 1800,
+  "motor_gateway_max_watchdog_ms": 60000,
+  "motor_gateway_wait_max_timeout_ms": 60000,
   "sensor_definitions": {
     "TMP": {
       "name": "Temperature",

@@ -19,8 +19,10 @@ class RestApiServer(object):
 
     MAX_REQUEST_BODY_BYTES = 8192
 
-    def __init__(self, command_service, host=REST_HOST, port=REST_PORT):
+    def __init__(self, command_service, host=REST_HOST, port=REST_PORT,
+                 ev3dev2_motor_gateway=None):
         self.command_service = command_service
+        self.ev3dev2_motor_gateway = ev3dev2_motor_gateway
         self.host = host
         self.port = port
         self.http_server = None
@@ -60,6 +62,7 @@ class RestApiServer(object):
 
     def _create_handler_class(self):
         command_service = self.command_service
+        ev3dev2_motor_gateway = self.ev3dev2_motor_gateway
         max_body_bytes = self.MAX_REQUEST_BODY_BYTES
 
         class RoverRequestHandler(BaseHTTPRequestHandler):
@@ -69,7 +72,7 @@ class RestApiServer(object):
             def do_OPTIONS(self):
                 self.send_response(204)
                 self.send_header("Content-Length", "0")
-                self.send_header("Allow", "GET, POST, OPTIONS")
+                self.send_header("Allow", "GET, POST, DELETE, OPTIONS")
                 self._send_cors_headers()
                 self.send_header("Connection", "close")
                 self.end_headers()
@@ -108,7 +111,15 @@ class RestApiServer(object):
                 self._send_method_not_allowed()
 
             def do_DELETE(self):
-                self._send_method_not_allowed()
+                try:
+                    path_parts = self._path_parts()
+                    result = self._route_delete(path_parts)
+                except Exception as exc:
+                    AppLogger.error(
+                        "Unhandled REST request error: {}".format(exc)
+                    )
+                    result = CommandResult.internal_error()
+                self._send_result(result)
 
             def _path_parts(self):
                 parsed_path = urlparse(self.path)
@@ -121,6 +132,26 @@ class RestApiServer(object):
             def _route_get(self, path_parts):
                 if path_parts == ["api", "health"]:
                     return CommandResult.ok({"status": "ok"})
+
+                if path_parts == ["api", "ev3dev2", "motor", "catalog"]:
+                    return self._gateway_call("catalog")
+                if path_parts == ["api", "ev3dev2", "motor", "objects"]:
+                    return self._gateway_call("list_objects")
+                if path_parts == ["api", "ev3dev2", "motor", "operations"]:
+                    return self._gateway_call("list_operations")
+                if (
+                    len(path_parts) == 7
+                    and path_parts[:4] == ["api", "ev3dev2", "motor", "objects"]
+                    and path_parts[5] == "properties"
+                ):
+                    return self._gateway_call(
+                        "get_property", path_parts[4], path_parts[6]
+                    )
+                if (
+                    len(path_parts) == 5
+                    and path_parts[:4] == ["api", "ev3dev2", "motor", "members"]
+                ):
+                    return self._gateway_call("module_value", path_parts[4])
 
                 if path_parts == ["api", "rover", "state"]:
                     return command_service.execute(
@@ -217,6 +248,37 @@ class RestApiServer(object):
                 return CommandResult.not_found("Endpoint not found")
 
             def _route_post(self, path_parts, body):
+                if path_parts == ["api", "ev3dev2", "motor", "objects"]:
+                    return self._gateway_call(
+                        "create",
+                        body.get("class"),
+                        body.get("args"),
+                        body.get("kwargs"),
+                        body.get("object_id")
+                    )
+                if (
+                    len(path_parts) == 7
+                    and path_parts[:4] == ["api", "ev3dev2", "motor", "objects"]
+                    and path_parts[5] == "methods"
+                ):
+                    return self._gateway_call(
+                        "invoke", path_parts[4], path_parts[6],
+                        body.get("args"), body.get("kwargs")
+                    )
+                if (
+                    len(path_parts) == 7
+                    and path_parts[:4] == ["api", "ev3dev2", "motor", "objects"]
+                    and path_parts[5] == "properties"
+                ):
+                    if "value" not in body:
+                        return CommandResult.bad_request(
+                            "Field 'value' is required"
+                        )
+                    return self._gateway_call(
+                        "set_property", path_parts[4], path_parts[6],
+                        body["value"]
+                    )
+
                 if path_parts == ["api", "drive", "tank"]:
                     return command_service.execute(
                         CommandTargets.DRIVE,
@@ -272,6 +334,25 @@ class RestApiServer(object):
 
                 return CommandResult.not_found("Endpoint not found")
 
+            def _route_delete(self, path_parts):
+                if (
+                    len(path_parts) == 5
+                    and path_parts[:4] == ["api", "ev3dev2", "motor", "objects"]
+                ):
+                    return self._gateway_call("delete", path_parts[4])
+                return CommandResult.not_found("Endpoint not found")
+
+            def _gateway_call(self, method_name, *args):
+                if ev3dev2_motor_gateway is None:
+                    return CommandResult.service_unavailable(
+                        "ev3dev2.motor gateway is unavailable"
+                    )
+                try:
+                    method = getattr(ev3dev2_motor_gateway, method_name)
+                    return CommandResult.ok(method(*args))
+                except Exception as exc:
+                    return CommandResult.bad_request(str(exc))
+
             def _read_json_body(self):
                 raw_length = self.headers.get("Content-Length", "0")
                 try:
@@ -306,9 +387,9 @@ class RestApiServer(object):
             def _send_method_not_allowed(self):
                 self._send_result(
                     CommandResult.method_not_allowed(
-                        "Only GET, POST and OPTIONS are supported"
+                        "Only GET, POST, DELETE and OPTIONS are supported"
                     ),
-                    allow_header="GET, POST, OPTIONS"
+                    allow_header="GET, POST, DELETE, OPTIONS"
                 )
 
             def _send_result(self, result, allow_header=None):
@@ -332,7 +413,7 @@ class RestApiServer(object):
             def _send_cors_headers(self):
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.send_header(
-                    "Access-Control-Allow-Methods", "GET, POST, OPTIONS"
+                    "Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"
                 )
                 self.send_header(
                     "Access-Control-Allow-Headers", "Content-Type"

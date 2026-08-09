@@ -18,6 +18,9 @@ from services.app_logger import AppLogger
 from services.controller_monitor import ControllerMonitor
 from services.controller_state_store import ControllerStateStore
 from services.drive_service import DriveService
+from services.ev3dev2_motor_gateway import (
+    Ev3Dev2MotorGateway, Ev3Dev2MotorGatewayError
+)
 from services.motor_monitor import MotorMonitor
 from services.motor_state_store import MotorStateStore
 from services.rover_state_service import RoverStateService
@@ -69,9 +72,33 @@ def build_application():
         rover_state_port=rover_state_port,
         drive_port=drive_port
     )
-    rest_api = RestApiServer(command_service, REST_HOST, REST_PORT)
 
-    return RoverApplication(monitors=monitors, rest_api=rest_api)
+    try:
+        ev3dev2_motor_gateway = Ev3Dev2MotorGateway(
+            motor_port=motor_port,
+            drive_port=drive_port
+        )
+    except Ev3Dev2MotorGatewayError as error:
+        AppLogger.warning(
+            "EV3Dev2 motor gateway unavailable: {}".format(error)
+        )
+        ev3dev2_motor_gateway = None
+
+    rest_api = RestApiServer(
+        command_service, REST_HOST, REST_PORT,
+        ev3dev2_motor_gateway=ev3dev2_motor_gateway
+    )
+
+    managed_services = (
+        [ev3dev2_motor_gateway]
+        if ev3dev2_motor_gateway is not None
+        else []
+    )
+    return RoverApplication(
+        monitors=monitors,
+        rest_api=rest_api,
+        managed_services=managed_services
+    )
 
 
 def main():

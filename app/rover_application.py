@@ -18,9 +18,10 @@ class RoverApplication(object):
     STOPPING = "stopping"
     STOPPED = "stopped"
 
-    def __init__(self, monitors, rest_api):
+    def __init__(self, monitors, rest_api, managed_services=None):
         self.monitors = list(monitors)
         self.rest_api = rest_api
+        self.managed_services = list(managed_services or [])
         self._status = self.CREATED
         self._status_lock = threading.Lock()
         self._stopped_event = threading.Event()
@@ -75,6 +76,18 @@ class RoverApplication(object):
         for monitor in self.monitors:
             if monitor.is_alive():
                 monitor.join(SHUTDOWN_JOIN_TIMEOUT_SECONDS)
+
+        for service in self.managed_services:
+            close = getattr(service, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception as error:
+                    AppLogger.error(
+                        "Error while closing managed service {}: {}".format(
+                            service.__class__.__name__, error
+                        )
+                    )
 
         if self._rest_thread is not None and self._rest_thread.is_alive():
             self._rest_thread.join(SHUTDOWN_JOIN_TIMEOUT_SECONDS)

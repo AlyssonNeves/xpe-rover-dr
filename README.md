@@ -121,8 +121,9 @@ The project continues to follow Hexagonal Architecture boundaries:
 7. adapters expose the stores, motor service and differential-drive service to the application layer;
 8. `DriveService` coordinates differential drive, encoder odometry, gyroscope heading and basic geometric navigation without accessing EV3 motor hardware directly;
 9. `CommandService` validates requests before queue admission;
-10. `RestApiServer` maps HTTP requests to application commands;
-11. `RoverApplication` owns startup and orderly shutdown.
+10. `Ev3Dev2MotorGateway` exposes an allowlisted `ev3dev2.motor` surface through the existing motor safety boundary;
+11. `RestApiServer` maps HTTP requests to application commands and gateway operations;
+12. `RoverApplication` owns startup and orderly shutdown, including gateway cleanup.
 
 ![Hexagonal Architecture](assets/images/hexagonal_architecture.png)
 
@@ -169,17 +170,22 @@ POST /api/drive/stop
 GET  /api/motor-commands
 GET  /api/motor-commands/1
 GET  /api/motors/LLM/commands
+GET  /api/ev3dev2/motor/catalog
+GET  /api/ev3dev2/motor/objects
+POST /api/ev3dev2/motor/objects
+GET  /api/ev3dev2/motor/operations
+DELETE /api/ev3dev2/motor/objects/{object_id}
 ```
 
 A queued command normally returns HTTP `202 Accepted` with its `command_id`. The command lifecycle can then be queried independently.
 
-See [`docs/rest_api_contract.md`](docs/rest_api_contract.md) for the complete API contract, [`docs/drive_navigation.md`](docs/drive_navigation.md) for odometry/navigation details and [`docs/motor_hardware_validation.md`](docs/motor_hardware_validation.md) for physical validation guidance.
+See [`docs/rest_api_contract.md`](docs/rest_api_contract.md) for the complete API contract, [`docs/ev3dev2_motor_complete_api.md`](docs/ev3dev2_motor_complete_api.md) for the expanded motor-domain catalog, [`docs/MOTOR_GATEWAY_SECURITY_AND_LIFECYCLE.md`](docs/MOTOR_GATEWAY_SECURITY_AND_LIFECYCLE.md) for gateway safety/lifecycle rules, and [`docs/MOTOR_PHYSICAL_QUALIFICATION_PROTOCOL.md`](docs/MOTOR_PHYSICAL_QUALIFICATION_PROTOCOL.md) for physical qualification guidance.
 
 Use `Ctrl+C` to request an orderly application shutdown.
 
 ## Status
 
-Centralized configuration, live EV3 motor integration, prioritized command orchestration, synchronized scheduling, motor safety supervision, differential-drive odometry, gyroscope heading and basic geometric navigation.
+Centralized configuration, live EV3 motor integration, prioritized command orchestration, synchronized scheduling, motor safety supervision, differential-drive odometry, gyroscope heading, basic geometric navigation and a safety-managed `ev3dev2.motor` gateway.
 
 ## Author
 

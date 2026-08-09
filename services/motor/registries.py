@@ -5,6 +5,7 @@
 
 import copy
 import threading
+import time
 
 
 class MotorCommandRegistry(object):
@@ -56,3 +57,55 @@ class MotorCommandRegistry(object):
             item["status"] = status
             item.update(copy.deepcopy(fields))
             return copy.deepcopy(item)
+
+
+class GuardedOperationRegistry(object):
+    """Tracks motor reservations used by native EV3Dev2 operations."""
+
+    HISTORY_LIMIT = 100
+
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.active_motor_codes = set()
+        self.operations = {}
+        self.history = []
+
+    def reserve(self, motor_codes, operation_name, operation_id):
+        with self.lock:
+            conflicts = [
+                code for code in motor_codes
+                if code in self.active_motor_codes
+            ]
+            if conflicts:
+                raise ValueError(
+                    "Motors already reserved: {}".format(", ".join(conflicts))
+                )
+            record = {
+                "operation_id": operation_id,
+                "operation": operation_name,
+                "motor_codes": list(motor_codes),
+                "started_at": time.time(),
+                "status": "RUNNING"
+            }
+            self.operations[operation_id] = record
+            self.active_motor_codes.update(motor_codes)
+            return copy.deepcopy(record)
+
+    def release(self, operation_id, status="COMPLETED", error=None,
+                stop_errors=None):
+        with self.lock:
+            record = self.operations.pop(operation_id, None)
+            if record is None:
+                return None
+            stop_errors = list(stop_errors or [])
+            record["status"] = "STOP_FAILED" if stop_errors else status
+            if stop_errors:
+                record["stop_errors"] = stop_errors
+            if error is not None:
+                record["error"] = str(error)
+            record["finished_at"] = time.time()
+            self.active_motor_codes.difference_update(record["motor_codes"])
+            self.history.append(copy.deepcopy(record))
+            if len(self.history) > self.HISTORY_LIMIT:
+                self.history[:] = self.history[-self.HISTORY_LIMIT:]
+            return copy.deepcopy(record)

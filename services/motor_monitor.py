@@ -14,7 +14,7 @@ from app.rover_config import (
     MOTOR_STALL_TIMEOUT_MS, get_motor_definitions
 )
 from services.monitor_base import MonitorBase
-from services.motor.registries import MotorCommandRegistry
+from services.motor.registries import GuardedOperationRegistry, MotorCommandRegistry
 from services.motor_state_store import MotorStateStore
 
 
@@ -259,6 +259,7 @@ class MotorMonitor(MonitorBase):
             self.motor_definitions, self.hardware_backend
         )
         self.command_registry = MotorCommandRegistry()
+        self.guarded_operation_registry = GuardedOperationRegistry()
 
         self._queue_lock = threading.RLock()
         self._command_sequence = 0
@@ -438,6 +439,14 @@ class MotorMonitor(MonitorBase):
     ):
         if motor_code not in self.motor_definitions:
             return None
+        with self.guarded_operation_registry.lock:
+            if motor_code in self.guarded_operation_registry.active_motor_codes:
+                return {
+                    "accepted": False,
+                    "status": MotorLifecycleStates.FAILED,
+                    "error": "Motor is reserved by an EV3Dev2 gateway operation",
+                    "motor_code": motor_code
+                }
 
         priority = self._normalize_priority(priority)
         command_id = self._next_command_id()
@@ -815,6 +824,70 @@ class MotorMonitor(MonitorBase):
             "cancelled_command_ids": sorted(set(cancelled_ids)),
             "motor": motor
         }
+
+    def _validate_external_motor_codes(self, motor_codes):
+        codes = []
+        for code in motor_codes or []:
+            if code not in self.motor_definitions:
+                raise ValueError("Unknown motor code: {}".format(code))
+            if code not in codes:
+                codes.append(code)
+        if not codes:
+            raise ValueError("At least one configured motor is required.")
+        return codes
+
+    def begin_guarded_operation(self, motor_codes, operation_name, operation_id):
+        """Reserves configured motors for a native EV3Dev2 operation."""
+        codes = self._validate_external_motor_codes(motor_codes)
+        with self.guarded_operation_registry.lock:
+            conflicts = [
+                code for code in codes
+                if code in self.guarded_operation_registry.active_motor_codes
+            ]
+            if conflicts:
+                raise ValueError(
+                    "Motors already reserved: {}".format(", ".join(conflicts))
+                )
+            for code in codes:
+                self._cancel_motor_commands(code, stop_running=True)
+            return self.guarded_operation_registry.reserve(
+                codes, operation_name, operation_id
+            )
+
+    def end_guarded_operation(self, operation_id, status="COMPLETED",
+                              error=None, stop=False):
+        """Releases a native operation and optionally stops its motors."""
+        with self.guarded_operation_registry.lock:
+            record = self.guarded_operation_registry.operations.get(operation_id)
+            if record is None:
+                return None
+            stop_errors = []
+            if stop:
+                for code in record["motor_codes"]:
+                    accepted, stop_error = self.motor_registry.stop_motor(
+                        code, MOTOR_DEFAULT_STOP_ACTION
+                    )
+                    if not accepted and stop_error:
+                        stop_errors.append("{}: {}".format(code, stop_error))
+            return self.guarded_operation_registry.release(
+                operation_id, status=status, error=error, stop_errors=stop_errors
+            )
+
+    def execute_guarded_operation(self, motor_codes, operation_name, operation):
+        """Executes one bounded native call under the motor reservation."""
+        operation_id = "sync-{}-{}".format(
+            int(time.time() * 1000), id(operation)
+        )
+        self.begin_guarded_operation(motor_codes, operation_name, operation_id)
+        try:
+            result = operation()
+            self.end_guarded_operation(operation_id, status="COMPLETED")
+            return result
+        except Exception as error:
+            self.end_guarded_operation(
+                operation_id, status="FAILED", error=error, stop=True
+            )
+            raise
 
     def cancel_motor_commands(self, motor_code):
         return self._cancel_motor_commands(motor_code, stop_running=True)

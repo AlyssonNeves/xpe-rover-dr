@@ -1,0 +1,204 @@
+{
+  "classes": {
+    "FollowGyroAngleErrorTooFast": {
+      "methods": [],
+      "properties": []
+    },
+    "LargeMotor": {
+      "methods": [],
+      "properties": []
+    },
+    "LineFollowErrorLostLine": {
+      "methods": [],
+      "properties": []
+    },
+    "LineFollowErrorTooFast": {
+      "methods": [],
+      "properties": []
+    },
+    "MediumMotor": {
+      "methods": [],
+      "properties": []
+    },
+    "Motor": {
+      "methods": [
+        "off",
+        "on",
+        "on_for_degrees",
+        "on_for_rotations",
+        "on_for_seconds",
+        "on_to_position",
+        "reset",
+        "run_direct",
+        "run_forever",
+        "run_timed",
+        "run_to_abs_pos",
+        "run_to_rel_pos",
+        "stop",
+        "wait",
+        "wait_until",
+        "wait_until_not_moving",
+        "wait_while"
+      ],
+      "properties": [
+        "address",
+        "command",
+        "commands",
+        "count_per_m",
+        "count_per_rot",
+        "degrees",
+        "driver_name",
+        "duty_cycle",
+        "duty_cycle_sp",
+        "full_travel_count",
+        "is_holding",
+        "is_overloaded",
+        "is_ramping",
+        "is_running",
+        "is_stalled",
+        "max_speed",
+        "polarity",
+        "position",
+        "position_d",
+        "position_i",
+        "position_p",
+        "position_sp",
+        "ramp_down_sp",
+        "ramp_up_sp",
+        "rotations",
+        "speed",
+        "speed_d",
+        "speed_i",
+        "speed_p",
+        "speed_sp",
+        "state",
+        "stop_action",
+        "stop_actions",
+        "time_sp"
+      ]
+    },
+    "MotorSet": {
+      "methods": [
+        "off",
+        "reset",
+        "run_direct",
+        "run_forever",
+        "run_timed",
+        "run_to_abs_pos",
+        "run_to_rel_pos",
+        "set_args",
+        "set_polarity",
+        "stop",
+        "wait",
+        "wait_until",
+        "wait_until_not_moving",
+        "wait_while"
+      ],
+      "properties": [
+        "is_holding",
+        "is_overloaded",
+        "is_ramping",
+        "is_running",
+        "is_stalled"
+      ]
+    },
+    "MoveDifferential": {
+      "methods": [
+        "odometry_coordinates_log",
+        "odometry_start",
+        "odometry_stop",
+        "on_arc_left",
+        "on_arc_right",
+        "on_for_distance",
+        "on_to_coordinates",
+        "turn_degrees",
+        "turn_left",
+        "turn_right",
+        "turn_to_angle"
+      ],
+      "properties": []
+    },
+    "MoveJoystick": {
+      "methods": [
+        "angle_to_speed_percentage",
+        "on"
+      ],
+      "properties": []
+    },
+    "MoveSteering": {
+      "methods": [
+        "get_speed_steering",
+        "on",
+        "on_for_degrees",
+        "on_for_rotations",
+        "on_for_seconds"
+      ],
+      "properties": []
+    },
+    "MoveTank": {
+      "methods": [
+        "follow_gyro_angle",
+        "follow_line",
+        "on",
+        "on_for_degrees",
+        "on_for_rotations",
+        "on_for_seconds",
+        "turn_degrees",
+        "turn_left",
+        "turn_right"
+      ],
+      "properties": [
+        "cs",
+        "gyro"
+      ]
+    },
+    "SpeedDPM": {
+      "methods": [
+        "to_native_units"
+      ],
+      "properties": []
+    },
+    "SpeedDPS": {
+      "methods": [
+        "to_native_units"
+      ],
+      "properties": []
+    },
+    "SpeedInvalid": {
+      "methods": [],
+      "properties": []
+    },
+    "SpeedNativeUnits": {
+      "methods": [
+        "to_native_units"
+      ],
+      "properties": []
+    },
+    "SpeedPercent": {
+      "methods": [
+        "to_native_units"
+      ],
+      "properties": []
+    },
+    "SpeedRPM": {
+      "methods": [
+        "to_native_units"
+      ],
+      "properties": []
+    },
+    "SpeedRPS": {
+      "methods": [
+        "to_native_units"
+      ],
+      "properties": []
+    },
+    "SpeedValue": {
+      "methods": [],
+      "properties": []
+    }
+  },
+  "module_constants": [
+    "WAIT_RUNNING_TIMEOUT"
+  ],
+  "version": "2.1.0.post1"
+}
