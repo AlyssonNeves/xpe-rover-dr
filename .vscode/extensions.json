@@ -1,0 +1,26 @@
+{
+    // Recommended extensions for Rover DR development.
+    "recommendations": [
+
+        // Python language support.
+        "ms-python.python",
+
+        // IntelliSense, static analysis, and type checking.
+        "ms-python.vscode-pylance",
+
+        // Python debugging support.
+        "ms-python.debugpy",
+
+        // Git history, blame, and repository insights.
+        "eamodio.gitlens",
+
+        // Folder and project version comparison.
+        "moshfeu.compare-folders",
+
+        // EditorConfig support for consistent formatting.
+        "editorconfig.editorconfig",
+
+        // EV3 and ev3dev integration.
+        "ev3dev.ev3dev-browser"
+    ]
+}

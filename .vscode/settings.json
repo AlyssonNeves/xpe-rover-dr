@@ -1,0 +1,6 @@
+{
+    "files.eol": "\n",
+    "files.insertFinalNewline": true,
+    "python.analysis.typeCheckingMode": "basic",
+    "ev3devBrowser.download.exclude": "{**/.*,.git/**,LICENSE,README.md,requirements.txt,.venv/**,__pycache__/**,**/__pycache__/**,*.pyc,**/*.pyc,assets/**}"
+}

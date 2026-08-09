@@ -1,0 +1,21 @@
+{
+    // VS Code launch configurations for Rover DR.
+    "version": "0.2.0",
+
+    "configurations": [
+        {
+            // Downloads the project to the EV3 and executes
+            // the main application entry point.
+            "name": "EV3 - Download and Run main.py",
+
+            // Launch configuration provided by the EV3Dev Browser extension.
+            "type": "ev3devBrowser",
+
+            // Starts a new execution on the target device.
+            "request": "launch",
+
+            // Remote path of the application entry point.
+            "program": "/home/robot/${workspaceFolderBasename}/main.py"
+        }
+    ]
+}
