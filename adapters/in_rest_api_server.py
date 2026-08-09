@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""HTTP input adapter for the Rover-DR read-only REST API."""
+"""HTTP input adapter for the Rover-DR validated read-only REST API."""
 
 import json
 import threading
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from app.models import CommandActions, CommandResult, CommandTargets
 from services.app_logger import AppLogger
 
 
 class RestApiServer(object):
-    """Exposes application queries through a small HTTP/JSON API."""
+    """Exposes validated application queries through a small HTTP/JSON API."""
 
     def __init__(self, command_service, host="0.0.0.0", port=8080):
         self.command_service = command_service
@@ -63,19 +63,56 @@ class RestApiServer(object):
         class RoverRequestHandler(BaseHTTPRequestHandler):
             """Handles the read-only routes available in this increment."""
 
+            server_version = "RoverDR"
+            sys_version = ""
+
+            def do_OPTIONS(self):
+                """Handles CORS preflight for the read-only API."""
+                self.send_response(204)
+                self.send_header("Content-Length", "0")
+                self.send_header("Allow", "GET, OPTIONS")
+                self._send_cors_headers()
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.close_connection = True
+
             def do_GET(self):
-                parsed_path = urlparse(self.path)
-                path_parts = [
-                    part for part in parsed_path.path.strip("/").split("/")
+                """Routes a validated GET request and always returns JSON."""
+                try:
+                    parsed_path = urlparse(self.path)
+                    path_parts = self._get_path_parts(parsed_path.path)
+                    result = self._route_get(path_parts)
+                except Exception as exc:
+                    AppLogger.error(
+                        "Unhandled REST request error: {}".format(exc)
+                    )
+                    result = CommandResult.internal_error()
+
+                self._send_result(result)
+
+            def do_POST(self):
+                self._send_method_not_allowed()
+
+            def do_PUT(self):
+                self._send_method_not_allowed()
+
+            def do_PATCH(self):
+                self._send_method_not_allowed()
+
+            def do_DELETE(self):
+                self._send_method_not_allowed()
+
+            @staticmethod
+            def _get_path_parts(path):
+                return [
+                    unquote(part)
+                    for part in path.strip("/").split("/")
                     if part
                 ]
 
-                result = self._route_get(path_parts)
-                self._send_result(result)
-
             def _route_get(self, path_parts):
                 if path_parts == ["api", "health"]:
-                    return CommandResult(True, data={"status": "ok"})
+                    return CommandResult.ok({"status": "ok"})
 
                 if path_parts == ["api", "rover", "state"]:
                     return command_service.execute(
@@ -134,9 +171,17 @@ class RestApiServer(object):
                         controller_action
                     )
 
-                return CommandResult(False, 404, error="Endpoint not found")
+                return CommandResult.not_found("Endpoint not found")
 
-            def _send_result(self, result):
+            def _send_method_not_allowed(self):
+                self._send_result(
+                    CommandResult.method_not_allowed(
+                        "Only GET and OPTIONS are supported in this API increment"
+                    ),
+                    allow_header="GET, OPTIONS"
+                )
+
+            def _send_result(self, result, allow_header=None):
                 payload = json.dumps(
                     result.to_dict(), sort_keys=True
                 ).encode("utf-8")
@@ -145,10 +190,23 @@ class RestApiServer(object):
                     "Content-Type", "application/json; charset=utf-8"
                 )
                 self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Cache-Control", "no-store")
+                if allow_header is not None:
+                    self.send_header("Allow", allow_header)
+                self._send_cors_headers()
                 self.send_header("Connection", "close")
                 self.end_headers()
                 self.wfile.write(payload)
                 self.close_connection = True
+
+            def _send_cors_headers(self):
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header(
+                    "Access-Control-Allow-Methods", "GET, OPTIONS"
+                )
+                self.send_header(
+                    "Access-Control-Allow-Headers", "Content-Type"
+                )
 
             def log_message(self, format_string, *args):
                 AppLogger.status(

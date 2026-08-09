@@ -2,9 +2,10 @@
 
 ## Overview
 
-This increment keeps the monitoring API read-only and adds a consolidated
-Rover state query. Application startup and shutdown are now coordinated by a
-single lifecycle component.
+This increment strengthens the read-only Rover-DR REST API with explicit
+command validation and consistent HTTP error handling. The available
+functional endpoints remain unchanged; the main evolution is predictable
+behavior for invalid requests and unavailable application ports.
 
 ### Base URL
 
@@ -37,6 +38,38 @@ Errors:
 }
 ```
 
+Every REST response uses `application/json; charset=utf-8`, disables caching
+with `Cache-Control: no-store`, and includes basic CORS headers for GET access.
+
+## HTTP status codes
+
+| Status | Meaning in this increment |
+| --- | --- |
+| `200 OK` | The query was accepted and completed. |
+| `204 No Content` | Successful `OPTIONS` preflight response. |
+| `400 Bad Request` | Invalid command target, action, parameters or resource-code syntax. |
+| `404 Not Found` | Endpoint or requested monitored resource does not exist. |
+| `405 Method Not Allowed` | A method other than `GET`/`OPTIONS` was used. |
+| `500 Internal Server Error` | An unexpected REST processing failure occurred. |
+| `503 Service Unavailable` | A required application output port is not configured. |
+
+Unexpected exceptions are logged internally while the client receives a
+generic `500` message instead of implementation details.
+
+## Command validation
+
+`CommandService` validates the command envelope before dispatching it:
+
+- `target` is mandatory and must be a non-empty string;
+- `action` is mandatory and must be a non-empty string;
+- `params`, when provided, must be a dictionary/JSON object;
+- sensor and motor codes are mandatory for single-resource reads;
+- sensor and motor codes are normalized to uppercase;
+- resource codes must start with a letter and contain only letters, digits,
+  `_` or `-`, with a maximum length of 16 characters.
+
+A syntactically valid but unknown sensor or motor code returns `404`.
+
 ## Health and Rover state
 
 | Method | Endpoint | Description |
@@ -44,8 +77,8 @@ Errors:
 | GET | `/api/health` | Returns basic REST API availability. |
 | GET | `/api/rover/state` | Returns one consolidated Rover state snapshot. |
 
-The consolidated snapshot is assembled from the current monitor-backed output
-ports. Dedicated state repositories are not introduced in this increment.
+The consolidated snapshot is assembled through the state-backed application
+ports introduced in the previous increment.
 
 ## Sensors
 
@@ -56,7 +89,8 @@ ports. Dedicated state repositories are not introduced in this increment.
 | GET | `/api/sensors/{code}` | Returns one sensor snapshot. |
 
 Known initial sensor codes are `TMP`, `GYR`, `RCS`, `LCS` and `TCH`.
-An unknown sensor code returns HTTP `404`.
+Codes are case-insensitive at the application boundary, so `/api/sensors/tmp`
+is normalized to `TMP`.
 
 ## Motors
 
@@ -67,7 +101,7 @@ An unknown sensor code returns HTTP `404`.
 | GET | `/api/motors/{code}` | Returns one motor snapshot. |
 
 Known initial motor codes are `LLM`, `LMM`, `RMM` and `RLM`.
-An unknown motor code returns HTTP `404`.
+Codes are case-insensitive at the application boundary.
 
 ## Controller
 
@@ -78,16 +112,33 @@ An unknown motor code returns HTTP `404`.
 | GET | `/api/controller/battery` | Returns battery information. |
 | GET | `/api/controller/system` | Returns basic system information. |
 
+## Unsupported methods
+
+The API remains read-only. `POST`, `PUT`, `PATCH` and `DELETE` return:
+
+```json
+{
+  "success": false,
+  "status_code": 405,
+  "error": "Only GET and OPTIONS are supported in this API increment"
+}
+```
+
+The response also contains:
+
+```text
+Allow: GET, OPTIONS
+```
+
 ## Application lifecycle
 
-`RoverApplication` owns the startup and orderly shutdown sequence. `main.py`
-registers `SIGINT`/`SIGTERM`, starts the application and delegates shutdown to
-that lifecycle coordinator. This increment does **not** expose shutdown or
-restart as HTTP commands.
+`RoverApplication` owns startup and orderly shutdown. `main.py` registers
+`SIGINT`/`SIGTERM`, starts the application and delegates shutdown to the
+lifecycle coordinator. Shutdown and restart are not exposed as REST commands.
 
 ## Scope of this increment
 
-The API intentionally contains no motor execution commands, navigation,
-sensor-mode changes, remote lifecycle operations, authentication, tokens or
-global hardware configuration. Dedicated sensor, motor and controller state
-repositories are introduced in the next commit.
+This API still contains no motor execution commands, navigation, sensor-mode
+changes, remote lifecycle operations, authentication, tokens or global
+hardware configuration. Those capabilities are introduced only in their
+respective later commits.

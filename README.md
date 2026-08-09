@@ -8,7 +8,7 @@ Educational and experimental mobile robotics platform based on LEGO MINDSTORMS E
 
 Rover-DR provides a modular foundation for the progressive development of monitoring, control, navigation and autonomous robotics capabilities on the LEGO EV3 platform.
 
-This increment consolidates dedicated, thread-safe state repositories for sensors, motors and controller information. Monitoring services now publish their snapshots to these repositories, while output adapters and `RoverStateService` consume the repositories as the single source of current state.
+This increment strengthens the application command boundary and REST API. Queries are now validated before reaching output ports, resource codes are normalized and checked, HTTP errors are standardized, unsupported methods are explicitly rejected and unexpected REST failures no longer expose internal implementation details.
 
 ## Platform
 
@@ -24,10 +24,15 @@ This increment consolidates dedicated, thread-safe state repositories for sensor
 - Motor registry and state queries
 - Controller, network, battery and system status queries
 - Output ports and adapters for monitored information
+- Dedicated thread-safe sensor, motor and controller state repositories
 - Read-only HTTP/JSON REST API on TCP port `8080`
 - Consolidated Rover state through `GET /api/rover/state`
+- Validation of command target, action and parameters
+- Validation and normalization of sensor/motor resource codes
+- Consistent `400`, `404`, `405`, `500` and `503` API responses
+- Explicit rejection of unsupported HTTP methods
+- Basic CORS/OPTIONS support for read-only clients
 - Centralized application status/error logging
-- Dedicated thread-safe sensor, motor and controller state repositories
 - Coordinated startup and orderly shutdown
 - `SIGINT` and `SIGTERM` process handling
 
@@ -85,8 +90,8 @@ The project follows the initial boundaries of a Hexagonal Architecture:
 3. output ports define sensor, motor, controller and Rover-state query contracts;
 4. output adapters read current state from those repositories;
 5. `RoverStateService` consolidates a point-in-time Rover snapshot;
-6. `CommandService` coordinates read-only application queries;
-7. `RestApiServer` translates HTTP requests into application commands;
+6. `CommandService` validates and coordinates read-only application queries;
+7. `RestApiServer` translates HTTP requests into commands and standardizes HTTP responses;
 8. `RoverApplication` owns startup and shutdown of runtime components.
 
 ![Hexagonal Architecture](assets/images/hexagonal_architecture.png)
@@ -123,13 +128,15 @@ GET /api/motors/LLM
 GET /api/controller/status
 ```
 
-See [`docs/rest_api_contract.md`](docs/rest_api_contract.md) for the complete API available in this increment.
+The API is read-only in this increment. Requests with `POST`, `PUT`, `PATCH` or `DELETE` return HTTP `405`.
+
+See [`docs/rest_api_contract.md`](docs/rest_api_contract.md) for the complete API and validation rules available in this increment.
 
 Use `Ctrl+C` to request an orderly application shutdown.
 
 ## Status
 
-Monitoring and REST queries backed by consolidated thread-safe state repositories and explicit application lifecycle management.
+Monitoring and state repositories with a validated, hardened read-only REST API and explicit application lifecycle management.
 
 ## Author
 

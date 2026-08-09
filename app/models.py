@@ -12,6 +12,16 @@ class CommandTargets(object):
     CONTROLLER = "controller"
     ROVER = "rover"
 
+    @classmethod
+    def values(cls):
+        """Returns the targets supported by this application increment."""
+        return (
+            cls.SENSOR,
+            cls.MOTOR,
+            cls.CONTROLLER,
+            cls.ROVER
+        )
+
 
 class CommandActions(object):
     """Read-only actions exposed by the current REST API."""
@@ -36,10 +46,40 @@ class CommandResult(object):
     """Standard result returned by the application command service."""
 
     def __init__(self, success, status_code=200, data=None, error=None):
-        self.success = success
-        self.status_code = status_code
+        self.success = bool(success)
+        self.status_code = int(status_code)
         self.data = data
         self.error = error
+
+    @classmethod
+    def ok(cls, data=None, status_code=200):
+        """Builds a successful command result."""
+        return cls(True, status_code=status_code, data=data)
+
+    @classmethod
+    def bad_request(cls, message):
+        """Builds a validation failure result."""
+        return cls(False, status_code=400, error=message)
+
+    @classmethod
+    def not_found(cls, message):
+        """Builds a resource-not-found result."""
+        return cls(False, status_code=404, error=message)
+
+    @classmethod
+    def method_not_allowed(cls, message="Method not allowed"):
+        """Builds a method-not-allowed result."""
+        return cls(False, status_code=405, error=message)
+
+    @classmethod
+    def service_unavailable(cls, message):
+        """Builds a service-unavailable result."""
+        return cls(False, status_code=503, error=message)
+
+    @classmethod
+    def internal_error(cls, message="Internal server error"):
+        """Builds a generic internal failure result."""
+        return cls(False, status_code=500, error=message)
 
     def to_dict(self):
         """Returns a JSON-serializable representation of this result."""

@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Rover-DR REST API - Lifecycle and Rover State",
-    "description": "Read-only Rover-DR API with consolidated Rover state query.",
+    "name": "Rover-DR REST API - Validation and Hardening",
+    "description": "Read-only Rover-DR API with command validation, standardized errors and method protection.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -106,6 +106,63 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/controller/system"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Validation and Errors",
+      "item": [
+        {
+          "name": "Unknown sensor - 404",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/sensors/XYZ"
+          }
+        },
+        {
+          "name": "Invalid sensor code - 400",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/sensors/%21invalid"
+          }
+        },
+        {
+          "name": "Unknown motor - 404",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/motors/XYZ"
+          }
+        },
+        {
+          "name": "Unknown endpoint - 404",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/not-found"
+          }
+        },
+        {
+          "name": "POST not allowed - 405",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/api/sensors"
+          }
+        },
+        {
+          "name": "CORS preflight - 204",
+          "request": {
+            "method": "OPTIONS",
+            "url": "{{baseUrl}}/api/sensors"
           }
         }
       ]
