@@ -8,7 +8,7 @@ import threading
 import time
 
 from app.rover_config import (
-    MONITOR_INTERVAL_SECONDS, MOTOR_COMMAND_TIMEOUT_MS,
+    HARDWARE_ENABLED, MONITOR_INTERVAL_SECONDS, MOTOR_COMMAND_TIMEOUT_MS,
     MOTOR_DEFAULT_STOP_ACTION, MOTOR_POSITION_TOLERANCE,
     MOTOR_RAMP_DOWN_MS, MOTOR_RAMP_UP_MS, MOTOR_RUN_FOREVER_WATCHDOG_MS,
     MOTOR_STALL_TIMEOUT_MS, get_motor_definitions
@@ -44,10 +44,13 @@ class MotorCommandActions(object):
 class Ev3MotorHardwareBackend(object):
     """Loads the supported python-ev3dev2 motor classes when available."""
 
-    def __init__(self):
+    def __init__(self, enabled=True):
         self._motor_classes = {}
         self.error_message = None
-        self._load_motor_classes()
+        if enabled:
+            self._load_motor_classes()
+        else:
+            self.error_message = "Physical EV3 hardware is disabled"
 
     def _load_motor_classes(self):
         try:
@@ -254,7 +257,9 @@ class MotorMonitor(MonitorBase):
         MonitorBase.__init__(self, "MotorMonitor", interval)
         self.state_store = state_store or MotorStateStore()
         self.motor_definitions = get_motor_definitions()
-        self.hardware_backend = hardware_backend or Ev3MotorHardwareBackend()
+        self.hardware_backend = hardware_backend or Ev3MotorHardwareBackend(
+            enabled=HARDWARE_ENABLED
+        )
         self.motor_registry = MotorRegistry(
             self.motor_definitions, self.hardware_backend
         )
@@ -292,7 +297,7 @@ class MotorMonitor(MonitorBase):
             "driver_name": None,
             "max_speed": None,
             "connected": False,
-            "source": "ev3dev2",
+            "source": "ev3dev2" if HARDWARE_ENABLED else "disabled",
             "error": None,
             "lifecycle_state": MotorLifecycleStates.IDLE,
             "command_queue_size": 0,

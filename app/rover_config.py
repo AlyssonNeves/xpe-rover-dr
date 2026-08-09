@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Central configuration settings for the Rover-DR application.
-
-This module is the single application-facing configuration entry point. Static
-runtime defaults live here, while hardware registry metadata is loaded from the
-JSON configuration file.
-"""
+"""Central configuration settings for the Rover-DR application."""
 
 import copy
 import json
@@ -14,18 +9,14 @@ import os
 
 
 APPLICATION_NAME = "Rover-DR"
+APPLICATION_VERSION = os.environ.get("ROVER_APPLICATION_VERSION", "0.1.0")
 
-# REST API network configuration.
 REST_HOST = "0.0.0.0"
 REST_PORT = 8080
 
-# Security credentials are supplied exclusively through environment variables.
-# No operational fallback is defined: committing a default token would make the
-# protected endpoints predictable.
 REST_SHUTDOWN_TOKEN = os.environ.get("ROVER_SHUTDOWN_TOKEN")
 REST_HARDWARE_API_TOKEN = os.environ.get("ROVER_HARDWARE_API_TOKEN")
 
-# Shared monitoring cadence and lifecycle timeout.
 MONITOR_INTERVAL_SECONDS = 1.0
 SHUTDOWN_JOIN_TIMEOUT_SECONDS = 2.0
 
@@ -51,38 +42,6 @@ REST_SHUTDOWN_CONFIRMATION_REQUIRED = parse_boolean(
     os.environ.get("ROVER_SHUTDOWN_CONFIRMATION_REQUIRED"),
     default=True
 )
-
-
-def validate_security_configuration():
-    """Validates mandatory credentials before runtime components are started.
-
-    Commit 17 introduces two independent protection domains: remote process
-    lifecycle operations and the reflective ``ev3dev2.motor`` gateway. Both
-    tokens are mandatory at this stage and must contain different values.
-    """
-    shutdown_token = os.environ.get("ROVER_SHUTDOWN_TOKEN", "").strip()
-    hardware_token = os.environ.get("ROVER_HARDWARE_API_TOKEN", "").strip()
-    missing = []
-
-    if not shutdown_token:
-        missing.append("ROVER_SHUTDOWN_TOKEN")
-    if not hardware_token:
-        missing.append("ROVER_HARDWARE_API_TOKEN")
-
-    if missing:
-        raise RuntimeError(
-            "Missing required security configuration: {}. Define the "
-            "environment variable(s) before starting Rover-DR.".format(
-                ", ".join(missing)
-            )
-        )
-
-    if shutdown_token == hardware_token:
-        raise RuntimeError(
-            "ROVER_SHUTDOWN_TOKEN and ROVER_HARDWARE_API_TOKEN must use "
-            "different values."
-        )
-
 
 
 def load_json_configuration(config_file_path=ROVER_CONFIG_FILE):
@@ -120,8 +79,27 @@ def load_json_configuration(config_file_path=ROVER_CONFIG_FILE):
 
 ROVER_JSON_CONFIG = load_json_configuration()
 
-# Motor safety defaults. These values are centralized so execution workers,
-# adapters and API validation use the same operational policy.
+
+def get_hardware_enabled():
+    """Returns whether physical EV3 integrations are enabled.
+
+    ``ROVER_HARDWARE_ENABLED`` is the deployment-level override. When absent,
+    the ``hardware_enabled`` value from ``config/rover_config.json`` is used.
+    """
+    configured_default = parse_boolean(
+        ROVER_JSON_CONFIG.get("hardware_enabled"),
+        default=False
+    )
+    return parse_boolean(
+        os.environ.get("ROVER_HARDWARE_ENABLED"),
+        default=configured_default
+    )
+
+
+# Single deployment-level switch for motors, sensors, display, buttons, LEDs,
+# sound, hardware gateway and operator mode selection.
+HARDWARE_ENABLED = get_hardware_enabled()
+
 MOTOR_COMMAND_TIMEOUT_MS = int(
     ROVER_JSON_CONFIG.get("motor_command_timeout_ms", 10000)
 )
@@ -140,7 +118,6 @@ MOTOR_DEFAULT_STOP_ACTION = ROVER_JSON_CONFIG.get(
 MOTOR_RAMP_UP_MS = int(ROVER_JSON_CONFIG.get("motor_ramp_up_ms", 300))
 MOTOR_RAMP_DOWN_MS = int(ROVER_JSON_CONFIG.get("motor_ramp_down_ms", 300))
 
-# Safety-managed EV3Dev2 motor gateway limits.
 MOTOR_GATEWAY_MAX_OBJECTS = int(
     ROVER_JSON_CONFIG.get("motor_gateway_max_objects", 32)
 )
@@ -165,21 +142,62 @@ DRIVE_WHEEL_DIAMETER_MM = float(DRIVE_CONFIG.get("wheel_diameter_mm", 56.0))
 DRIVE_TRACK_WIDTH_MM = float(DRIVE_CONFIG.get("track_width_mm", 120.0))
 
 if DRIVE_LEFT_MOTOR_CODE not in MOTOR_DEFINITIONS:
-    raise RuntimeError("Configured left drive motor is not defined: {}".format(
-        DRIVE_LEFT_MOTOR_CODE
-    ))
+    raise RuntimeError(
+        "Configured left drive motor is not defined: {}".format(
+            DRIVE_LEFT_MOTOR_CODE
+        )
+    )
 if DRIVE_RIGHT_MOTOR_CODE not in MOTOR_DEFINITIONS:
-    raise RuntimeError("Configured right drive motor is not defined: {}".format(
-        DRIVE_RIGHT_MOTOR_CODE
-    ))
+    raise RuntimeError(
+        "Configured right drive motor is not defined: {}".format(
+            DRIVE_RIGHT_MOTOR_CODE
+        )
+    )
 if DRIVE_LEFT_MOTOR_CODE == DRIVE_RIGHT_MOTOR_CODE:
     raise RuntimeError("Left and right drive motors must be different.")
 if DRIVE_GYRO_SENSOR_CODE not in SENSOR_DEFINITIONS:
-    raise RuntimeError("Configured drive gyroscope is not defined: {}".format(
-        DRIVE_GYRO_SENSOR_CODE
-    ))
+    raise RuntimeError(
+        "Configured drive gyroscope is not defined: {}".format(
+            DRIVE_GYRO_SENSOR_CODE
+        )
+    )
 if DRIVE_WHEEL_DIAMETER_MM <= 0 or DRIVE_TRACK_WIDTH_MM <= 0:
     raise RuntimeError("Drive wheel diameter and track width must be positive.")
+
+
+def validate_security_configuration():
+    """Validates credentials required by the selected deployment mode.
+
+    The shutdown token is mandatory in every mode. The hardware token is
+    additionally mandatory when physical EV3 integration is enabled.
+    """
+    shutdown_token = os.environ.get("ROVER_SHUTDOWN_TOKEN", "").strip()
+    hardware_token = os.environ.get("ROVER_HARDWARE_API_TOKEN", "").strip()
+    missing = []
+
+    if not shutdown_token:
+        missing.append("ROVER_SHUTDOWN_TOKEN")
+    if HARDWARE_ENABLED and not hardware_token:
+        missing.append("ROVER_HARDWARE_API_TOKEN")
+
+    if missing:
+        raise RuntimeError(
+            "Missing required security configuration: {}. Define the "
+            "environment variable(s) before starting Rover-DR.".format(
+                ", ".join(missing)
+            )
+        )
+
+    if HARDWARE_ENABLED and shutdown_token == hardware_token:
+        raise RuntimeError(
+            "ROVER_SHUTDOWN_TOKEN and ROVER_HARDWARE_API_TOKEN must use "
+            "different values in hardware mode."
+        )
+
+
+def get_application_version():
+    """Returns the explicit Rover-DR semantic version identifier."""
+    return APPLICATION_VERSION
 
 
 def get_sensor_definitions():

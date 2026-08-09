@@ -8,7 +8,7 @@ Educational and experimental mobile robotics platform based on LEGO MINDSTORMS E
 
 Rover-DR provides a modular foundation for the progressive development of monitoring, control, navigation and autonomous robotics capabilities on the LEGO EV3 platform.
 
-This increment adds operator-visible fatal startup alerts on the EV3 brick. Configuration failures can now be presented through the display, alternating red status LEDs and an audible warning, with physical-button acknowledgement before termination, while preserving a safe fallback for development environments without EV3 hardware.
+This release consolidates deployment configuration for EV3 and simulation environments. A single `ROVER_HARDWARE_ENABLED` switch now controls physical integrations, startup includes operator selection of command/operation mode on the EV3, and deployment/security requirements are documented for reproducible execution.
 
 ## Platform
 
@@ -56,6 +56,10 @@ This increment adds operator-visible fatal startup alerts on the EV3 brick. Conf
 - Operator-visible fatal startup alerts on the EV3 display
 - Alternating red status LEDs and audible warning for fatal startup configuration errors
 - Physical-button acknowledgement before terminating after a displayed fatal startup error
+- Global `ROVER_HARDWARE_ENABLED` deployment switch for physical EV3 integrations
+- EV3 startup selector for `LOCAL/REMOTE` command mode and `MANUAL/AUTOMATIC` operation mode
+- Simulation-safe startup with physical hardware disabled
+- Application version override through `ROVER_APPLICATION_VERSION`
 
 
 ## Project structure
@@ -129,6 +133,38 @@ The project continues to follow Hexagonal Architecture boundaries:
 12. `RoverApplication` owns startup and orderly shutdown, including gateway cleanup.
 
 ![Hexagonal Architecture](assets/images/hexagonal_architecture.png)
+
+## Deployment modes
+
+Rover-DR supports two deployment profiles controlled by a single switch:
+
+```bash
+export ROVER_HARDWARE_ENABLED=true   # EV3 deployment
+export ROVER_HARDWARE_ENABLED=false  # development/simulation
+```
+
+When the environment variable is omitted, `hardware_enabled` from `config/rover_config.json` is used. In hardware mode the application enables physical motor/sensor access, startup alerts, the `ev3dev2.motor` gateway and the EV3 operating-mode selector. In simulation mode these physical integrations are skipped and the Rover starts in `LOCAL/MANUAL`.
+
+### EV3 deployment
+
+```bash
+export ROVER_HARDWARE_ENABLED=true
+export ROVER_SHUTDOWN_TOKEN="<generated-shutdown-token>"
+export ROVER_HARDWARE_API_TOKEN="<generated-hardware-token>"
+python3 main.py
+```
+
+The two tokens must be different. At startup, use the EV3 buttons to select `LOCAL/REMOTE` and `MANUAL/AUTOMATIC`, then confirm with the center button.
+
+### Development without EV3 hardware
+
+```bash
+export ROVER_HARDWARE_ENABLED=false
+export ROVER_SHUTDOWN_TOKEN="<generated-shutdown-token>"
+python3 main.py
+```
+
+The hardware API token is not required in this profile because the hardware gateway is not started.
 
 ## Installation
 

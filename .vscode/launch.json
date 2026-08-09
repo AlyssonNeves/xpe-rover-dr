@@ -1,5 +1,8 @@
 {
-    // VS Code launch configurations for Rover DR.
+    // VS Code launch/debug configurations for Rover-DR.
+
+    // Refers to the VS Code launch.json schema, not to the Rover-DR software
+    // version.
     "version": "0.2.0",
 
     "configurations": [
@@ -11,11 +14,42 @@
             // Launch configuration provided by the EV3Dev Browser extension.
             "type": "ev3devBrowser",
 
-            // Starts a new execution on the target device.
+            // Starts a new execution on the target EV3 device.
             "request": "launch",
 
-            // Remote path of the application entry point.
+            // Remote path of the Rover-DR application entry point on the EV3.
             "program": "/home/robot/${workspaceFolderBasename}/main.py"
+        },
+        {
+            // Executes Rover-DR locally in simulation mode without requiring
+            // physical EV3 hardware.
+            "name": "Local - Simulation",
+
+            // Uses the Python Debugger (debugpy) provided by the VS Code
+            // Python debugging extension.
+            "type": "debugpy",
+
+            // Starts a new local execution of the application.
+            "request": "launch",
+
+            // Local path of the Rover-DR application entry point.
+            "program": "${workspaceFolder}/main.py",
+
+            // Displays the application output and accepts input through
+            // the VS Code integrated terminal.
+            "console": "integratedTerminal",
+
+            // Environment variables used to configure Rover-DR for
+            // local execution.
+            "env": {
+                // Disables access to physical EV3 motors, sensors, buttons,
+                // display, LEDs, and other hardware-dependent components.
+                "ROVER_HARDWARE_ENABLED": "false",
+
+                // Defines the shutdown authorization token used by the
+                // application during local development and testing.
+                "ROVER_SHUTDOWN_TOKEN": "rover-dev-local"
+            }
         }
     ]
 }

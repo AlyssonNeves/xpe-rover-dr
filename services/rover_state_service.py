@@ -9,14 +9,17 @@ from datetime import datetime
 class RoverStateService(object):
     """Aggregates state exposed by the sensor, motor and controller ports."""
 
-    def __init__(self, sensor_port, motor_port, controller_port):
+    def __init__(
+        self, sensor_port, motor_port, controller_port, operation_mode_service=None
+    ):
         self.sensor_port = sensor_port
         self.motor_port = motor_port
         self.controller_port = controller_port
+        self.operation_mode_service = operation_mode_service
 
     def get_rover_state(self):
         """Returns a point-in-time snapshot from the dedicated repositories."""
-        return {
+        snapshot = {
             "controller": self.controller_port.read_controller_status(),
             "network": self.controller_port.read_network_status(),
             "battery": self.controller_port.read_battery_status(),
@@ -25,3 +28,6 @@ class RoverStateService(object):
             "motors": self.motor_port.read_all_motors(),
             "timestamp": datetime.now().strftime("%d/%m/%y %H:%M:%S.%f")[:-3]
         }
+        if self.operation_mode_service is not None:
+            snapshot["operation_mode"] = self.operation_mode_service.get_mode()
+        return snapshot

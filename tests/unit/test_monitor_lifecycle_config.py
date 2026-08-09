@@ -92,13 +92,24 @@ def test_configuration_copy_and_invalid_files():
         os.unlink(path)
 
 
-def test_security_configuration_requires_two_distinct_tokens(monkeypatch):
+def test_hardware_environment_overrides_json_default(monkeypatch):
+    monkeypatch.setenv("ROVER_HARDWARE_ENABLED", "false")
+    assert rover_config.get_hardware_enabled() is False
+    monkeypatch.setenv("ROVER_HARDWARE_ENABLED", "true")
+    assert rover_config.get_hardware_enabled() is True
+
+
+def test_security_configuration_depends_on_hardware_mode(monkeypatch):
     monkeypatch.delenv("ROVER_SHUTDOWN_TOKEN", raising=False)
     monkeypatch.delenv("ROVER_HARDWARE_API_TOKEN", raising=False)
     with pytest.raises(RuntimeError, match="ROVER_SHUTDOWN_TOKEN"):
         rover_config.validate_security_configuration()
 
     monkeypatch.setenv("ROVER_SHUTDOWN_TOKEN", "shutdown-secret")
+    monkeypatch.setattr(rover_config, "HARDWARE_ENABLED", False)
+    rover_config.validate_security_configuration()
+
+    monkeypatch.setattr(rover_config, "HARDWARE_ENABLED", True)
     with pytest.raises(RuntimeError, match="ROVER_HARDWARE_API_TOKEN"):
         rover_config.validate_security_configuration()
 

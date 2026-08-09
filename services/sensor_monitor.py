@@ -5,6 +5,7 @@
 
 from app.rover_config import (
     DRIVE_GYRO_SENSOR_CODE,
+    HARDWARE_ENABLED,
     MONITOR_INTERVAL_SECONDS,
     get_sensor_definitions,
 )
@@ -15,10 +16,13 @@ from services.sensor_state_store import SensorStateStore
 class Ev3GyroHardwareBackend(object):
     """Small hardware backend dedicated to the standard EV3 gyroscope."""
 
-    def __init__(self):
+    def __init__(self, enabled=True):
         self.available = False
         self.error = None
         self._gyro_class = None
+        if not enabled:
+            self.error = "Physical EV3 hardware is disabled"
+            return
         try:
             from ev3dev2.sensor.lego import GyroSensor
             self._gyro_class = GyroSensor
@@ -65,7 +69,9 @@ class SensorMonitor(MonitorBase):
         MonitorBase.__init__(self, "SensorMonitor", interval)
         self.state_store = state_store or SensorStateStore()
         self.sensor_definitions = get_sensor_definitions()
-        self.gyro_backend = gyro_backend or Ev3GyroHardwareBackend()
+        self.gyro_backend = gyro_backend or Ev3GyroHardwareBackend(
+            enabled=HARDWARE_ENABLED
+        )
         self._gyro = None
         self._load_configured_sensors()
         self._connect_gyro()
@@ -95,7 +101,9 @@ class SensorMonitor(MonitorBase):
         sensor["value"] = value
         sensor["connected"] = self._gyro is not None and value is not None
         sensor["source"] = (
-            "ev3dev2" if sensor["connected"] else "unavailable"
+            "ev3dev2" if sensor["connected"] else (
+                "unavailable" if HARDWARE_ENABLED else "disabled"
+            )
         )
         if not sensor["connected"] and self.gyro_backend.error:
             sensor["error"] = self.gyro_backend.error

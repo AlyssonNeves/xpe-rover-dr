@@ -18,10 +18,8 @@ pode ser executado sem hardware EV3 físico.
 - shutdown/restart remoto com confirmação explícita;
 - formatação de erros fatais de startup para a tela do EV3;
 - adapter de alerta com display, LEDs, som e reconhecimento por botão;
-- contratos abstratos das portas.
-
-A seleção global do modo de hardware não faz parte deste marco e terá testes
-adicionados no Commit 19.
+- contratos abstratos das portas;
+- configuração global de hardware e seleção do modo de operação.
 
 ## Execução
 

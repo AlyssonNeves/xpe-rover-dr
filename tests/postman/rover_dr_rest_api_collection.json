@@ -1,61 +1,143 @@
 {
   "info": {
-    "name": "Rover-DR REST API - Differential Drive",
-    "description": "Validated Rover-DR API with motor safety, asynchronous command orchestration and initial differential-drive control.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "_postman_id": "9d515029-a0b7-4c74-8847-8f2057174fb3",
+    "name": "Rover-DR REST API - Differential Drive - Automated Tests",
+    "description": "Validated Rover-DR API with motor safety, asynchronous command orchestration and initial differential-drive control. Automated Postman assertions added for HTTP status, JSON contract, response time, expected validation errors, hardware-disabled behavior, and safety gating of motion/gateway/lifecycle operations. Physical motion tests are skipped by default.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "50109329",
+    "_collection_link": "https://go.postman.co/collection/50109329-9d515029-a0b7-4c74-8847-8f2057174fb3?source=collection_link"
   },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:8080"
-    },
-    {
-      "key": "shutdownToken",
-      "value": "<configure-locally>"
-    },
-    {
-      "key": "hardwareApiToken",
-      "value": "<configure-locally>"
-    }
-  ],
   "item": [
-    {
-      "name": "Health",
-      "request": {
-        "method": "GET",
-        "url": "{{baseUrl}}/api/health"
-      }
-    },
-    {
-      "name": "Rover State",
-      "request": {
-        "method": "GET",
-        "url": "{{baseUrl}}/api/rover/state"
-      }
-    },
     {
       "name": "Sensors",
       "item": [
         {
           "name": "List sensors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/sensors"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sensors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sensors"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Read all sensors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/sensors/all"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sensors/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sensors",
+                "all"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Read sensor TMP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/sensors/TMP"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sensors/TMP",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sensors",
+                "TMP"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         }
       ]
     },
@@ -64,27 +146,176 @@
       "item": [
         {
           "name": "List motors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/motors"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/motors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Read all motors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/motors/all"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "all"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Read motor LLM",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/motors/LLM"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/LLM",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "LLM"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Run timed LLM",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runMotionTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste de movimento ignorado. Defina runMotionTests=true somente com o Rover fisicamente seguro.\");",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -97,11 +328,66 @@
               "mode": "raw",
               "raw": "{\n  \"speed_sp\": 200,\n  \"time_sp\": 500,\n  \"timeout_ms\": 3000,\n  \"stop_action\": \"brake\",\n  \"priority\": 50\n}"
             },
-            "url": "{{baseUrl}}/api/motors/LLM/run-timed"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/LLM/run-timed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "LLM",
+                "run-timed"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Run forever LLM",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runMotionTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste de movimento ignorado. Defina runMotionTests=true somente com o Rover fisicamente seguro.\");",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -114,11 +400,53 @@
               "mode": "raw",
               "raw": "{\n  \"speed_sp\": 150,\n  \"watchdog_ms\": 2000,\n  \"timeout_ms\": 10000,\n  \"stop_action\": \"brake\",\n  \"priority\": 50\n}"
             },
-            "url": "{{baseUrl}}/api/motors/LLM/run-forever"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/LLM/run-forever",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "LLM",
+                "run-forever"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Stop LLM",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -131,11 +459,66 @@
               "mode": "raw",
               "raw": "{\n  \"stop_action\": \"brake\"\n}"
             },
-            "url": "{{baseUrl}}/api/motors/LLM/stop"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/LLM/stop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "LLM",
+                "stop"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Move LLM relative position",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runMotionTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste de movimento ignorado. Defina runMotionTests=true somente com o Rover fisicamente seguro.\");",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -148,11 +531,53 @@
               "mode": "raw",
               "raw": "{\n  \"speed_sp\": 200,\n  \"position_sp\": 180,\n  \"stop_action\": \"hold\",\n  \"priority\": 50\n}"
             },
-            "url": "{{baseUrl}}/api/motors/LLM/run-to-rel-pos"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/LLM/run-to-rel-pos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "LLM",
+                "run-to-rel-pos"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Reset LLM",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -165,11 +590,44 @@
               "mode": "raw",
               "raw": "{}"
             },
-            "url": "{{baseUrl}}/api/motors/LLM/reset"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/LLM/reset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "LLM",
+                "reset"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Cancel LLM commands",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/202)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -182,32 +640,192 @@
               "mode": "raw",
               "raw": "{}"
             },
-            "url": "{{baseUrl}}/api/motors/LLM/cancel"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/LLM/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "LLM",
+                "cancel"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "List motor commands",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/motor-commands"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/motor-commands",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motor-commands"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Read motor command 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/404)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 404) {",
+                  "    pm.test('Comando 1 inexistente é tratado como 404 válido', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(false);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/motor-commands/1"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/motor-commands/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motor-commands",
+                "1"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "List LLM commands",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/motors/LLM/commands"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/LLM/commands",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "LLM",
+                "commands"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Synchronized LLM and RLM",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runMotionTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste de movimento ignorado. Defina runMotionTests=true somente com o Rover fisicamente seguro.\");",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -220,41 +838,186 @@
               "mode": "raw",
               "raw": "{\n  \"priority\": 80,\n  \"commands\": [\n    {\n      \"code\": \"LLM\",\n      \"action\": \"run-timed\",\n      \"speed_sp\": 200,\n      \"time_sp\": 500,\n      \"stop_action\": \"brake\"\n    },\n    {\n      \"code\": \"RLM\",\n      \"action\": \"run-timed\",\n      \"speed_sp\": 200,\n      \"time_sp\": 500,\n      \"stop_action\": \"brake\"\n    }\n  ]\n}"
             },
-            "url": "{{baseUrl}}/api/motors/synchronized"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/synchronized",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "synchronized"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         }
-      ]
+      ],
+      "description": "Motor API tests. Motion-producing requests are skipped unless runMotionTests=true."
     },
     {
       "name": "Controller",
       "item": [
         {
           "name": "Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/controller/status"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/controller/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "controller",
+                "status"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Network",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/controller/network"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/controller/network",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "controller",
+                "network"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Battery",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/controller/battery"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/controller/battery",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "controller",
+                "battery"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "System",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/controller/system"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/controller/system",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "controller",
+                "system"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         }
       ]
     },
@@ -263,24 +1026,88 @@
       "item": [
         {
           "name": "Drive Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/drive/status",
+              "raw": "{{baseUrl}}/api/drive/status",
               "host": [
-                "{{base_url}}"
+                "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "drive",
                 "status"
               ]
-            }
-          }
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Drive Tank",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runMotionTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste de movimento ignorado. Defina runMotionTests=true somente com o Rover fisicamente seguro.\");",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -294,20 +1121,52 @@
               "raw": "{\n  \"left_speed_sp\": 300,\n  \"right_speed_sp\": 250,\n  \"priority\": 60,\n  \"watchdog_ms\": 2000,\n  \"stop_action\": \"brake\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/drive/tank",
+              "raw": "{{baseUrl}}/api/drive/tank",
               "host": [
-                "{{base_url}}"
+                "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "drive",
                 "tank"
               ]
-            }
-          }
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Drive Stop",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const hardwareDisabled = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        const driveStopError = 'One or more traction motors could not be stopped';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.be.oneOf([hardwareDisabled, driveStopError]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -321,20 +1180,42 @@
               "raw": "{\n  \"stop_action\": \"brake\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/drive/stop",
+              "raw": "{{baseUrl}}/api/drive/stop",
               "host": [
-                "{{base_url}}"
+                "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "drive",
                 "stop"
               ]
-            }
-          }
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Reset Odometry",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/202)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -348,20 +1229,64 @@
               "raw": "{\n  \"x_mm\": 0,\n  \"y_mm\": 0,\n  \"heading_deg\": 0\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/drive/reset-odometry",
+              "raw": "{{baseUrl}}/api/drive/reset-odometry",
               "host": [
-                "{{base_url}}"
+                "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "drive",
                 "reset-odometry"
               ]
-            }
-          }
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Move Distance",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runMotionTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste de movimento ignorado. Defina runMotionTests=true somente com o Rover fisicamente seguro.\");",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -375,20 +1300,64 @@
               "raw": "{\n  \"distance_mm\": 250,\n  \"speed_sp\": 300,\n  \"stop_action\": \"brake\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/drive/move-distance",
+              "raw": "{{baseUrl}}/api/drive/move-distance",
               "host": [
-                "{{base_url}}"
+                "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "drive",
                 "move-distance"
               ]
-            }
-          }
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Rotate Angle",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runMotionTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste de movimento ignorado. Defina runMotionTests=true somente com o Rover fisicamente seguro.\");",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -402,20 +1371,64 @@
               "raw": "{\n  \"angle_deg\": 90,\n  \"speed_sp\": 250,\n  \"stop_action\": \"brake\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/drive/rotate-angle",
+              "raw": "{{baseUrl}}/api/drive/rotate-angle",
               "host": [
-                "{{base_url}}"
+                "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "drive",
                 "rotate-angle"
               ]
-            }
-          }
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Curve Radius",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runMotionTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste de movimento ignorado. Defina runMotionTests=true somente com o Rover fisicamente seguro.\");",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -429,53 +1442,217 @@
               "raw": "{\n  \"radius_mm\": 250,\n  \"angle_deg\": 45,\n  \"speed_sp\": 300,\n  \"stop_action\": \"brake\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/drive/curve-radius",
+              "raw": "{{baseUrl}}/api/drive/curve-radius",
               "host": [
-                "{{base_url}}"
+                "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "drive",
                 "curve-radius"
               ]
-            }
-          }
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         }
-      ]
+      ],
+      "description": "Differential-drive API tests. Motion-producing requests are skipped unless runMotionTests=true."
     },
     {
       "name": "Validation and Errors",
       "item": [
         {
           "name": "Unknown sensor - 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (404)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([404]);",
+                  "});",
+                  "if (pm.response.code >= 400) {",
+                  "    pm.test('Resposta de erro possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(false);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "        pm.expect(json).to.have.property('error');",
+                  "        pm.expect(json.error).to.be.a('string').and.not.empty;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/sensors/XYZ"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sensors/XYZ",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sensors",
+                "XYZ"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Invalid sensor code - 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (400)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400]);",
+                  "});",
+                  "if (pm.response.code >= 400) {",
+                  "    pm.test('Resposta de erro possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(false);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "        pm.expect(json).to.have.property('error');",
+                  "        pm.expect(json.error).to.be.a('string').and.not.empty;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/sensors/%21invalid"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sensors/%21invalid",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sensors",
+                "%21invalid"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Unknown motor - 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (404)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([404]);",
+                  "});",
+                  "if (pm.response.code >= 400) {",
+                  "    pm.test('Resposta de erro possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(false);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "        pm.expect(json).to.have.property('error');",
+                  "        pm.expect(json.error).to.be.a('string').and.not.empty;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/motors/XYZ"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/XYZ",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "XYZ"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Unknown endpoint - 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (404)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([404]);",
+                  "});",
+                  "if (pm.response.code >= 400) {",
+                  "    pm.test('Resposta de erro possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(false);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "        pm.expect(json).to.have.property('error');",
+                  "        pm.expect(json.error).to.be.a('string').and.not.empty;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/not-found"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/not-found",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "not-found"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "PUT not allowed - 405",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (405)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([405]);",
+                  "});",
+                  "if (pm.response.code >= 400) {",
+                  "    pm.test('Resposta de erro possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(false);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "        pm.expect(json).to.have.property('error');",
+                  "        pm.expect(json.error).to.be.a('string').and.not.empty;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PUT",
             "header": [
@@ -488,18 +1665,79 @@
               "mode": "raw",
               "raw": "{}"
             },
-            "url": "{{baseUrl}}/api/sensors"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/sensors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sensors"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "CORS preflight - 204",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (204)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([204]);",
+                  "});",
+                  "pm.test('CORS preflight retorna corpo vazio', function () {",
+                  "    pm.expect((pm.response.text() || '').trim()).to.eql('');",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "OPTIONS",
-            "url": "{{baseUrl}}/api/sensors"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sensors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sensors"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Invalid motor speed - 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (400)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400]);",
+                  "});",
+                  "if (pm.response.code >= 400) {",
+                  "    pm.test('Resposta de erro possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(false);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "        pm.expect(json).to.have.property('error');",
+                  "        pm.expect(json.error).to.be.a('string').and.not.empty;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -512,11 +1750,46 @@
               "mode": "raw",
               "raw": "{\n  \"speed_sp\": \"fast\",\n  \"time_sp\": 500\n}"
             },
-            "url": "{{baseUrl}}/api/motors/LLM/run-timed"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/LLM/run-timed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "LLM",
+                "run-timed"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Invalid motor watchdog - 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (400)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400]);",
+                  "});",
+                  "if (pm.response.code >= 400) {",
+                  "    pm.test('Resposta de erro possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(false);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "        pm.expect(json).to.have.property('error');",
+                  "        pm.expect(json.error).to.be.a('string').and.not.empty;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -529,44 +1802,225 @@
               "mode": "raw",
               "raw": "{\n  \"speed_sp\": 150,\n  \"watchdog_ms\": 50\n}"
             },
-            "url": "{{baseUrl}}/api/motors/LLM/run-forever"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/motors/LLM/run-forever",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motors",
+                "LLM",
+                "run-forever"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         }
-      ]
+      ],
+      "description": "Negative and protocol-validation tests with exact expected HTTP status codes."
     },
     {
       "name": "EV3Dev2 Motor Gateway",
       "item": [
         {
           "name": "Gateway Catalog",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runGatewayTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste do gateway EV3Dev2 ignorado. Defina runGatewayTests=true ap\\u00f3s preparar hardware/token.\");",
+                  "    pm.execution.skipRequest();",
+                  "}",
+                  "const token = String(pm.variables.get('hardwareApiToken') || '');",
+                  "if (!token || token.includes('<configure-locally>')) {",
+                  "    console.warn('Token hardwareApiToken não configurado; requisição ignorada por segurança.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/ev3dev2/motor/catalog",
             "header": [
               {
                 "key": "X-Rover-Hardware-Token",
                 "value": "{{hardwareApiToken}}",
                 "type": "text"
               }
-            ]
-          }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ev3dev2/motor/catalog",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ev3dev2",
+                "motor",
+                "catalog"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "List Gateway Objects",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runGatewayTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste do gateway EV3Dev2 ignorado. Defina runGatewayTests=true ap\\u00f3s preparar hardware/token.\");",
+                  "    pm.execution.skipRequest();",
+                  "}",
+                  "const token = String(pm.variables.get('hardwareApiToken') || '');",
+                  "if (!token || token.includes('<configure-locally>')) {",
+                  "    console.warn('Token hardwareApiToken não configurado; requisição ignorada por segurança.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/ev3dev2/motor/objects",
             "header": [
               {
                 "key": "X-Rover-Hardware-Token",
                 "value": "{{hardwareApiToken}}",
                 "type": "text"
               }
-            ]
-          }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ev3dev2/motor/objects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ev3dev2",
+                "motor",
+                "objects"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Create LargeMotor Object",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runGatewayTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste do gateway EV3Dev2 ignorado. Defina runGatewayTests=true ap\\u00f3s preparar hardware/token.\");",
+                  "    pm.execution.skipRequest();",
+                  "}",
+                  "const token = String(pm.variables.get('hardwareApiToken') || '');",
+                  "if (!token || token.includes('<configure-locally>')) {",
+                  "    console.warn('Token hardwareApiToken não configurado; requisição ignorada por segurança.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/201/202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -584,11 +2038,71 @@
               "mode": "raw",
               "raw": "{\n  \"class\": \"LargeMotor\",\n  \"args\": [\n    \"outA\"\n  ],\n  \"object_id\": \"postman-llm\"\n}"
             },
-            "url": "{{baseUrl}}/api/ev3dev2/motor/objects"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/ev3dev2/motor/objects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ev3dev2",
+                "motor",
+                "objects"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Set Safe Property",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runGatewayTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste do gateway EV3Dev2 ignorado. Defina runGatewayTests=true ap\\u00f3s preparar hardware/token.\");",
+                  "    pm.execution.skipRequest();",
+                  "}",
+                  "const token = String(pm.variables.get('hardwareApiToken') || '');",
+                  "if (!token || token.includes('<configure-locally>')) {",
+                  "    console.warn('Token hardwareApiToken não configurado; requisição ignorada por segurança.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -606,11 +2120,87 @@
               "mode": "raw",
               "raw": "{\n  \"value\": \"brake\"\n}"
             },
-            "url": "{{baseUrl}}/api/ev3dev2/motor/objects/postman-llm/properties/stop_action"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/ev3dev2/motor/objects/postman-llm/properties/stop_action",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ev3dev2",
+                "motor",
+                "objects",
+                "postman-llm",
+                "properties",
+                "stop_action"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Run Forever with Watchdog",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runMotionTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste de movimento ignorado. Defina runMotionTests=true somente com o Rover fisicamente seguro.\");",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runGatewayTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste do gateway EV3Dev2 ignorado. Defina runGatewayTests=true ap\\u00f3s preparar hardware/token.\");",
+                  "    pm.execution.skipRequest();",
+                  "}",
+                  "const token = String(pm.variables.get('hardwareApiToken') || '');",
+                  "if (!token || token.includes('<configure-locally>')) {",
+                  "    console.warn('Token hardwareApiToken não configurado; requisição ignorada por segurança.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/202/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -628,44 +2218,220 @@
               "mode": "raw",
               "raw": "{\n  \"kwargs\": {\n    \"speed_sp\": 300,\n    \"rover_watchdog_ms\": 2000\n  }\n}"
             },
-            "url": "{{baseUrl}}/api/ev3dev2/motor/objects/postman-llm/methods/run_forever"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/ev3dev2/motor/objects/postman-llm/methods/run_forever",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ev3dev2",
+                "motor",
+                "objects",
+                "postman-llm",
+                "methods",
+                "run_forever"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "List Gateway Operations",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runGatewayTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste do gateway EV3Dev2 ignorado. Defina runGatewayTests=true ap\\u00f3s preparar hardware/token.\");",
+                  "    pm.execution.skipRequest();",
+                  "}",
+                  "const token = String(pm.variables.get('hardwareApiToken') || '');",
+                  "if (!token || token.includes('<configure-locally>')) {",
+                  "    console.warn('Token hardwareApiToken não configurado; requisição ignorada por segurança.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/ev3dev2/motor/operations",
             "header": [
               {
                 "key": "X-Rover-Hardware-Token",
                 "value": "{{hardwareApiToken}}",
                 "type": "text"
               }
-            ]
-          }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ev3dev2/motor/operations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ev3dev2",
+                "motor",
+                "operations"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Delete Gateway Object",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runGatewayTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste do gateway EV3Dev2 ignorado. Defina runGatewayTests=true ap\\u00f3s preparar hardware/token.\");",
+                  "    pm.execution.skipRequest();",
+                  "}",
+                  "const token = String(pm.variables.get('hardwareApiToken') || '');",
+                  "if (!token || token.includes('<configure-locally>')) {",
+                  "    console.warn('Token hardwareApiToken não configurado; requisição ignorada por segurança.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (200/204/404/503)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 503]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}",
+                  "if (pm.response.code === 503) {",
+                  "    pm.test('503 corresponde ao hardware físico EV3 desabilitado', function () {",
+                  "        const json = pm.response.json();",
+                  "        const expected = pm.variables.get('hardwareDisabledMessage') || 'Physical EV3 hardware is disabled';",
+                  "        pm.expect(json.success).to.eql(false);",
+                  "        pm.expect(json.status_code).to.eql(503);",
+                  "        pm.expect(json.error).to.eql(expected);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "DELETE",
-            "url": "{{baseUrl}}/api/ev3dev2/motor/objects/postman-llm",
             "header": [
               {
                 "key": "X-Rover-Hardware-Token",
                 "value": "{{hardwareApiToken}}",
                 "type": "text"
               }
-            ]
-          }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ev3dev2/motor/objects/postman-llm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ev3dev2",
+                "motor",
+                "objects",
+                "postman-llm"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         }
-      ]
+      ],
+      "description": "EV3Dev2 motor gateway tests. Skipped unless runGatewayTests=true and hardwareApiToken is configured."
     },
     {
       "name": "System Lifecycle",
       "item": [
         {
           "name": "Shutdown",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runLifecycleTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste de ciclo de vida ignorado. Shutdown/Restart s\\u00e3o disruptivos e devem ser executados conscientemente.\");",
+                  "    pm.execution.skipRequest();",
+                  "}",
+                  "const token = String(pm.variables.get('shutdownToken') || '');",
+                  "if (!token || token.includes('<configure-locally>')) {",
+                  "    console.warn('Token shutdownToken não configurado; requisição ignorada por segurança.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (202)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([202]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -683,11 +2449,61 @@
               "mode": "raw",
               "raw": "{\n  \"confirm\": true\n}"
             },
-            "url": "{{baseUrl}}/api/system/shutdown"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/system/shutdown",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "system",
+                "shutdown"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
         },
         {
           "name": "Restart",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const enabled = String(pm.variables.get('runLifecycleTests') || 'false').toLowerCase() === 'true';",
+                  "if (!enabled) {",
+                  "    console.warn(\"Teste de ciclo de vida ignorado. Shutdown/Restart s\\u00e3o disruptivos e devem ser executados conscientemente.\");",
+                  "    pm.execution.skipRequest();",
+                  "}",
+                  "const token = String(pm.variables.get('shutdownToken') || '');",
+                  "if (!token || token.includes('<configure-locally>')) {",
+                  "    console.warn('Token shutdownToken não configurado; requisição ignorada por segurança.');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP status esperado (202)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([202]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+                  "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+                  "        const json = pm.response.json();",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+                  "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -705,10 +2521,180 @@
               "mode": "raw",
               "raw": "{\n  \"confirm\": true\n}"
             },
-            "url": "{{baseUrl}}/api/system/restart"
+            "url": {
+              "raw": "{{baseUrl}}/api/system/restart",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "system",
+                "restart"
+              ]
+            },
+            "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+          },
+          "response": []
+        }
+      ],
+      "description": "Disruptive lifecycle tests. Skipped unless runLifecycleTests=true. Execute Restart/Shutdown individually because either can interrupt the Collection Runner."
+    },
+    {
+      "name": "Health",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status esperado (200)', function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+              "});",
+              "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+              "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+              "        const json = pm.response.json();",
+              "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+              "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+              "    });",
+              "}"
+            ]
           }
         }
-      ]
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "health"
+          ]
+        },
+        "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+      },
+      "response": []
+    },
+    {
+      "name": "Rover State",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status esperado (200)', function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200]);",
+              "});",
+              "if (pm.response.code >= 200 && pm.response.code < 300 && pm.response.code !== 204) {",
+              "    pm.test('Resposta de sucesso possui contrato coerente', function () {",
+              "        const json = pm.response.json();",
+              "        if (Object.prototype.hasOwnProperty.call(json, 'success')) pm.expect(json.success).to.eql(true);",
+              "        if (Object.prototype.hasOwnProperty.call(json, 'status_code')) pm.expect(json.status_code).to.eql(pm.response.code);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/rover/state",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rover",
+            "state"
+          ]
+        },
+        "description": "Automated assertions validate the expected HTTP status, common JSON response contract, and response time."
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const maxMs = Number(pm.variables.get('maxResponseTimeMs') || 5000);",
+          "",
+          "pm.test(`Tempo de resposta <= ${maxMs} ms`, function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(maxMs + 1);",
+          "});",
+          "",
+          "if (pm.response.code !== 204) {",
+          "    pm.test('Content-Type é JSON', function () {",
+          "        const ct = pm.response.headers.get('Content-Type') || '';",
+          "        pm.expect(ct.toLowerCase()).to.include('application/json');",
+          "    });",
+          "",
+          "    let payload = null;",
+          "    try { payload = pm.response.json(); } catch (e) {}",
+          "    if (payload !== null && typeof payload === 'object') {",
+          "        pm.test('Contrato comum da resposta é consistente', function () {",
+          "            if (Object.prototype.hasOwnProperty.call(payload, 'status_code')) {",
+          "                pm.expect(payload.status_code).to.eql(pm.response.code);",
+          "            }",
+          "            if (Object.prototype.hasOwnProperty.call(payload, 'success')) {",
+          "                pm.expect(payload.success).to.be.a('boolean');",
+          "            }",
+          "        });",
+          "    }",
+          "} else {",
+          "    pm.test('Resposta 204 não possui corpo significativo', function () {",
+          "        pm.expect((pm.response.text() || '').trim()).to.eql('');",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "shutdownToken",
+      "value": "<configure-locally>"
+    },
+    {
+      "key": "hardwareApiToken",
+      "value": "<configure-locally>"
+    },
+    {
+      "key": "maxResponseTimeMs",
+      "value": "5000",
+      "description": "Maximum response time accepted by the automated tests."
+    },
+    {
+      "key": "runMotionTests",
+      "value": "false",
+      "description": "Set to true only when the Rover is physically secured for motion tests."
+    },
+    {
+      "key": "runGatewayTests",
+      "value": "false",
+      "description": "Set to true only after configuring hardwareApiToken and preparing the EV3 hardware."
+    },
+    {
+      "key": "runLifecycleTests",
+      "value": "false",
+      "description": "Set to true only to run shutdown/restart manually; these requests are disruptive."
+    },
+    {
+      "key": "hardwareDisabledMessage",
+      "value": "Physical EV3 hardware is disabled",
+      "description": "Expected error when physical EV3 hardware access is disabled."
     }
   ]
 }
