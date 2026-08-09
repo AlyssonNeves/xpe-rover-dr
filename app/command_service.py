@@ -9,7 +9,7 @@ from app.models import CommandActions, CommandResult, CommandTargets
 
 
 class CommandService(object):
-    """Coordinates validated queries and immediate motor commands."""
+    """Coordinates validated queries and queued motor commands."""
 
     RESOURCE_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_-]{0,15}$")
     VALID_STOP_ACTIONS = ("coast", "brake", "hold")
@@ -17,6 +17,8 @@ class CommandService(object):
     MAX_SPEED_SP = 2000
     MAX_TIME_SP_MS = 600000
     MAX_REL_POSITION = 1000000
+    MIN_PRIORITY = 0
+    MAX_PRIORITY = 100
 
     def __init__(
         self,
@@ -116,6 +118,21 @@ class CommandService(object):
             )
         return None
 
+    def _validate_priority(self, value):
+        if value is None:
+            return None
+        if not self._is_integer(value):
+            return CommandResult.bad_request(
+                "Parameter priority must be an integer"
+            )
+        if value < self.MIN_PRIORITY or value > self.MAX_PRIORITY:
+            return CommandResult.bad_request(
+                "Parameter priority must be between {} and {}".format(
+                    self.MIN_PRIORITY, self.MAX_PRIORITY
+                )
+            )
+        return None
+
     def _execute_sensor(self, action, params):
         if self.sensor_port is None:
             return CommandResult.service_unavailable(
@@ -161,6 +178,14 @@ class CommandService(object):
             return self._run_to_rel_pos_motor(params)
         if action == CommandActions.RESET_MOTOR:
             return self._reset_motor(params)
+        if action == CommandActions.GET_MOTOR_COMMAND:
+            return self._get_motor_command(params)
+        if action == CommandActions.LIST_MOTOR_COMMANDS:
+            return self._list_motor_commands(params)
+        if action == CommandActions.CANCEL_MOTOR_COMMANDS:
+            return self._cancel_motor_commands(params)
+        if action == CommandActions.RUN_SYNCHRONIZED_MOTORS:
+            return self._run_synchronized_motors(params)
 
         return CommandResult.bad_request(
             "Unsupported motor action: {}".format(action)
@@ -188,6 +213,10 @@ class CommandService(object):
         validation = self._validate_stop_action(params.get("stop_action"))
         if validation is not None:
             return None, validation
+
+        validation = self._validate_priority(params.get("priority"))
+        if validation is not None:
+            return None, validation
         return code, None
 
     @staticmethod
@@ -196,9 +225,10 @@ class CommandService(object):
             return CommandResult.not_found("Motor not found: {}".format(code))
         if not data.get("accepted"):
             return CommandResult.service_unavailable(
-                data.get("error") or "Motor command could not be executed"
+                data.get("error") or "Motor command could not be accepted"
             )
-        return CommandResult.ok(data)
+        status_code = 202 if data.get("status") == "QUEUED" else 200
+        return CommandResult.ok(data, status_code=status_code)
 
     def _stop_motor(self, params):
         code, validation = self._validate_motor_execution(params)
@@ -230,6 +260,7 @@ class CommandService(object):
             code,
             params["speed_sp"],
             time_sp,
+            params.get("priority"),
             params.get("stop_action")
         )
         return self._execution_result(data, code)
@@ -241,7 +272,10 @@ class CommandService(object):
         if validation is not None:
             return validation
         data = self.motor_port.run_forever_motor(
-            code, params["speed_sp"], params.get("stop_action")
+            code,
+            params["speed_sp"],
+            params.get("priority"),
+            params.get("stop_action")
         )
         return self._execution_result(data, code)
 
@@ -266,6 +300,7 @@ class CommandService(object):
             code,
             params["speed_sp"],
             position_sp,
+            params.get("priority"),
             params.get("stop_action")
         )
         return self._execution_result(data, code)
@@ -274,8 +309,146 @@ class CommandService(object):
         code, validation = self._validate_resource_code(params, "Motor")
         if validation is not None:
             return validation
-        data = self.motor_port.reset_motor(code)
+        validation = self._validate_priority(params.get("priority"))
+        if validation is not None:
+            return validation
+        data = self.motor_port.reset_motor(code, params.get("priority"))
         return self._execution_result(data, code)
+
+    def _get_motor_command(self, params):
+        command_id = params.get("command_id")
+        if not self._is_integer(command_id) or command_id < 1:
+            return CommandResult.bad_request(
+                "command_id must be a positive integer"
+            )
+        command = self.motor_port.get_command(command_id)
+        if command is None:
+            return CommandResult.not_found(
+                "Motor command not found: {}".format(command_id)
+            )
+        return CommandResult.ok(command)
+
+    def _list_motor_commands(self, params):
+        motor_code = params.get("code")
+        if motor_code is not None:
+            code, validation = self._validate_resource_code(params, "Motor")
+            if validation is not None:
+                return validation
+            if self.motor_port.read_motor(code) is None:
+                return CommandResult.not_found(
+                    "Motor not found: {}".format(code)
+                )
+            motor_code = code
+        return CommandResult.ok(self.motor_port.list_commands(motor_code))
+
+    def _cancel_motor_commands(self, params):
+        code, validation = self._validate_resource_code(params, "Motor")
+        if validation is not None:
+            return validation
+        data = self.motor_port.cancel_motor_commands(code)
+        if data is None:
+            return CommandResult.not_found("Motor not found: {}".format(code))
+        return CommandResult.ok(data)
+
+    def _normalize_synchronized_item(self, raw_item, default_priority):
+        if not isinstance(raw_item, dict):
+            return None, CommandResult.bad_request(
+                "Each synchronized command must be a JSON object"
+            )
+
+        code, validation = self._validate_resource_code(raw_item, "Motor")
+        if validation is not None:
+            return None, validation
+        if self.motor_port.read_motor(code) is None:
+            return None, CommandResult.not_found(
+                "Motor not found: {}".format(code)
+            )
+
+        action = raw_item.get("action")
+        allowed_actions = (
+            "run-timed",
+            "run-forever",
+            "run-to-rel-pos"
+        )
+        if action not in allowed_actions:
+            return None, CommandResult.bad_request(
+                "Unsupported synchronized motor action: {}".format(action)
+            )
+
+        priority = raw_item.get("priority", default_priority)
+        validation = self._validate_priority(priority)
+        if validation is not None:
+            return None, validation
+
+        params = {
+            "speed_sp": raw_item.get("speed_sp"),
+            "stop_action": raw_item.get("stop_action")
+        }
+        validation = self._validate_speed(params["speed_sp"])
+        if validation is not None:
+            return None, validation
+        validation = self._validate_stop_action(params.get("stop_action"))
+        if validation is not None:
+            return None, validation
+
+        if action == "run-timed":
+            time_sp = raw_item.get("time_sp")
+            if not self._is_integer(time_sp) or time_sp < 1 or time_sp > self.MAX_TIME_SP_MS:
+                return None, CommandResult.bad_request(
+                    "Synchronized time_sp must be between 1 and {} milliseconds".format(
+                        self.MAX_TIME_SP_MS
+                    )
+                )
+            params["time_sp"] = time_sp
+
+        if action == "run-to-rel-pos":
+            position_sp = raw_item.get("position_sp")
+            if not self._is_integer(position_sp) or abs(position_sp) > self.MAX_REL_POSITION:
+                return None, CommandResult.bad_request(
+                    "Synchronized position_sp is outside the allowed range"
+                )
+            params["position_sp"] = position_sp
+
+        return {
+            "code": code,
+            "action": action,
+            "priority": priority,
+            "parameters": params
+        }, None
+
+    def _run_synchronized_motors(self, params):
+        commands = params.get("commands")
+        if not isinstance(commands, list) or not commands:
+            return CommandResult.bad_request(
+                "Parameter commands must be a non-empty array"
+            )
+
+        default_priority = params.get("priority", 0)
+        validation = self._validate_priority(default_priority)
+        if validation is not None:
+            return validation
+
+        normalized = []
+        seen_codes = set()
+        for raw_item in commands:
+            item, validation = self._normalize_synchronized_item(
+                raw_item, default_priority
+            )
+            if validation is not None:
+                return validation
+            if item["code"] in seen_codes:
+                return CommandResult.bad_request(
+                    "A synchronized batch may contain only one command per motor"
+                )
+            seen_codes.add(item["code"])
+            normalized.append(item)
+
+        data = self.motor_port.run_synchronized_motors(normalized)
+        if not data.get("accepted"):
+            return CommandResult.service_unavailable(
+                data.get("error") or "Synchronized commands could not be accepted"
+            )
+        return CommandResult.ok(data, status_code=202)
 
     def _execute_controller(self, action):
         if self.controller_port is None:

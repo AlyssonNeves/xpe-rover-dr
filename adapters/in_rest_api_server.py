@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""HTTP input adapter for Rover-DR queries and basic motor commands."""
+"""HTTP input adapter for Rover-DR queries and queued motor commands."""
 
 import json
 import threading
@@ -15,7 +15,7 @@ from services.app_logger import AppLogger
 
 
 class RestApiServer(object):
-    """Exposes validated Rover-DR queries and immediate motor operations."""
+    """Exposes validated Rover-DR queries and motor command orchestration."""
 
     MAX_REQUEST_BODY_BYTES = 8192
 
@@ -155,6 +155,35 @@ class RestApiServer(object):
                         CommandTargets.MOTOR,
                         CommandActions.READ_ALL_MOTORS
                     )
+
+                if path_parts == ["api", "motor-commands"]:
+                    return command_service.execute(
+                        CommandTargets.MOTOR,
+                        CommandActions.LIST_MOTOR_COMMANDS
+                    )
+                if (
+                    len(path_parts) == 3
+                    and path_parts[:2] == ["api", "motor-commands"]
+                ):
+                    try:
+                        command_id = int(path_parts[2])
+                    except ValueError:
+                        command_id = path_parts[2]
+                    return command_service.execute(
+                        CommandTargets.MOTOR,
+                        CommandActions.GET_MOTOR_COMMAND,
+                        {"command_id": command_id}
+                    )
+                if (
+                    len(path_parts) == 4
+                    and path_parts[:2] == ["api", "motors"]
+                    and path_parts[3] == "commands"
+                ):
+                    return command_service.execute(
+                        CommandTargets.MOTOR,
+                        CommandActions.LIST_MOTOR_COMMANDS,
+                        {"code": path_parts[2]}
+                    )
                 if len(path_parts) == 3 and path_parts[:2] == ["api", "motors"]:
                     return command_service.execute(
                         CommandTargets.MOTOR,
@@ -182,6 +211,13 @@ class RestApiServer(object):
                 return CommandResult.not_found("Endpoint not found")
 
             def _route_post(self, path_parts, body):
+                if path_parts == ["api", "motors", "synchronized"]:
+                    return command_service.execute(
+                        CommandTargets.MOTOR,
+                        CommandActions.RUN_SYNCHRONIZED_MOTORS,
+                        body
+                    )
+
                 if (
                     len(path_parts) == 4
                     and path_parts[:2] == ["api", "motors"]
@@ -193,7 +229,8 @@ class RestApiServer(object):
                         "run-timed": CommandActions.RUN_TIMED_MOTOR,
                         "run-forever": CommandActions.RUN_FOREVER_MOTOR,
                         "run-to-rel-pos": CommandActions.RUN_TO_REL_POS_MOTOR,
-                        "reset": CommandActions.RESET_MOTOR
+                        "reset": CommandActions.RESET_MOTOR,
+                        "cancel": CommandActions.CANCEL_MOTOR_COMMANDS
                     }
                     action = action_map.get(operation)
                     if action is not None:

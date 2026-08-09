@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Rover-DR REST API - Basic Motor Execution",
-    "description": "Validated Rover-DR API with read queries and immediate basic EV3 motor execution.",
+    "name": "Rover-DR REST API - Queues and Synchronization",
+    "description": "Validated Rover-DR API with asynchronous motor queues, priorities, command lifecycle tracking, cancellation and synchronized batches.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -87,7 +87,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"speed_sp\": 200,\n  \"time_sp\": 500,\n  \"stop_action\": \"brake\"\n}"
+              "raw": "{\n  \"speed_sp\": 200,\n  \"time_sp\": 500,\n  \"stop_action\": \"brake\",\n  \"priority\": 50\n}"
             },
             "url": "{{baseUrl}}/api/motors/LLM/run-timed"
           }
@@ -104,7 +104,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"speed_sp\": 150,\n  \"stop_action\": \"brake\"\n}"
+              "raw": "{\n  \"speed_sp\": 150,\n  \"stop_action\": \"brake\",\n  \"priority\": 50\n}"
             },
             "url": "{{baseUrl}}/api/motors/LLM/run-forever"
           }
@@ -138,7 +138,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"speed_sp\": 200,\n  \"position_sp\": 180,\n  \"stop_action\": \"hold\"\n}"
+              "raw": "{\n  \"speed_sp\": 200,\n  \"position_sp\": 180,\n  \"stop_action\": \"hold\",\n  \"priority\": 50\n}"
             },
             "url": "{{baseUrl}}/api/motors/LLM/run-to-rel-pos"
           }
@@ -158,6 +158,61 @@
               "raw": "{}"
             },
             "url": "{{baseUrl}}/api/motors/LLM/reset"
+          }
+        },
+        {
+          "name": "Cancel LLM commands",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/api/motors/LLM/cancel"
+          }
+        },
+        {
+          "name": "List motor commands",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/motor-commands"
+          }
+        },
+        {
+          "name": "Read motor command 1",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/motor-commands/1"
+          }
+        },
+        {
+          "name": "List LLM commands",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/motors/LLM/commands"
+          }
+        },
+        {
+          "name": "Synchronized LLM and RLM",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priority\": 80,\n  \"commands\": [\n    {\n      \"code\": \"LLM\",\n      \"action\": \"run-timed\",\n      \"speed_sp\": 200,\n      \"time_sp\": 500,\n      \"stop_action\": \"brake\"\n    },\n    {\n      \"code\": \"RLM\",\n      \"action\": \"run-timed\",\n      \"speed_sp\": 200,\n      \"time_sp\": 500,\n      \"stop_action\": \"brake\"\n    }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/api/motors/synchronized"
           }
         }
       ]

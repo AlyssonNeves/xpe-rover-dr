@@ -5,8 +5,6 @@
 
 
 class CommandTargets(object):
-    """Logical targets available to the application service."""
-
     SENSOR = "sensor"
     MOTOR = "motor"
     CONTROLLER = "controller"
@@ -14,13 +12,10 @@ class CommandTargets(object):
 
     @classmethod
     def values(cls):
-        """Returns the targets supported by this application increment."""
         return (cls.SENSOR, cls.MOTOR, cls.CONTROLLER, cls.ROVER)
 
 
 class CommandActions(object):
-    """Query and basic motor-execution actions exposed by the application."""
-
     LIST_SENSORS = "list_sensors"
     READ_SENSOR = "read_sensor"
     READ_ALL_SENSORS = "read_all_sensors"
@@ -33,6 +28,10 @@ class CommandActions(object):
     RUN_FOREVER_MOTOR = "run_forever_motor"
     RUN_TO_REL_POS_MOTOR = "run_to_rel_pos_motor"
     RESET_MOTOR = "reset_motor"
+    GET_MOTOR_COMMAND = "get_motor_command"
+    LIST_MOTOR_COMMANDS = "list_motor_commands"
+    CANCEL_MOTOR_COMMANDS = "cancel_motor_commands"
+    RUN_SYNCHRONIZED_MOTORS = "run_synchronized_motors"
 
     READ_CONTROLLER_STATUS = "read_controller_status"
     READ_CONTROLLER_NETWORK = "read_controller_network"
@@ -43,8 +42,6 @@ class CommandActions(object):
 
 
 class CommandResult(object):
-    """Standard result returned by the application command service."""
-
     def __init__(self, success, status_code=200, data=None, error=None):
         self.success = bool(success)
         self.status_code = int(status_code)

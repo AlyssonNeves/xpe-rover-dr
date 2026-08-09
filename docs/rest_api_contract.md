@@ -2,13 +2,7 @@
 
 ## Overview
 
-This increment extends the validated Rover-DR REST API with immediate execution
-of basic physical motor operations. Read endpoints remain unchanged. Motor
-commands are accepted through dedicated `POST` routes and are executed directly
-through the configured `python-ev3dev2` motor instance.
-
-No command queue, priority, command identifier, synchronized batch or watchdog
-exists in this increment; those mechanisms are introduced later.
+This increment replaces immediate motor execution with asynchronous command orchestration. Read endpoints remain available, while movement requests are admitted into independent motor queues and receive persistent command identifiers.
 
 ### Base URL
 
@@ -16,11 +10,11 @@ exists in this increment; those mechanisms are introduced later.
 http://<host>:8080
 ```
 
-The default bind address is `0.0.0.0` and the default TCP port is `8080`.
+Default bind address: `0.0.0.0`. Default TCP port: `8080`.
 
 ## Common response format
 
-Successful requests:
+Successful query:
 
 ```json
 {
@@ -30,30 +24,35 @@ Successful requests:
 }
 ```
 
-Errors:
+Queued command:
 
 ```json
 {
-  "success": false,
-  "status_code": 400,
-  "error": "Parameter speed_sp must be an integer"
+  "success": true,
+  "status_code": 202,
+  "data": {
+    "accepted": true,
+    "command_id": 12,
+    "status": "QUEUED",
+    "priority": 80
+  }
 }
 ```
 
-Every response uses `application/json; charset=utf-8`, `Cache-Control: no-store`
-and basic CORS headers.
+Errors use the same envelope with `success: false` and an `error` field.
 
 ## HTTP status codes
 
 | Status | Meaning |
 | --- | --- |
-| `200 OK` | Query completed or a motor command was submitted directly to the driver. |
+| `200 OK` | Query, cancellation or immediate stop completed. |
+| `202 Accepted` | Motor command or synchronized batch admitted to the queue. |
 | `204 No Content` | Successful `OPTIONS` preflight. |
-| `400 Bad Request` | Invalid JSON, route parameters or motor command parameters. |
-| `404 Not Found` | Endpoint or configured resource does not exist. |
-| `405 Method Not Allowed` | `PUT`, `PATCH` or `DELETE` was used. |
+| `400 Bad Request` | Invalid JSON, route parameter or command parameter. |
+| `404 Not Found` | Endpoint, motor or command identifier does not exist. |
+| `405 Method Not Allowed` | Unsupported HTTP method. |
 | `500 Internal Server Error` | Unexpected REST processing failure. |
-| `503 Service Unavailable` | Required port or physical motor backend is unavailable. |
+| `503 Service Unavailable` | Required application port or motor backend is unavailable. |
 
 ## Read endpoints
 
@@ -64,31 +63,32 @@ and basic CORS headers.
 | GET | `/api/sensors` | Lists sensors. |
 | GET | `/api/sensors/all` | Complete sensor snapshots. |
 | GET | `/api/sensors/{code}` | One sensor snapshot. |
-| GET | `/api/motors` | Lists motors. |
+| GET | `/api/motors` | Lists motors with queue metadata. |
 | GET | `/api/motors/all` | Complete motor snapshots. |
 | GET | `/api/motors/{code}` | One motor snapshot. |
+| GET | `/api/motor-commands` | Lists all command lifecycle records. |
+| GET | `/api/motor-commands/{id}` | Reads one command lifecycle record. |
+| GET | `/api/motors/{code}/commands` | Lists command records for one motor. |
 | GET | `/api/controller/status` | General controller status. |
 | GET | `/api/controller/network` | Network information. |
 | GET | `/api/controller/battery` | Battery information. |
 | GET | `/api/controller/system` | System information. |
 
-Known initial motor codes are `LLM`, `LMM`, `RMM` and `RLM`. Resource codes are
-normalized to uppercase at the application boundary.
+## Queue model
 
-## Basic motor execution
+Each configured motor owns an independent priority queue and worker thread. A command admitted to a queue receives a monotonic `command_id` and transitions through the following public states:
 
-### Stop
-
-```http
-POST /api/motors/{code}/stop
-Content-Type: application/json
+```text
+QUEUED -> RUNNING -> COMPLETED
+                  -> FAILED
+       -> CANCELLED
 ```
 
-Optional body:
+Priorities are integers from `0` to `100`. Higher numeric values execute first. Commands with the same priority preserve FIFO admission order.
 
-```json
-{"stop_action": "brake"}
-```
+A command already running is not displaced by a later higher-priority request. Priority controls the order of **pending** work.
+
+## Queued motor operations
 
 ### Run timed
 
@@ -101,11 +101,10 @@ Content-Type: application/json
 {
   "speed_sp": 300,
   "time_sp": 1000,
+  "priority": 70,
   "stop_action": "brake"
 }
 ```
-
-`time_sp` is expressed in milliseconds.
 
 ### Run forever
 
@@ -117,12 +116,12 @@ Content-Type: application/json
 ```json
 {
   "speed_sp": 250,
+  "priority": 50,
   "stop_action": "brake"
 }
 ```
 
-The command returns after it is submitted to the EV3 driver. A later `stop`
-request is required to stop continuous movement.
+A `run-forever` command remains `RUNNING` until cancelled or stopped. No watchdog exists yet in this increment.
 
 ### Run to relative position
 
@@ -135,12 +134,10 @@ Content-Type: application/json
 {
   "speed_sp": 300,
   "position_sp": 360,
+  "priority": 60,
   "stop_action": "hold"
 }
 ```
-
-`position_sp` is an encoder-relative position in degrees as interpreted by the
-EV3 motor driver.
 
 ### Reset
 
@@ -149,37 +146,76 @@ POST /api/motors/{code}/reset
 Content-Type: application/json
 ```
 
-An empty JSON object may be used as the request body.
+```json
+{"priority": 10}
+```
 
-## Motor parameter validation
+## Cancellation and stop
 
-- `speed_sp` must be a non-zero integer between `-2000` and `2000`;
-- `time_sp` must be an integer between `1` and `600000` milliseconds;
-- `position_sp` must be an integer with absolute value no greater than `1000000`;
-- optional `stop_action` must be `coast`, `brake` or `hold`;
-- the request body must be a JSON object and is limited to 8192 bytes.
+Cancel queued and active work for one motor:
 
-These are application-boundary checks for this increment. Device-specific
-limits remain enforced by the EV3 driver and are strengthened by later safety
-commits.
+```http
+POST /api/motors/{code}/cancel
+Content-Type: application/json
 
-## Execution model
+{}
+```
 
-Motor operations are executed immediately. The API does **not** yet expose:
+The response contains `cancelled_command_ids`.
 
-- `command_id` or command history;
-- queues or priorities;
-- cancellation of pending work;
-- synchronized multi-motor batches;
-- watchdog/timeout supervision for continuous movement;
+`POST /api/motors/{code}/stop` is intentionally preemptive. It cancels pending work for the motor, requests physical stop immediately and creates its own completed/failed command lifecycle record.
+
+## Synchronized multi-motor batch
+
+```http
+POST /api/motors/synchronized
+Content-Type: application/json
+```
+
+```json
+{
+  "priority": 80,
+  "commands": [
+    {
+      "code": "LLM",
+      "action": "run-timed",
+      "speed_sp": 300,
+      "time_sp": 1000,
+      "stop_action": "brake"
+    },
+    {
+      "code": "RLM",
+      "action": "run-timed",
+      "speed_sp": 300,
+      "time_sp": 1000,
+      "stop_action": "brake"
+    }
+  ]
+}
+```
+
+Supported batch actions in this increment are `run-timed`, `run-forever` and `run-to-rel-pos`. A batch may contain only one command per motor.
+
+The server assigns a shared `batch_id` and `scheduled_start_at` timestamp. Independent motor workers wait for that common timestamp before dispatch. This is best-effort software synchronization; hard real-time guarantees are outside the scope of this increment.
+
+## Parameter validation
+
+- `speed_sp`: non-zero integer from `-2000` through `2000`;
+- `time_sp`: integer from `1` through `600000` milliseconds;
+- `position_sp`: integer with absolute value no greater than `1000000`;
+- `priority`: integer from `0` through `100`;
+- `stop_action`: `coast`, `brake` or `hold`;
+- request body: JSON object no larger than 8192 bytes.
+
+## Deliberately deferred safety mechanisms
+
+This commit does **not** provide:
+
+- watchdog supervision for `run-forever`;
+- command execution deadlines/timeouts;
+- stall detection;
+- automatic emergency stop based on elapsed time;
 - differential drive or navigation;
 - authentication/tokens.
 
-If the configured motor cannot be connected or the EV3 driver rejects the
-operation, the API returns `503 Service Unavailable` and retains the driver
-error internally in the motor snapshot.
-
-## Application lifecycle
-
-`RoverApplication` continues to own startup and orderly shutdown. Remote
-shutdown/restart is not exposed by the REST API in this increment.
+These safety mechanisms are intentionally introduced by later commits so that the history remains technically incremental.
