@@ -8,7 +8,7 @@ Educational and experimental mobile robotics platform based on LEGO MINDSTORMS E
 
 Rover-DR provides a modular foundation for the progressive development of monitoring, control, navigation and autonomous robotics capabilities on the LEGO EV3 platform.
 
-This initial version establishes the project repository, development environment and base source-code organization. Functional monitoring and control capabilities will be introduced incrementally in subsequent versions.
+This increment introduces the first functional services of the project: periodic monitoring of sensors, motors and the EV3 controller. The implementation establishes explicit output ports and adapters while keeping hardware access and external APIs outside this stage.
 
 ## Platform
 
@@ -17,16 +17,37 @@ This initial version establishes the project repository, development environment
 - Python 3
 - python-ev3dev2
 
+## Current capabilities
+
+- Periodic monitoring infrastructure based on threads
+- Sensor registry and state queries
+- Motor registry and state queries
+- Controller, network, battery and system status queries
+- Output ports for sensors, motors and controller information
+- Output adapters connecting the monitoring services to those ports
+
+> Physical EV3 motor control, REST services, centralized configuration and dedicated state repositories are intentionally deferred to later increments.
+
 ## Project structure
 
 ```text
 xpe-rover-dr/
 ├── adapters/
+│   ├── out_controller_monitor.py
+│   ├── out_motor_monitor.py
+│   └── out_sensor_monitor.py
 ├── app/
 ├── assets/
 │   └── images/
 ├── ports/
+│   ├── controller_port.py
+│   ├── motor_port.py
+│   └── sensor_port.py
 ├── services/
+│   ├── controller_monitor.py
+│   ├── monitor_base.py
+│   ├── motor_monitor.py
+│   └── sensor_monitor.py
 ├── .vscode/
 ├── main.py
 ├── requirements.txt
@@ -34,56 +55,48 @@ xpe-rover-dr/
 └── README.md
 ```
 
-The source tree is organized from the beginning to support separation between application logic, ports, adapters and infrastructure services as the project evolves.
+## Architecture
+
+The monitoring subsystem follows the initial boundaries of a Hexagonal Architecture:
+
+1. monitoring services maintain the current in-memory state;
+2. output ports define the contracts used by the application;
+3. output adapters expose each monitor through its corresponding port.
+
+Dedicated state repositories will be introduced later so that monitoring and state persistence can evolve independently.
+
+![Hexagonal Architecture](assets/images/hexagonal_architecture.png)
 
 ## Installation
 
-Clone the repository:
-
 ```bash
 git clone https://github.com/AlyssonNeves/xpe-rover-dr.git
-```
-
-Access the project directory:
-
-```bash
 cd xpe-rover-dr
-```
-
-Install the Python dependencies:
-
-```bash
 pip install -r requirements.txt
 ```
 
 ## Execution
 
-Run the initial application entry point:
-
 ```bash
 python3 main.py
 ```
 
-Expected output:
+Expected startup output:
 
 ```text
 Rover-DR
-Initial project structure initialized.
+Monitoring services initialized.
+Sensors: 5
+Motors: 4
+Controller: available
+Press Ctrl+C to stop.
 ```
 
-## Development environment
-
-The repository includes basic VS Code configuration and recommendations for Python development and EV3/ev3dev integration.
-
-## Architecture
-
-The initial directory structure prepares the project for a modular architecture inspired by Hexagonal Architecture principles. Concrete ports, adapters, monitoring services and application services are intentionally deferred to later increments.
-
-![Hexagonal Architecture](assets/images/hexagonal_architecture.png)
+Use `Ctrl+C` for an orderly shutdown of the monitoring threads.
 
 ## Status
 
-Initial project structure.
+Sensor, motor and controller monitoring implemented with in-memory state.
 
 ## Author
 
