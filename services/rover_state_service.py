@@ -7,7 +7,7 @@ from datetime import datetime
 
 
 class RoverStateService(object):
-    """Aggregates the snapshots already maintained by monitoring services."""
+    """Aggregates state exposed by the sensor, motor and controller ports."""
 
     def __init__(self, sensor_port, motor_port, controller_port):
         self.sensor_port = sensor_port
@@ -15,7 +15,7 @@ class RoverStateService(object):
         self.controller_port = controller_port
 
     def get_rover_state(self):
-        """Returns the current state without introducing a separate repository."""
+        """Returns a point-in-time snapshot from the dedicated repositories."""
         return {
             "controller": self.controller_port.read_controller_status(),
             "network": self.controller_port.read_network_status(),

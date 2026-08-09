@@ -14,9 +14,12 @@ from app.command_service import CommandService
 from app.rover_application import RoverApplication
 from services.app_logger import AppLogger
 from services.controller_monitor import ControllerMonitor
+from services.controller_state_store import ControllerStateStore
 from services.motor_monitor import MotorMonitor
+from services.motor_state_store import MotorStateStore
 from services.rover_state_service import RoverStateService
 from services.sensor_monitor import SensorMonitor
+from services.sensor_state_store import SensorStateStore
 
 
 REST_HOST = "0.0.0.0"
@@ -25,14 +28,27 @@ REST_PORT = 8080
 
 def build_application():
     """Builds the current Rover-DR application dependency graph."""
-    sensor_monitor = SensorMonitor()
-    motor_monitor = MotorMonitor()
-    controller_monitor = ControllerMonitor()
+    sensor_state_store = SensorStateStore()
+    motor_state_store = MotorStateStore()
+    controller_state_store = ControllerStateStore()
+
+    sensor_monitor = SensorMonitor(state_store=sensor_state_store)
+    motor_monitor = MotorMonitor(state_store=motor_state_store)
+    controller_monitor = ControllerMonitor(state_store=controller_state_store)
     monitors = [sensor_monitor, motor_monitor, controller_monitor]
 
-    sensor_port = SensorMonitorAdapter(sensor_monitor)
-    motor_port = MotorMonitorAdapter(motor_monitor)
-    controller_port = ControllerMonitorAdapter(controller_monitor)
+    sensor_port = SensorMonitorAdapter(
+        sensor_monitor=sensor_monitor,
+        state_store=sensor_state_store
+    )
+    motor_port = MotorMonitorAdapter(
+        motor_monitor=motor_monitor,
+        state_store=motor_state_store
+    )
+    controller_port = ControllerMonitorAdapter(
+        controller_monitor=controller_monitor,
+        state_store=controller_state_store
+    )
 
     rover_state_service = RoverStateService(
         sensor_port=sensor_port,

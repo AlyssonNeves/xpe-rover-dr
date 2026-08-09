@@ -1,22 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Output adapter exposing motor monitor queries through MotorPort."""
+"""Output adapter exposing motor state through MotorPort."""
 
 from ports.motor_port import MotorPort
 
 
 class MotorMonitorAdapter(MotorPort):
-    """Adapts MotorMonitor to the motor output-port contract."""
+    """Exposes the motor repository through the application output port."""
 
-    def __init__(self, motor_monitor):
+    def __init__(self, motor_monitor, state_store=None):
         self.motor_monitor = motor_monitor
+        self.state_store = state_store or motor_monitor.state_store
 
     def list_motors(self):
-        return self.motor_monitor.list_motors()
+        return [
+            {
+                "code": item["code"],
+                "name": item["name"],
+                "address": item["address"],
+                "connected": item["connected"]
+            }
+            for item in self.state_store.get_all_motors()
+        ]
 
     def read_motor(self, motor_code):
-        return self.motor_monitor.read_motor(motor_code)
+        return self.state_store.get_motor(motor_code)
 
     def read_all_motors(self):
-        return self.motor_monitor.read_all_motors()
+        return self.state_store.get_all_motors()

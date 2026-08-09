@@ -8,7 +8,7 @@ Educational and experimental mobile robotics platform based on LEGO MINDSTORMS E
 
 Rover-DR provides a modular foundation for the progressive development of monitoring, control, navigation and autonomous robotics capabilities on the LEGO EV3 platform.
 
-This increment introduces explicit application lifecycle management and a consolidated Rover state query. Startup and shutdown of monitoring and HTTP components are now coordinated by `RoverApplication`, while `RoverStateService` aggregates the snapshots already maintained by the monitors.
+This increment consolidates dedicated, thread-safe state repositories for sensors, motors and controller information. Monitoring services now publish their snapshots to these repositories, while output adapters and `RoverStateService` consume the repositories as the single source of current state.
 
 ## Platform
 
@@ -27,10 +27,11 @@ This increment introduces explicit application lifecycle management and a consol
 - Read-only HTTP/JSON REST API on TCP port `8080`
 - Consolidated Rover state through `GET /api/rover/state`
 - Centralized application status/error logging
+- Dedicated thread-safe sensor, motor and controller state repositories
 - Coordinated startup and orderly shutdown
 - `SIGINT` and `SIGTERM` process handling
 
-> Dedicated state repositories, motor execution commands, centralized configuration, authentication and hardware control are intentionally deferred to later increments.
+> Motor execution commands, centralized configuration, authentication and hardware control are intentionally deferred to later increments.
 
 ## Project structure
 
@@ -58,10 +59,13 @@ xpe-rover-dr/
 ├── services/
 │   ├── app_logger.py
 │   ├── controller_monitor.py
+│   ├── controller_state_store.py
 │   ├── monitor_base.py
 │   ├── motor_monitor.py
+│   ├── motor_state_store.py
 │   ├── rover_state_service.py
-│   └── sensor_monitor.py
+│   ├── sensor_monitor.py
+│   └── sensor_state_store.py
 ├── tests/
 │   └── postman/
 │       └── rover_dr_rest_api_collection.json
@@ -76,13 +80,14 @@ xpe-rover-dr/
 
 The project follows the initial boundaries of a Hexagonal Architecture:
 
-1. monitoring services maintain the current in-memory state;
-2. output ports define sensor, motor, controller and Rover-state query contracts;
-3. output adapters expose those services to the application layer;
-4. `RoverStateService` consolidates a point-in-time Rover snapshot;
-5. `CommandService` coordinates read-only application queries;
-6. `RestApiServer` translates HTTP requests into application commands;
-7. `RoverApplication` owns startup and shutdown of runtime components.
+1. monitoring services collect or produce state updates;
+2. dedicated `StateStore` repositories keep the latest thread-safe snapshots;
+3. output ports define sensor, motor, controller and Rover-state query contracts;
+4. output adapters read current state from those repositories;
+5. `RoverStateService` consolidates a point-in-time Rover snapshot;
+6. `CommandService` coordinates read-only application queries;
+7. `RestApiServer` translates HTTP requests into application commands;
+8. `RoverApplication` owns startup and shutdown of runtime components.
 
 ![Hexagonal Architecture](assets/images/hexagonal_architecture.png)
 
@@ -124,7 +129,7 @@ Use `Ctrl+C` to request an orderly application shutdown.
 
 ## Status
 
-Monitoring and REST queries with consolidated Rover state and explicit application lifecycle management.
+Monitoring and REST queries backed by consolidated thread-safe state repositories and explicit application lifecycle management.
 
 ## Author
 

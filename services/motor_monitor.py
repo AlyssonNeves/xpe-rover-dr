@@ -3,24 +3,17 @@
 
 """Initial motor monitoring service for Rover-DR."""
 
-import copy
-import threading
-
 from services.monitor_base import MonitorBase
+from services.motor_state_store import MotorStateStore
 
 
 class MotorMonitor(MonitorBase):
-    """Maintains an in-memory snapshot of the Rover motors."""
+    """Publishes the current motor registry to a dedicated state store."""
 
-    def __init__(self, interval_seconds=1.0):
+    def __init__(self, state_store=None, interval_seconds=1.0):
         MonitorBase.__init__(self, "MotorMonitor", interval_seconds)
-        self._lock = threading.Lock()
-        self._motors = {
-            "LLM": self._motor("LLM", "Left Large Motor", "outA", "LargeMotor", "normal"),
-            "LMM": self._motor("LMM", "Left Medium Motor", "outB", "MediumMotor", "normal"),
-            "RMM": self._motor("RMM", "Right Medium Motor", "outC", "MediumMotor", "normal"),
-            "RLM": self._motor("RLM", "Right Large Motor", "outD", "LargeMotor", "inversed")
-        }
+        self.state_store = state_store or MotorStateStore()
+        self._load_initial_motors()
 
     @staticmethod
     def _motor(code, name, address, motor_class, polarity):
@@ -37,6 +30,25 @@ class MotorMonitor(MonitorBase):
             "connected": False,
             "source": "simulated"
         }
+
+    def _load_initial_motors(self):
+        motors = {
+            "LLM": self._motor(
+                "LLM", "Left Large Motor", "outA", "LargeMotor", "normal"
+            ),
+            "LMM": self._motor(
+                "LMM", "Left Medium Motor", "outB", "MediumMotor", "normal"
+            ),
+            "RMM": self._motor(
+                "RMM", "Right Medium Motor", "outC", "MediumMotor", "normal"
+            ),
+            "RLM": self._motor(
+                "RLM", "Right Large Motor", "outD", "LargeMotor", "inversed"
+            )
+        }
+
+        for code, motor in motors.items():
+            self.state_store.update_motor(code, motor)
 
     def on_cycle(self):
         """Refreshes the motor snapshot.
@@ -55,16 +67,13 @@ class MotorMonitor(MonitorBase):
                 "address": item["address"],
                 "connected": item["connected"]
             }
-            for item in self.read_all_motors()
+            for item in self.state_store.get_all_motors()
         ]
 
     def read_motor(self, motor_code):
         """Returns one motor snapshot or None when it is unknown."""
-        with self._lock:
-            motor = self._motors.get(motor_code)
-            return copy.deepcopy(motor) if motor is not None else None
+        return self.state_store.get_motor(motor_code)
 
     def read_all_motors(self):
         """Returns snapshots of all known motors."""
-        with self._lock:
-            return copy.deepcopy(list(self._motors.values()))
+        return self.state_store.get_all_motors()

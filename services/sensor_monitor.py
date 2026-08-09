@@ -3,19 +3,20 @@
 
 """Initial sensor monitoring service for Rover-DR."""
 
-import copy
-import threading
-
 from services.monitor_base import MonitorBase
+from services.sensor_state_store import SensorStateStore
 
 
 class SensorMonitor(MonitorBase):
-    """Maintains an in-memory snapshot of the configured Rover sensors."""
+    """Publishes the current sensor registry to a dedicated state store."""
 
-    def __init__(self, interval_seconds=1.0):
+    def __init__(self, state_store=None, interval_seconds=1.0):
         MonitorBase.__init__(self, "SensorMonitor", interval_seconds)
-        self._lock = threading.Lock()
-        self._sensors = {
+        self.state_store = state_store or SensorStateStore()
+        self._load_initial_sensors()
+
+    def _load_initial_sensors(self):
+        sensors = {
             "TMP": {
                 "code": "TMP",
                 "name": "Temperature",
@@ -68,6 +69,9 @@ class SensorMonitor(MonitorBase):
             }
         }
 
+        for code, sensor in sensors.items():
+            self.state_store.update_sensor(code, sensor)
+
     def on_cycle(self):
         """Refreshes the sensor snapshot.
 
@@ -84,16 +88,13 @@ class SensorMonitor(MonitorBase):
                 "address": item["address"],
                 "connected": item["connected"]
             }
-            for item in self.read_all_sensors()
+            for item in self.state_store.get_all_sensors()
         ]
 
     def read_sensor(self, code):
         """Returns one sensor snapshot or None when it is unknown."""
-        with self._lock:
-            sensor = self._sensors.get(code)
-            return copy.deepcopy(sensor) if sensor is not None else None
+        return self.state_store.get_sensor(code)
 
     def read_all_sensors(self):
         """Returns snapshots of all known sensors."""
-        with self._lock:
-            return copy.deepcopy(list(self._sensors.values()))
+        return self.state_store.get_all_sensors()
