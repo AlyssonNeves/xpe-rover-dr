@@ -5,6 +5,14 @@
 
 import re
 
+from app.commands.domain_handlers import (
+    CommandHandlerRegistry,
+    ControllerCommandHandler,
+    DriveCommandHandler,
+    MotorCommandHandler,
+    RoverCommandHandler,
+    SensorCommandHandler,
+)
 from app.models import CommandActions, CommandResult, CommandTargets
 
 
@@ -35,28 +43,31 @@ class CommandService(object):
         self.controller_port = controller_port
         self.rover_state_port = rover_state_port
         self.drive_port = drive_port
+        self._handlers = CommandHandlerRegistry((
+            SensorCommandHandler(CommandTargets.SENSOR, self._execute_sensor),
+            MotorCommandHandler(CommandTargets.MOTOR, self._execute_motor),
+            ControllerCommandHandler(
+                CommandTargets.CONTROLLER,
+                lambda action, _params: self._execute_controller(action)
+            ),
+            RoverCommandHandler(
+                CommandTargets.ROVER,
+                lambda action, _params: self._execute_rover(action)
+            ),
+            DriveCommandHandler(CommandTargets.DRIVE, self._execute_drive),
+        ))
 
     def execute(self, target, action, params=None):
         validation = self._validate_envelope(target, action, params)
         if validation is not None:
             return validation
 
-        params = params or {}
-
-        if target == CommandTargets.SENSOR:
-            return self._execute_sensor(action, params)
-        if target == CommandTargets.MOTOR:
-            return self._execute_motor(action, params)
-        if target == CommandTargets.CONTROLLER:
-            return self._execute_controller(action)
-        if target == CommandTargets.ROVER:
-            return self._execute_rover(action)
-        if target == CommandTargets.DRIVE:
-            return self._execute_drive(action, params)
-
-        return CommandResult.bad_request(
-            "Unsupported command target: {}".format(target)
-        )
+        handler = self._handlers.get(target)
+        if handler is None:
+            return CommandResult.bad_request(
+                "Unsupported command target: {}".format(target)
+            )
+        return handler.handle(action, params or {})
 
     @staticmethod
     def _validate_envelope(target, action, params):

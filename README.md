@@ -194,3 +194,7 @@ Developed by DUDA Robotics.
 ## License
 
 This project is licensed under the MIT License. See `LICENSE` for details.
+
+## Arquitetura hexagonal
+
+A camada REST foi separada do despacho de comandos. O transporte HTTP permanece em `adapters/in_rest_api_server.py`, o mapeamento de endpoints fica em `adapters/rest/command_routes.py` e o `CommandService` despacha comandos para handlers explícitos em `app/commands/`. Essa separação evita que detalhes HTTP se propaguem para os serviços e portas do Rover. Consulte `docs/hexagonal_architecture.md`.

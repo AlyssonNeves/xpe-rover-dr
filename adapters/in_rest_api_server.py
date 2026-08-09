@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""HTTP input adapter for Rover-DR queries and queued motor commands."""
+"""Thin HTTP input adapter for Rover-DR.
+
+HTTP parsing/serialization stays here while application route mapping lives in
+``adapters.rest.command_routes``.  This keeps transport concerns independent
+from command orchestration and domain services.
+"""
 
 import json
 import threading
@@ -9,22 +14,25 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import unquote, urlparse
 
-from app.models import CommandActions, CommandResult, CommandTargets
+from adapters.rest.command_routes import CommandRoutes
+from app.models import CommandResult
 from app.rover_config import REST_HOST, REST_PORT
 from services.app_logger import AppLogger
 
 
 class RestApiServer(object):
-    """Exposes validated Rover-DR queries and motor command orchestration."""
+    """Exposes Rover-DR application routes over HTTP."""
 
     MAX_REQUEST_BODY_BYTES = 8192
 
     def __init__(self, command_service, host=REST_HOST, port=REST_PORT,
                  ev3dev2_motor_gateway=None):
-        self.command_service = command_service
-        self.ev3dev2_motor_gateway = ev3dev2_motor_gateway
         self.host = host
         self.port = port
+        self.routes = CommandRoutes(
+            command_service,
+            ev3dev2_motor_gateway=ev3dev2_motor_gateway
+        )
         self.http_server = None
         self._server_lock = threading.Lock()
         self._stop_requested = threading.Event()
@@ -61,8 +69,7 @@ class RestApiServer(object):
             server.shutdown()
 
     def _create_handler_class(self):
-        command_service = self.command_service
-        ev3dev2_motor_gateway = self.ev3dev2_motor_gateway
+        routes = self.routes
         max_body_bytes = self.MAX_REQUEST_BODY_BYTES
 
         class RoverRequestHandler(BaseHTTPRequestHandler):
@@ -79,9 +86,17 @@ class RestApiServer(object):
                 self.close_connection = True
 
             def do_GET(self):
+                self._execute_request(
+                    lambda: routes.route_get(self._path_parts())
+                )
+
+            def do_POST(self):
                 try:
-                    path_parts = self._path_parts()
-                    result = self._route_get(path_parts)
+                    body, error_result = self._read_json_body()
+                    if error_result is not None:
+                        self._send_result(error_result)
+                        return
+                    result = routes.route_post(self._path_parts(), body)
                 except Exception as exc:
                     AppLogger.error(
                         "Unhandled REST request error: {}".format(exc)
@@ -89,20 +104,10 @@ class RestApiServer(object):
                     result = CommandResult.internal_error()
                 self._send_result(result)
 
-            def do_POST(self):
-                try:
-                    path_parts = self._path_parts()
-                    body, error_result = self._read_json_body()
-                    if error_result is not None:
-                        self._send_result(error_result)
-                        return
-                    result = self._route_post(path_parts, body)
-                except Exception as exc:
-                    AppLogger.error(
-                        "Unhandled REST request error: {}".format(exc)
-                    )
-                    result = CommandResult.internal_error()
-                self._send_result(result)
+            def do_DELETE(self):
+                self._execute_request(
+                    lambda: routes.route_delete(self._path_parts())
+                )
 
             def do_PUT(self):
                 self._send_method_not_allowed()
@@ -110,10 +115,9 @@ class RestApiServer(object):
             def do_PATCH(self):
                 self._send_method_not_allowed()
 
-            def do_DELETE(self):
+            def _execute_request(self, executor):
                 try:
-                    path_parts = self._path_parts()
-                    result = self._route_delete(path_parts)
+                    result = executor()
                 except Exception as exc:
                     AppLogger.error(
                         "Unhandled REST request error: {}".format(exc)
@@ -128,230 +132,6 @@ class RestApiServer(object):
                     for part in parsed_path.path.strip("/").split("/")
                     if part
                 ]
-
-            def _route_get(self, path_parts):
-                if path_parts == ["api", "health"]:
-                    return CommandResult.ok({"status": "ok"})
-
-                if path_parts == ["api", "ev3dev2", "motor", "catalog"]:
-                    return self._gateway_call("catalog")
-                if path_parts == ["api", "ev3dev2", "motor", "objects"]:
-                    return self._gateway_call("list_objects")
-                if path_parts == ["api", "ev3dev2", "motor", "operations"]:
-                    return self._gateway_call("list_operations")
-                if (
-                    len(path_parts) == 7
-                    and path_parts[:4] == ["api", "ev3dev2", "motor", "objects"]
-                    and path_parts[5] == "properties"
-                ):
-                    return self._gateway_call(
-                        "get_property", path_parts[4], path_parts[6]
-                    )
-                if (
-                    len(path_parts) == 5
-                    and path_parts[:4] == ["api", "ev3dev2", "motor", "members"]
-                ):
-                    return self._gateway_call("module_value", path_parts[4])
-
-                if path_parts == ["api", "rover", "state"]:
-                    return command_service.execute(
-                        CommandTargets.ROVER,
-                        CommandActions.READ_ROVER_STATE
-                    )
-
-                if path_parts == ["api", "drive", "status"]:
-                    return command_service.execute(
-                        CommandTargets.DRIVE,
-                        CommandActions.READ_DRIVE_STATUS
-                    )
-
-                if path_parts == ["api", "sensors"]:
-                    return command_service.execute(
-                        CommandTargets.SENSOR,
-                        CommandActions.LIST_SENSORS
-                    )
-                if path_parts == ["api", "sensors", "all"]:
-                    return command_service.execute(
-                        CommandTargets.SENSOR,
-                        CommandActions.READ_ALL_SENSORS
-                    )
-                if len(path_parts) == 3 and path_parts[:2] == ["api", "sensors"]:
-                    return command_service.execute(
-                        CommandTargets.SENSOR,
-                        CommandActions.READ_SENSOR,
-                        {"code": path_parts[2]}
-                    )
-
-                if path_parts == ["api", "motors"]:
-                    return command_service.execute(
-                        CommandTargets.MOTOR,
-                        CommandActions.LIST_MOTORS
-                    )
-                if path_parts == ["api", "motors", "all"]:
-                    return command_service.execute(
-                        CommandTargets.MOTOR,
-                        CommandActions.READ_ALL_MOTORS
-                    )
-
-                if path_parts == ["api", "motor-commands"]:
-                    return command_service.execute(
-                        CommandTargets.MOTOR,
-                        CommandActions.LIST_MOTOR_COMMANDS
-                    )
-                if (
-                    len(path_parts) == 3
-                    and path_parts[:2] == ["api", "motor-commands"]
-                ):
-                    try:
-                        command_id = int(path_parts[2])
-                    except ValueError:
-                        command_id = path_parts[2]
-                    return command_service.execute(
-                        CommandTargets.MOTOR,
-                        CommandActions.GET_MOTOR_COMMAND,
-                        {"command_id": command_id}
-                    )
-                if (
-                    len(path_parts) == 4
-                    and path_parts[:2] == ["api", "motors"]
-                    and path_parts[3] == "commands"
-                ):
-                    return command_service.execute(
-                        CommandTargets.MOTOR,
-                        CommandActions.LIST_MOTOR_COMMANDS,
-                        {"code": path_parts[2]}
-                    )
-                if len(path_parts) == 3 and path_parts[:2] == ["api", "motors"]:
-                    return command_service.execute(
-                        CommandTargets.MOTOR,
-                        CommandActions.READ_MOTOR,
-                        {"code": path_parts[2]}
-                    )
-
-                controller_routes = {
-                    ("api", "controller", "status"):
-                        CommandActions.READ_CONTROLLER_STATUS,
-                    ("api", "controller", "network"):
-                        CommandActions.READ_CONTROLLER_NETWORK,
-                    ("api", "controller", "battery"):
-                        CommandActions.READ_CONTROLLER_BATTERY,
-                    ("api", "controller", "system"):
-                        CommandActions.READ_CONTROLLER_SYSTEM
-                }
-                controller_action = controller_routes.get(tuple(path_parts))
-                if controller_action is not None:
-                    return command_service.execute(
-                        CommandTargets.CONTROLLER,
-                        controller_action
-                    )
-
-                return CommandResult.not_found("Endpoint not found")
-
-            def _route_post(self, path_parts, body):
-                if path_parts == ["api", "ev3dev2", "motor", "objects"]:
-                    return self._gateway_call(
-                        "create",
-                        body.get("class"),
-                        body.get("args"),
-                        body.get("kwargs"),
-                        body.get("object_id")
-                    )
-                if (
-                    len(path_parts) == 7
-                    and path_parts[:4] == ["api", "ev3dev2", "motor", "objects"]
-                    and path_parts[5] == "methods"
-                ):
-                    return self._gateway_call(
-                        "invoke", path_parts[4], path_parts[6],
-                        body.get("args"), body.get("kwargs")
-                    )
-                if (
-                    len(path_parts) == 7
-                    and path_parts[:4] == ["api", "ev3dev2", "motor", "objects"]
-                    and path_parts[5] == "properties"
-                ):
-                    if "value" not in body:
-                        return CommandResult.bad_request(
-                            "Field 'value' is required"
-                        )
-                    return self._gateway_call(
-                        "set_property", path_parts[4], path_parts[6],
-                        body["value"]
-                    )
-
-                if path_parts == ["api", "drive", "tank"]:
-                    return command_service.execute(
-                        CommandTargets.DRIVE,
-                        CommandActions.DRIVE_TANK,
-                        body
-                    )
-
-                drive_routes = {
-                    ("api", "drive", "stop"): CommandActions.STOP_DRIVE,
-                    ("api", "drive", "reset-odometry"):
-                        CommandActions.RESET_DRIVE_ODOMETRY,
-                    ("api", "drive", "move-distance"):
-                        CommandActions.MOVE_DRIVE_DISTANCE,
-                    ("api", "drive", "rotate-angle"):
-                        CommandActions.ROTATE_DRIVE_ANGLE,
-                    ("api", "drive", "curve-radius"):
-                        CommandActions.CURVE_DRIVE_RADIUS,
-                }
-                drive_action = drive_routes.get(tuple(path_parts))
-                if drive_action is not None:
-                    return command_service.execute(
-                        CommandTargets.DRIVE, drive_action, body
-                    )
-
-                if path_parts == ["api", "motors", "synchronized"]:
-                    return command_service.execute(
-                        CommandTargets.MOTOR,
-                        CommandActions.RUN_SYNCHRONIZED_MOTORS,
-                        body
-                    )
-
-                if (
-                    len(path_parts) == 4
-                    and path_parts[:2] == ["api", "motors"]
-                ):
-                    code = path_parts[2]
-                    operation = path_parts[3]
-                    action_map = {
-                        "stop": CommandActions.STOP_MOTOR,
-                        "run-timed": CommandActions.RUN_TIMED_MOTOR,
-                        "run-forever": CommandActions.RUN_FOREVER_MOTOR,
-                        "run-to-rel-pos": CommandActions.RUN_TO_REL_POS_MOTOR,
-                        "reset": CommandActions.RESET_MOTOR,
-                        "cancel": CommandActions.CANCEL_MOTOR_COMMANDS
-                    }
-                    action = action_map.get(operation)
-                    if action is not None:
-                        params = dict(body)
-                        params["code"] = code
-                        return command_service.execute(
-                            CommandTargets.MOTOR, action, params
-                        )
-
-                return CommandResult.not_found("Endpoint not found")
-
-            def _route_delete(self, path_parts):
-                if (
-                    len(path_parts) == 5
-                    and path_parts[:4] == ["api", "ev3dev2", "motor", "objects"]
-                ):
-                    return self._gateway_call("delete", path_parts[4])
-                return CommandResult.not_found("Endpoint not found")
-
-            def _gateway_call(self, method_name, *args):
-                if ev3dev2_motor_gateway is None:
-                    return CommandResult.service_unavailable(
-                        "ev3dev2.motor gateway is unavailable"
-                    )
-                try:
-                    method = getattr(ev3dev2_motor_gateway, method_name)
-                    return CommandResult.ok(method(*args))
-                except Exception as exc:
-                    return CommandResult.bad_request(str(exc))
 
             def _read_json_body(self):
                 raw_length = self.headers.get("Content-Length", "0")
