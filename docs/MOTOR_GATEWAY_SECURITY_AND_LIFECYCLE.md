@@ -4,7 +4,7 @@
 
 O gateway expõe somente o domínio de motores necessário ao Rover-DR. A superfície pública é baseada em listas explícitas de classes, métodos e propriedades permitidos; membros privados, classes fora do escopo e escrita direta em propriedades perigosas são rejeitados.
 
-Neste marco do projeto ainda não existe autenticação por token. A proteção por autenticação será adicionada em um commit posterior. Portanto, o gateway deve ser utilizado somente em rede de desenvolvimento controlada.
+A partir deste marco, todo endpoint `/api/ev3dev2/motor/...` exige o token dedicado definido em `ROVER_HARDWARE_API_TOKEN`. O cliente deve enviá-lo em `X-Rover-Hardware-Token` ou como `Authorization: Bearer <token>`. A validação ocorre no adapter HTTP antes que qualquer método do gateway seja chamado. O token não possui valor padrão e não deve ser armazenado no repositório.
 
 ## Limite de hardware
 

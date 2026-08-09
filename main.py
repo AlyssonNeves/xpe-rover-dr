@@ -3,7 +3,9 @@
 
 """Composition root and process lifecycle entry point for Rover-DR."""
 
+import os
 import signal
+import sys
 
 from adapters.in_rest_api_server import RestApiServer
 from adapters.out_controller_monitor import ControllerMonitorAdapter
@@ -13,6 +15,7 @@ from adapters.out_rover_state_query import RoverStateQueryAdapter
 from adapters.out_sensor_monitor import SensorMonitorAdapter
 from app.command_service import CommandService
 from app.rover_application import RoverApplication
+from app import rover_config
 from app.rover_config import REST_HOST, REST_PORT
 from services.app_logger import AppLogger
 from services.controller_monitor import ControllerMonitor
@@ -94,15 +97,24 @@ def build_application():
         if ev3dev2_motor_gateway is not None
         else []
     )
-    return RoverApplication(
+    application = RoverApplication(
         monitors=monitors,
         rest_api=rest_api,
         managed_services=managed_services
     )
+    rest_api.set_shutdown_callback(application.stop)
+    rest_api.set_restart_callback(application.restart)
+    return application
 
 
 def main():
     """Starts Rover-DR and handles normal process termination signals."""
+    try:
+        rover_config.validate_security_configuration()
+    except RuntimeError as error:
+        AppLogger.error("Security configuration error: {}".format(error))
+        return 1
+
     application = build_application()
 
     def request_shutdown(signum, _frame):
@@ -120,6 +132,10 @@ def main():
         application.stop()
     finally:
         application.stop()
+
+    if application.is_restart_requested():
+        AppLogger.status("Restarting Rover-DR process.")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
 
     return 0
 

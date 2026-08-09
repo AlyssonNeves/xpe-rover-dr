@@ -90,3 +90,30 @@ def test_configuration_copy_and_invalid_files():
             rover_config.load_json_configuration(path)
     finally:
         os.unlink(path)
+
+
+def test_security_configuration_requires_two_distinct_tokens(monkeypatch):
+    monkeypatch.delenv("ROVER_SHUTDOWN_TOKEN", raising=False)
+    monkeypatch.delenv("ROVER_HARDWARE_API_TOKEN", raising=False)
+    with pytest.raises(RuntimeError, match="ROVER_SHUTDOWN_TOKEN"):
+        rover_config.validate_security_configuration()
+
+    monkeypatch.setenv("ROVER_SHUTDOWN_TOKEN", "shutdown-secret")
+    with pytest.raises(RuntimeError, match="ROVER_HARDWARE_API_TOKEN"):
+        rover_config.validate_security_configuration()
+
+    monkeypatch.setenv("ROVER_HARDWARE_API_TOKEN", "shutdown-secret")
+    with pytest.raises(RuntimeError, match="different values"):
+        rover_config.validate_security_configuration()
+
+    monkeypatch.setenv("ROVER_HARDWARE_API_TOKEN", "hardware-secret")
+    rover_config.validate_security_configuration()
+
+
+def test_rover_application_restart_marks_request_and_stops():
+    rest = FakeRest()
+    app = RoverApplication([], rest)
+    app.restart()
+    assert app.is_restart_requested() is True
+    assert app.get_status() == app.STOPPED
+    assert rest.stopped is True

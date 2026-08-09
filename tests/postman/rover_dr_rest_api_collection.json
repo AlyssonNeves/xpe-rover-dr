@@ -8,6 +8,14 @@
     {
       "key": "baseUrl",
       "value": "http://localhost:8080"
+    },
+    {
+      "key": "shutdownToken",
+      "value": "<configure-locally>"
+    },
+    {
+      "key": "hardwareApiToken",
+      "value": "<configure-locally>"
     }
   ],
   "item": [
@@ -533,14 +541,28 @@
           "name": "Gateway Catalog",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/ev3dev2/motor/catalog"
+            "url": "{{baseUrl}}/api/ev3dev2/motor/catalog",
+            "header": [
+              {
+                "key": "X-Rover-Hardware-Token",
+                "value": "{{hardwareApiToken}}",
+                "type": "text"
+              }
+            ]
           }
         },
         {
           "name": "List Gateway Objects",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/ev3dev2/motor/objects"
+            "url": "{{baseUrl}}/api/ev3dev2/motor/objects",
+            "header": [
+              {
+                "key": "X-Rover-Hardware-Token",
+                "value": "{{hardwareApiToken}}",
+                "type": "text"
+              }
+            ]
           }
         },
         {
@@ -551,6 +573,11 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-Rover-Hardware-Token",
+                "value": "{{hardwareApiToken}}",
+                "type": "text"
               }
             ],
             "body": {
@@ -568,6 +595,11 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-Rover-Hardware-Token",
+                "value": "{{hardwareApiToken}}",
+                "type": "text"
               }
             ],
             "body": {
@@ -585,6 +617,11 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-Rover-Hardware-Token",
+                "value": "{{hardwareApiToken}}",
+                "type": "text"
               }
             ],
             "body": {
@@ -598,14 +635,77 @@
           "name": "List Gateway Operations",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/ev3dev2/motor/operations"
+            "url": "{{baseUrl}}/api/ev3dev2/motor/operations",
+            "header": [
+              {
+                "key": "X-Rover-Hardware-Token",
+                "value": "{{hardwareApiToken}}",
+                "type": "text"
+              }
+            ]
           }
         },
         {
           "name": "Delete Gateway Object",
           "request": {
             "method": "DELETE",
-            "url": "{{baseUrl}}/api/ev3dev2/motor/objects/postman-llm"
+            "url": "{{baseUrl}}/api/ev3dev2/motor/objects/postman-llm",
+            "header": [
+              {
+                "key": "X-Rover-Hardware-Token",
+                "value": "{{hardwareApiToken}}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "System Lifecycle",
+      "item": [
+        {
+          "name": "Shutdown",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Rover-Token",
+                "value": "{{shutdownToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirm\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/system/shutdown"
+          }
+        },
+        {
+          "name": "Restart",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Rover-Token",
+                "value": "{{shutdownToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirm\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/system/restart"
           }
         }
       ]

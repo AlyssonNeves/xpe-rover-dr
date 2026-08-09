@@ -14,10 +14,12 @@ pode ser executado sem hardware EV3 físico.
 - lifecycle da aplicação e infraestrutura de monitors;
 - registros de comandos e reservas de motores;
 - gateway controlado `ev3dev2.motor` com módulo simulado;
+- autenticação dos endpoints protegidos e validação dos tokens obrigatórios;
+- shutdown/restart remoto com confirmação explícita;
 - contratos abstratos das portas.
 
-Recursos de autenticação, alertas operacionais e seleção global do modo de hardware
-não fazem parte deste marco e terão testes adicionados nos commits correspondentes.
+Alertas operacionais e seleção global do modo de hardware não fazem parte deste
+marco e terão testes adicionados nos commits correspondentes.
 
 ## Execução
 

@@ -3,11 +3,12 @@
 
 """Thin HTTP input adapter for Rover-DR.
 
-HTTP parsing/serialization stays here while application route mapping lives in
-``adapters.rest.command_routes``.  This keeps transport concerns independent
-from command orchestration and domain services.
+HTTP parsing, authentication and serialization stay here while application route
+mapping lives in ``adapters.rest.command_routes``.  This keeps transport and
+security concerns independent from command orchestration and domain services.
 """
 
+import hmac
 import json
 import threading
 
@@ -16,7 +17,13 @@ from urllib.parse import unquote, urlparse
 
 from adapters.rest.command_routes import CommandRoutes
 from app.models import CommandResult
-from app.rover_config import REST_HOST, REST_PORT
+from app.rover_config import (
+    REST_HARDWARE_API_TOKEN,
+    REST_HOST,
+    REST_PORT,
+    REST_SHUTDOWN_CONFIRMATION_REQUIRED,
+    REST_SHUTDOWN_TOKEN,
+)
 from services.app_logger import AppLogger
 
 
@@ -26,16 +33,27 @@ class RestApiServer(object):
     MAX_REQUEST_BODY_BYTES = 8192
 
     def __init__(self, command_service, host=REST_HOST, port=REST_PORT,
-                 ev3dev2_motor_gateway=None):
+                 ev3dev2_motor_gateway=None, shutdown_callback=None,
+                 restart_callback=None):
         self.host = host
         self.port = port
         self.routes = CommandRoutes(
             command_service,
             ev3dev2_motor_gateway=ev3dev2_motor_gateway
         )
+        self.shutdown_callback = shutdown_callback
+        self.restart_callback = restart_callback
         self.http_server = None
         self._server_lock = threading.Lock()
         self._stop_requested = threading.Event()
+
+    def set_shutdown_callback(self, shutdown_callback):
+        """Sets the lifecycle callback used by the protected shutdown route."""
+        self.shutdown_callback = shutdown_callback
+
+    def set_restart_callback(self, restart_callback):
+        """Sets the lifecycle callback used by the protected restart route."""
+        self.restart_callback = restart_callback
 
     def start(self):
         handler_class = self._create_handler_class()
@@ -71,6 +89,8 @@ class RestApiServer(object):
     def _create_handler_class(self):
         routes = self.routes
         max_body_bytes = self.MAX_REQUEST_BODY_BYTES
+        shutdown_callback = self.shutdown_callback
+        restart_callback = self.restart_callback
 
         class RoverRequestHandler(BaseHTTPRequestHandler):
             server_version = "RoverDR"
@@ -86,9 +106,11 @@ class RestApiServer(object):
                 self.close_connection = True
 
             def do_GET(self):
-                self._execute_request(
-                    lambda: routes.route_get(self._path_parts())
-                )
+                path_parts = self._path_parts()
+                if self._is_gateway_path(path_parts):
+                    if not self._require_hardware_api_token():
+                        return
+                self._execute_request(lambda: routes.route_get(path_parts))
 
             def do_POST(self):
                 try:
@@ -96,7 +118,24 @@ class RestApiServer(object):
                     if error_result is not None:
                         self._send_result(error_result)
                         return
-                    result = routes.route_post(self._path_parts(), body)
+
+                    path_parts = self._path_parts()
+                    if path_parts == ["api", "system", "shutdown"]:
+                        self._handle_system_operation(
+                            "shutdown", body, shutdown_callback
+                        )
+                        return
+                    if path_parts == ["api", "system", "restart"]:
+                        self._handle_system_operation(
+                            "restart", body, restart_callback
+                        )
+                        return
+
+                    if self._is_gateway_path(path_parts):
+                        if not self._require_hardware_api_token():
+                            return
+
+                    result = routes.route_post(path_parts, body)
                 except Exception as exc:
                     AppLogger.error(
                         "Unhandled REST request error: {}".format(exc)
@@ -105,9 +144,11 @@ class RestApiServer(object):
                 self._send_result(result)
 
             def do_DELETE(self):
-                self._execute_request(
-                    lambda: routes.route_delete(self._path_parts())
-                )
+                path_parts = self._path_parts()
+                if self._is_gateway_path(path_parts):
+                    if not self._require_hardware_api_token():
+                        return
+                self._execute_request(lambda: routes.route_delete(path_parts))
 
             def do_PUT(self):
                 self._send_method_not_allowed()
@@ -164,6 +205,85 @@ class RestApiServer(object):
                     )
                 return body, None
 
+            def _is_gateway_path(self, path_parts):
+                return path_parts[:3] == ["api", "ev3dev2", "motor"]
+
+            def _authorization_bearer(self):
+                authorization = self.headers.get("Authorization", "")
+                if authorization.startswith("Bearer "):
+                    return authorization[len("Bearer "):].strip()
+                return None
+
+            def _tokens_match(self, provided, expected):
+                if provided is None or expected is None:
+                    return False
+                provided = str(provided)
+                expected = str(expected)
+                if not provided or not expected:
+                    return False
+                return hmac.compare_digest(provided, expected)
+
+            def _require_hardware_api_token(self):
+                token = self.headers.get("X-Rover-Hardware-Token")
+                if token is None:
+                    token = self._authorization_bearer()
+
+                if self._tokens_match(token, REST_HARDWARE_API_TOKEN):
+                    return True
+
+                AppLogger.warning("Unauthorized EV3Dev2 motor API request.")
+                self._send_result(CommandResult(
+                    False,
+                    status_code=401,
+                    error="Unauthorized hardware API request"
+                ))
+                return False
+
+            def _shutdown_token_is_valid(self, body):
+                token = body.get("token")
+                if token is None:
+                    token = self.headers.get("X-Rover-Token")
+                if token is None:
+                    token = self._authorization_bearer()
+                return self._tokens_match(token, REST_SHUTDOWN_TOKEN)
+
+            def _handle_system_operation(self, operation, body, callback):
+                if not self._shutdown_token_is_valid(body):
+                    AppLogger.warning(
+                        "Unauthorized remote {} attempt.".format(operation)
+                    )
+                    self._send_result(CommandResult(
+                        False, status_code=401, error="Unauthorized"
+                    ))
+                    return
+
+                if (
+                    REST_SHUTDOWN_CONFIRMATION_REQUIRED
+                    and body.get("confirm") is not True
+                ):
+                    self._send_result(CommandResult.bad_request(
+                        "Required confirmation missing. Send confirm=true"
+                    ))
+                    return
+
+                if callback is None:
+                    self._send_result(CommandResult.service_unavailable(
+                        "{} unavailable".format(operation.capitalize())
+                    ))
+                    return
+
+                self._send_result(CommandResult.ok(
+                    {"message": "Application {} requested.".format(operation)},
+                    status_code=202
+                ))
+
+                lifecycle_thread = threading.Thread(
+                    target=callback,
+                    name="Remote{}Thread".format(operation.capitalize())
+                )
+                lifecycle_thread.daemon = False
+                lifecycle_thread.start()
+
             def _send_method_not_allowed(self):
                 self._send_result(
                     CommandResult.method_not_allowed(
@@ -196,7 +316,9 @@ class RestApiServer(object):
                     "Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"
                 )
                 self.send_header(
-                    "Access-Control-Allow-Headers", "Content-Type"
+                    "Access-Control-Allow-Headers",
+                    "Content-Type, Authorization, X-Rover-Token, "
+                    "X-Rover-Hardware-Token"
                 )
 
             def log_message(self, format_string, *args):

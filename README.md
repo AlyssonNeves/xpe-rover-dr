@@ -135,6 +135,39 @@ cd xpe-rover-dr
 pip install -r requirements.txt
 ```
 
+
+## Security configuration
+
+Commit 17 introduces mandatory credentials for remote lifecycle operations and
+the reflective `ev3dev2.motor` gateway. Rover-DR does not ship operational
+default tokens. Configure both variables before running `main.py`:
+
+```bash
+export ROVER_SHUTDOWN_TOKEN="<generated-shutdown-token>"
+export ROVER_HARDWARE_API_TOKEN="<generated-hardware-token>"
+```
+
+Use different cryptographically random values and never commit them to Git.
+`.env.example` documents the variable names but intentionally contains only
+placeholders. Startup terminates with status `1` when either token is missing,
+blank or when both tokens contain the same value.
+
+The following system operations use `ROVER_SHUTDOWN_TOKEN` and require
+`{"confirm": true}` by default:
+
+```text
+POST /api/system/shutdown
+POST /api/system/restart
+```
+
+The token may be supplied in `X-Rover-Token`, as `Authorization: Bearer ...`,
+or in the JSON `token` field.
+
+Every `/api/ev3dev2/motor/...` request requires the dedicated
+`ROVER_HARDWARE_API_TOKEN`, supplied through `X-Rover-Hardware-Token` or
+`Authorization: Bearer ...`. Regular monitoring, motor-command and drive routes
+retain their existing behavior in this historical increment.
+
 ## Execution
 
 ```bash
@@ -175,6 +208,8 @@ GET  /api/ev3dev2/motor/objects
 POST /api/ev3dev2/motor/objects
 GET  /api/ev3dev2/motor/operations
 DELETE /api/ev3dev2/motor/objects/{object_id}
+POST /api/system/shutdown
+POST /api/system/restart
 ```
 
 A queued command normally returns HTTP `202 Accepted` with its `command_id`. The command lifecycle can then be queried independently.

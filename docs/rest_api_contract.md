@@ -442,3 +442,58 @@ motor reservation.
 Authentication/tokens, the later architectural route refactoring, expanded
 quality gates and deployment-specific hardware enable/disable controls remain
 reserved for subsequent commits.
+
+
+## Authentication and protected operations
+
+Rover-DR uses two independent credentials supplied only through environment
+variables. No operational token is stored in `config/rover_config.json`.
+
+| Environment variable | Protected scope |
+| --- | --- |
+| `ROVER_SHUTDOWN_TOKEN` | `POST /api/system/shutdown` and `POST /api/system/restart` |
+| `ROVER_HARDWARE_API_TOKEN` | every `/api/ev3dev2/motor/...` endpoint |
+
+Missing or invalid credentials return `401 Unauthorized`. The two configured
+tokens must be non-empty and different; otherwise `main.py` refuses to start.
+
+### Remote shutdown
+
+```http
+POST /api/system/shutdown
+X-Rover-Token: <shutdown-token>
+Content-Type: application/json
+```
+
+```json
+{"confirm": true}
+```
+
+A valid request returns `202 Accepted` before the lifecycle callback starts.
+
+### Remote restart
+
+```http
+POST /api/system/restart
+X-Rover-Token: <shutdown-token>
+Content-Type: application/json
+```
+
+```json
+{"confirm": true}
+```
+
+The same token may alternatively be sent as `Authorization: Bearer <token>` or
+in the JSON body as `token`. Confirmation can be disabled only through
+`ROVER_SHUTDOWN_CONFIRMATION_REQUIRED=false`.
+
+### EV3Dev2 motor gateway
+
+Every request whose path begins with `/api/ev3dev2/motor` requires:
+
+```http
+X-Rover-Hardware-Token: <hardware-token>
+```
+
+or `Authorization: Bearer <hardware-token>`. Authentication is checked by the
+HTTP adapter before the gateway is invoked.

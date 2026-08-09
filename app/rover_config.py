@@ -19,12 +19,70 @@ APPLICATION_NAME = "Rover-DR"
 REST_HOST = "0.0.0.0"
 REST_PORT = 8080
 
+# Security credentials are supplied exclusively through environment variables.
+# No operational fallback is defined: committing a default token would make the
+# protected endpoints predictable.
+REST_SHUTDOWN_TOKEN = os.environ.get("ROVER_SHUTDOWN_TOKEN")
+REST_HARDWARE_API_TOKEN = os.environ.get("ROVER_HARDWARE_API_TOKEN")
+
 # Shared monitoring cadence and lifecycle timeout.
 MONITOR_INTERVAL_SECONDS = 1.0
 SHUTDOWN_JOIN_TIMEOUT_SECONDS = 2.0
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROVER_CONFIG_FILE = os.path.join(PROJECT_ROOT, "config", "rover_config.json")
+
+
+def parse_boolean(value, default=False):
+    """Parses a permissive boolean environment/configuration value."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized in ("true", "1", "yes", "y", "on"):
+        return True
+    if normalized in ("false", "0", "no", "n", "off"):
+        return False
+    return default
+
+
+REST_SHUTDOWN_CONFIRMATION_REQUIRED = parse_boolean(
+    os.environ.get("ROVER_SHUTDOWN_CONFIRMATION_REQUIRED"),
+    default=True
+)
+
+
+def validate_security_configuration():
+    """Validates mandatory credentials before runtime components are started.
+
+    Commit 17 introduces two independent protection domains: remote process
+    lifecycle operations and the reflective ``ev3dev2.motor`` gateway. Both
+    tokens are mandatory at this stage and must contain different values.
+    """
+    shutdown_token = os.environ.get("ROVER_SHUTDOWN_TOKEN", "").strip()
+    hardware_token = os.environ.get("ROVER_HARDWARE_API_TOKEN", "").strip()
+    missing = []
+
+    if not shutdown_token:
+        missing.append("ROVER_SHUTDOWN_TOKEN")
+    if not hardware_token:
+        missing.append("ROVER_HARDWARE_API_TOKEN")
+
+    if missing:
+        raise RuntimeError(
+            "Missing required security configuration: {}. Define the "
+            "environment variable(s) before starting Rover-DR.".format(
+                ", ".join(missing)
+            )
+        )
+
+    if shutdown_token == hardware_token:
+        raise RuntimeError(
+            "ROVER_SHUTDOWN_TOKEN and ROVER_HARDWARE_API_TOKEN must use "
+            "different values."
+        )
+
 
 
 def load_json_configuration(config_file_path=ROVER_CONFIG_FILE):

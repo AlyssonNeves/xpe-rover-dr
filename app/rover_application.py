@@ -24,6 +24,8 @@ class RoverApplication(object):
         self.managed_services = list(managed_services or [])
         self._status = self.CREATED
         self._status_lock = threading.Lock()
+        self._restart_lock = threading.Lock()
+        self._restart_requested = False
         self._stopped_event = threading.Event()
         self._rest_thread = None
 
@@ -95,6 +97,18 @@ class RoverApplication(object):
         self._set_status(self.STOPPED)
         self._stopped_event.set()
         AppLogger.status("Rover-DR application stopped.")
+
+    def restart(self):
+        """Requests an orderly application restart after shutdown."""
+        with self._restart_lock:
+            self._restart_requested = True
+        AppLogger.status("Remote Rover-DR restart requested.")
+        self.stop()
+
+    def is_restart_requested(self):
+        """Returns whether a restart was requested through the lifecycle API."""
+        with self._restart_lock:
+            return self._restart_requested
 
     def wait(self):
         """Blocks the caller until application shutdown is completed."""
