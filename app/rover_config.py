@@ -88,6 +88,9 @@ MOTOR_DEFINITIONS = ROVER_JSON_CONFIG.get("motor_definitions", {})
 DRIVE_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("drive", {}))
 DRIVE_LEFT_MOTOR_CODE = DRIVE_CONFIG.get("left_motor_code", "LLM")
 DRIVE_RIGHT_MOTOR_CODE = DRIVE_CONFIG.get("right_motor_code", "RLM")
+DRIVE_GYRO_SENSOR_CODE = DRIVE_CONFIG.get("gyro_sensor_code", "GYR")
+DRIVE_WHEEL_DIAMETER_MM = float(DRIVE_CONFIG.get("wheel_diameter_mm", 56.0))
+DRIVE_TRACK_WIDTH_MM = float(DRIVE_CONFIG.get("track_width_mm", 120.0))
 
 if DRIVE_LEFT_MOTOR_CODE not in MOTOR_DEFINITIONS:
     raise RuntimeError("Configured left drive motor is not defined: {}".format(
@@ -99,6 +102,12 @@ if DRIVE_RIGHT_MOTOR_CODE not in MOTOR_DEFINITIONS:
     ))
 if DRIVE_LEFT_MOTOR_CODE == DRIVE_RIGHT_MOTOR_CODE:
     raise RuntimeError("Left and right drive motors must be different.")
+if DRIVE_GYRO_SENSOR_CODE not in SENSOR_DEFINITIONS:
+    raise RuntimeError("Configured drive gyroscope is not defined: {}".format(
+        DRIVE_GYRO_SENSOR_CODE
+    ))
+if DRIVE_WHEEL_DIAMETER_MM <= 0 or DRIVE_TRACK_WIDTH_MM <= 0:
+    raise RuntimeError("Drive wheel diameter and track width must be positive.")
 
 
 def get_sensor_definitions():

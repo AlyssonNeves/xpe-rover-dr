@@ -103,6 +103,11 @@
   },
   "drive": {
     "left_motor_code": "LLM",
-    "right_motor_code": "RLM"
+    "right_motor_code": "RLM",
+    "gyro_sensor_code": "GYR",
+    "wheel_diameter_mm": 56.0,
+    "track_width_mm": 120.0,
+    "left_speed_factor": 1.0,
+    "right_speed_factor": 1.0
   }
 }

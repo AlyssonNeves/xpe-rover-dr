@@ -44,6 +44,10 @@ class CommandActions(object):
     READ_DRIVE_STATUS = "read_drive_status"
     DRIVE_TANK = "drive_tank"
     STOP_DRIVE = "stop_drive"
+    RESET_DRIVE_ODOMETRY = "reset_drive_odometry"
+    MOVE_DRIVE_DISTANCE = "move_drive_distance"
+    ROTATE_DRIVE_ANGLE = "rotate_drive_angle"
+    CURVE_DRIVE_RADIUS = "curve_drive_radius"
 
 
 class CommandResult(object):

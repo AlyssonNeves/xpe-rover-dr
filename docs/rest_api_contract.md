@@ -223,8 +223,8 @@ existing motor port and synchronized command machinery.
 GET /api/drive/status
 ```
 
-Returns the configured traction motor codes, current motor snapshots and the
-last drive-level request. No odometry or pose information is provided yet.
+Returns the configured traction motor codes, current motor snapshots, gyroscope
+angle, calibration data, estimated pose and the last drive-level request.
 
 ### Tank control
 
@@ -266,9 +266,67 @@ Content-Type: application/json
 The stop operation preempts pending work for both traction motors and requests
 an immediate safe stop on each side.
 
+## Odometry, gyroscope and basic navigation
+
+The drive status now includes `pose` (`x_mm`, `y_mm`, `heading_deg`,
+`distance_mm`) and `gyro_angle_deg`. Encoder deltas feed differential-drive
+odometry; when the configured `GYR` sensor is available its angle is used as
+the current heading estimate.
+
+### Reset odometry
+
+```http
+POST /api/drive/reset-odometry
+Content-Type: application/json
+```
+
+```json
+{"x_mm": 0, "y_mm": 0, "heading_deg": 0}
+```
+
+### Move a linear distance
+
+```http
+POST /api/drive/move-distance
+Content-Type: application/json
+```
+
+```json
+{"distance_mm": 250, "speed_sp": 300, "stop_action": "brake"}
+```
+
+### Rotate in place
+
+```http
+POST /api/drive/rotate-angle
+Content-Type: application/json
+```
+
+```json
+{"angle_deg": 90, "speed_sp": 250, "stop_action": "brake"}
+```
+
+### Drive an arc
+
+```http
+POST /api/drive/curve-radius
+Content-Type: application/json
+```
+
+```json
+{"radius_mm": 250, "angle_deg": 45, "speed_sp": 300, "stop_action": "brake"}
+```
+
+Finite navigation operations return `202 Accepted` with the synchronized
+`batch_id` and the two underlying motor `command_ids`. They are geometric,
+encoder-targeted motions; closed-loop path correction and autonomous path
+planning remain deferred.
+
 ## Deliberately deferred capabilities
 
-This commit provides the initial differential-drive abstraction, but still does **not** provide odometry, gyro-assisted heading control, geometric navigation or authentication/tokens. Those capabilities remain reserved for later commits.
+This increment still does **not** provide advanced closed-loop navigation,
+autonomous path planning, the expanded `ev3dev2.motor` gateway or
+authentication/tokens. Those capabilities remain reserved for later commits.
 
 ## Motor safety supervision
 

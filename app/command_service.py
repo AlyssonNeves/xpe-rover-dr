@@ -553,6 +553,26 @@ class CommandService(object):
                 )
             return CommandResult.ok(data)
 
+        if action == CommandActions.RESET_DRIVE_ODOMETRY:
+            for parameter_name in ("x_mm", "y_mm", "heading_deg"):
+                value = params.get(parameter_name, 0.0)
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    return CommandResult.bad_request(
+                        "Parameter {} must be numeric".format(parameter_name)
+                    )
+            return CommandResult.ok(self.drive_port.reset_odometry(
+                params.get("x_mm", 0.0),
+                params.get("y_mm", 0.0),
+                params.get("heading_deg", 0.0)
+            ))
+
+        if action in (
+            CommandActions.MOVE_DRIVE_DISTANCE,
+            CommandActions.ROTATE_DRIVE_ANGLE,
+            CommandActions.CURVE_DRIVE_RADIUS
+        ):
+            return self._execute_navigation_drive(action, params)
+
         if action == CommandActions.DRIVE_TANK:
             for parameter_name in ("left_speed_sp", "right_speed_sp"):
                 validation = self._validate_drive_speed(
@@ -590,3 +610,72 @@ class CommandService(object):
         return CommandResult.bad_request(
             "Unsupported drive action: {}".format(action)
         )
+
+    def _execute_navigation_drive(self, action, params):
+        speed_sp = params.get("speed_sp")
+        validation = self._validate_drive_speed(speed_sp, "speed_sp")
+        if validation is not None:
+            return validation
+        if speed_sp <= 0:
+            return CommandResult.bad_request("Parameter speed_sp must be positive")
+
+        validation = self._validate_priority(params.get("priority"))
+        if validation is not None:
+            return validation
+        validation = self._validate_stop_action(params.get("stop_action"))
+        if validation is not None:
+            return validation
+        validation = self._validate_safety_timeout(
+            params.get("timeout_ms"), "timeout_ms"
+        )
+        if validation is not None:
+            return validation
+
+        def number(name, allow_zero=False):
+            value = params.get(name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return None, CommandResult.bad_request(
+                    "Parameter {} must be numeric".format(name)
+                )
+            if not allow_zero and value == 0:
+                return None, CommandResult.bad_request(
+                    "Parameter {} must be non-zero".format(name)
+                )
+            return float(value), None
+
+        try:
+            if action == CommandActions.MOVE_DRIVE_DISTANCE:
+                distance_mm, error = number("distance_mm")
+                if error is not None:
+                    return error
+                data = self.drive_port.move_distance(
+                    distance_mm, speed_sp, params.get("priority"),
+                    params.get("stop_action"), params.get("timeout_ms")
+                )
+            elif action == CommandActions.ROTATE_DRIVE_ANGLE:
+                angle_deg, error = number("angle_deg")
+                if error is not None:
+                    return error
+                data = self.drive_port.rotate_angle(
+                    angle_deg, speed_sp, params.get("priority"),
+                    params.get("stop_action"), params.get("timeout_ms")
+                )
+            else:
+                radius_mm, error = number("radius_mm")
+                if error is not None:
+                    return error
+                angle_deg, error = number("angle_deg")
+                if error is not None:
+                    return error
+                data = self.drive_port.curve_radius(
+                    radius_mm, angle_deg, speed_sp, params.get("priority"),
+                    params.get("stop_action"), params.get("timeout_ms")
+                )
+        except ValueError as error:
+            return CommandResult.bad_request(str(error))
+
+        if not data.get("accepted"):
+            return CommandResult.service_unavailable(
+                data.get("error") or "Navigation command could not be accepted"
+            )
+        return CommandResult.ok(data, status_code=202)

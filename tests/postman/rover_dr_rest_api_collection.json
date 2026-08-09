@@ -324,6 +324,114 @@
               ]
             }
           }
+        },
+        {
+          "name": "Reset Odometry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"x_mm\": 0,\n  \"y_mm\": 0,\n  \"heading_deg\": 0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/drive/reset-odometry",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "drive",
+                "reset-odometry"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Move Distance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"distance_mm\": 250,\n  \"speed_sp\": 300,\n  \"stop_action\": \"brake\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/drive/move-distance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "drive",
+                "move-distance"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Rotate Angle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"angle_deg\": 90,\n  \"speed_sp\": 250,\n  \"stop_action\": \"brake\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/drive/rotate-angle",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "drive",
+                "rotate-angle"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Curve Radius",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"radius_mm\": 250,\n  \"angle_deg\": 45,\n  \"speed_sp\": 300,\n  \"stop_action\": \"brake\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/drive/curve-radius",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "drive",
+                "curve-radius"
+              ]
+            }
+          }
         }
       ]
     },

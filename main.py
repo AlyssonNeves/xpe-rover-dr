@@ -56,7 +56,10 @@ def build_application():
     )
     rover_state_port = RoverStateQueryAdapter(rover_state_service)
 
-    drive_service = DriveService(motor_port=motor_port)
+    drive_service = DriveService(
+        motor_port=motor_port,
+        sensor_port=sensor_port
+    )
     drive_port = DriveServiceAdapter(drive_service)
 
     command_service = CommandService(

@@ -119,7 +119,7 @@ The project continues to follow Hexagonal Architecture boundaries:
 5. thread-safe `StateStore` repositories keep current hardware snapshots;
 6. output ports define query and motor-orchestration contracts;
 7. adapters expose the stores, motor service and differential-drive service to the application layer;
-8. `DriveService` coordinates the configured left/right traction motors without accessing EV3 hardware directly;
+8. `DriveService` coordinates differential drive, encoder odometry, gyroscope heading and basic geometric navigation without accessing EV3 motor hardware directly;
 9. `CommandService` validates requests before queue admission;
 10. `RestApiServer` maps HTTP requests to application commands;
 11. `RoverApplication` owns startup and orderly shutdown.
@@ -161,6 +161,10 @@ POST /api/motors/LLM/stop
 POST /api/motors/synchronized
 GET  /api/drive/status
 POST /api/drive/tank
+POST /api/drive/move-distance
+POST /api/drive/rotate-angle
+POST /api/drive/curve-radius
+POST /api/drive/reset-odometry
 POST /api/drive/stop
 GET  /api/motor-commands
 GET  /api/motor-commands/1
@@ -169,13 +173,13 @@ GET  /api/motors/LLM/commands
 
 A queued command normally returns HTTP `202 Accepted` with its `command_id`. The command lifecycle can then be queried independently.
 
-See [`docs/rest_api_contract.md`](docs/rest_api_contract.md) for the complete API contract and [`docs/motor_hardware_validation.md`](docs/motor_hardware_validation.md) for physical validation guidance.
+See [`docs/rest_api_contract.md`](docs/rest_api_contract.md) for the complete API contract, [`docs/drive_navigation.md`](docs/drive_navigation.md) for odometry/navigation details and [`docs/motor_hardware_validation.md`](docs/motor_hardware_validation.md) for physical validation guidance.
 
 Use `Ctrl+C` to request an orderly application shutdown.
 
 ## Status
 
-Centralized configuration, live EV3 motor integration, prioritized command orchestration, synchronized scheduling, motor safety supervision and initial differential-drive control.
+Centralized configuration, live EV3 motor integration, prioritized command orchestration, synchronized scheduling, motor safety supervision, differential-drive odometry, gyroscope heading and basic geometric navigation.
 
 ## Author
 

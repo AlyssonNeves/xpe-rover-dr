@@ -224,11 +224,21 @@ class RestApiServer(object):
                         body
                     )
 
-                if path_parts == ["api", "drive", "stop"]:
+                drive_routes = {
+                    ("api", "drive", "stop"): CommandActions.STOP_DRIVE,
+                    ("api", "drive", "reset-odometry"):
+                        CommandActions.RESET_DRIVE_ODOMETRY,
+                    ("api", "drive", "move-distance"):
+                        CommandActions.MOVE_DRIVE_DISTANCE,
+                    ("api", "drive", "rotate-angle"):
+                        CommandActions.ROTATE_DRIVE_ANGLE,
+                    ("api", "drive", "curve-radius"):
+                        CommandActions.CURVE_DRIVE_RADIUS,
+                }
+                drive_action = drive_routes.get(tuple(path_parts))
+                if drive_action is not None:
                     return command_service.execute(
-                        CommandTargets.DRIVE,
-                        CommandActions.STOP_DRIVE,
-                        body
+                        CommandTargets.DRIVE, drive_action, body
                     )
 
                 if path_parts == ["api", "motors", "synchronized"]:
