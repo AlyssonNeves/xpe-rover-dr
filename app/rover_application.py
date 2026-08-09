@@ -5,6 +5,7 @@
 
 import threading
 
+from app.rover_config import SHUTDOWN_JOIN_TIMEOUT_SECONDS
 from services.app_logger import AppLogger
 
 
@@ -73,10 +74,10 @@ class RoverApplication(object):
 
         for monitor in self.monitors:
             if monitor.is_alive():
-                monitor.join(2.0)
+                monitor.join(SHUTDOWN_JOIN_TIMEOUT_SECONDS)
 
         if self._rest_thread is not None and self._rest_thread.is_alive():
-            self._rest_thread.join(2.0)
+            self._rest_thread.join(SHUTDOWN_JOIN_TIMEOUT_SECONDS)
 
         self._set_status(self.STOPPED)
         self._stopped_event.set()

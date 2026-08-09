@@ -142,3 +142,8 @@ This API still contains no motor execution commands, navigation, sensor-mode
 changes, remote lifecycle operations, authentication, tokens or global
 hardware configuration. Those capabilities are introduced only in their
 respective later commits.
+
+
+## Runtime configuration
+
+The REST host and port defaults are centralized in `app/rover_config.py`. Sensor and motor registry metadata is loaded from `config/rover_config.json`.

@@ -12,6 +12,7 @@ from adapters.out_rover_state_query import RoverStateQueryAdapter
 from adapters.out_sensor_monitor import SensorMonitorAdapter
 from app.command_service import CommandService
 from app.rover_application import RoverApplication
+from app.rover_config import REST_HOST, REST_PORT
 from services.app_logger import AppLogger
 from services.controller_monitor import ControllerMonitor
 from services.controller_state_store import ControllerStateStore
@@ -20,10 +21,6 @@ from services.motor_state_store import MotorStateStore
 from services.rover_state_service import RoverStateService
 from services.sensor_monitor import SensorMonitor
 from services.sensor_state_store import SensorStateStore
-
-
-REST_HOST = "0.0.0.0"
-REST_PORT = 8080
 
 
 def build_application():

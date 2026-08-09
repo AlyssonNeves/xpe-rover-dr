@@ -10,13 +10,14 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import unquote, urlparse
 
 from app.models import CommandActions, CommandResult, CommandTargets
+from app.rover_config import REST_HOST, REST_PORT
 from services.app_logger import AppLogger
 
 
 class RestApiServer(object):
     """Exposes validated application queries through a small HTTP/JSON API."""
 
-    def __init__(self, command_service, host="0.0.0.0", port=8080):
+    def __init__(self, command_service, host=REST_HOST, port=REST_PORT):
         self.command_service = command_service
         self.host = host
         self.port = port

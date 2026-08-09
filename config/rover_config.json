@@ -1,0 +1,81 @@
+{
+  "sensor_definitions": {
+    "TMP": {
+      "name": "Temperature",
+      "address": "in1:i2c76",
+      "mode": "NXT-TEMP-C",
+      "unit": "C",
+      "supported_modes": [
+        "NXT-TEMP-C",
+        "NXT-TEMP-F"
+      ]
+    },
+    "GYR": {
+      "name": "Gyroscope",
+      "address": "in3",
+      "mode": "GYRO-ANG",
+      "unit": "deg",
+      "supported_modes": [
+        "GYRO-ANG",
+        "GYRO-RATE"
+      ]
+    },
+    "RCS": {
+      "name": "Right Color Sensor",
+      "address": "in2:i2c80:mux1",
+      "mode": "COL-REFLECT",
+      "unit": "%",
+      "supported_modes": [
+        "COL-REFLECT",
+        "COL-AMBIENT",
+        "COL-COLOR"
+      ]
+    },
+    "LCS": {
+      "name": "Left Color Sensor",
+      "address": "in2:i2c81:mux2",
+      "mode": "COL-REFLECT",
+      "unit": "%",
+      "supported_modes": [
+        "COL-REFLECT",
+        "COL-AMBIENT",
+        "COL-COLOR"
+      ]
+    },
+    "TCH": {
+      "name": "Touch Sensor",
+      "address": "in2:i2c82:mux3",
+      "mode": "TOUCH",
+      "unit": "pressed",
+      "supported_modes": [
+        "TOUCH"
+      ]
+    }
+  },
+  "motor_definitions": {
+    "LLM": {
+      "name": "Left Large Motor",
+      "address": "outA",
+      "motor_class": "LargeMotor",
+      "polarity": "normal"
+    },
+    "LMM": {
+      "name": "Left Medium Motor",
+      "address": "outB",
+      "motor_class": "MediumMotor",
+      "polarity": "normal"
+    },
+    "RMM": {
+      "name": "Right Medium Motor",
+      "address": "outC",
+      "motor_class": "MediumMotor",
+      "polarity": "normal"
+    },
+    "RLM": {
+      "name": "Right Large Motor",
+      "address": "outD",
+      "motor_class": "LargeMotor",
+      "polarity": "inversed"
+    }
+  }
+}

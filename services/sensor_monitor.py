@@ -1,75 +1,35 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Initial sensor monitoring service for Rover-DR."""
+"""Sensor monitoring service for Rover-DR."""
 
+from app.rover_config import MONITOR_INTERVAL_SECONDS, get_sensor_definitions
 from services.monitor_base import MonitorBase
 from services.sensor_state_store import SensorStateStore
 
 
 class SensorMonitor(MonitorBase):
-    """Publishes the current sensor registry to a dedicated state store."""
+    """Publishes the configured sensor registry to a dedicated state store."""
 
-    def __init__(self, state_store=None, interval_seconds=1.0):
-        MonitorBase.__init__(self, "SensorMonitor", interval_seconds)
+    def __init__(self, state_store=None, interval_seconds=None):
+        interval = (
+            MONITOR_INTERVAL_SECONDS
+            if interval_seconds is None
+            else interval_seconds
+        )
+        MonitorBase.__init__(self, "SensorMonitor", interval)
         self.state_store = state_store or SensorStateStore()
-        self._load_initial_sensors()
+        self._load_configured_sensors()
 
-    def _load_initial_sensors(self):
-        sensors = {
-            "TMP": {
-                "code": "TMP",
-                "name": "Temperature",
-                "address": "in1:i2c76",
-                "mode": "NXT-TEMP-C",
-                "unit": "C",
+    def _load_configured_sensors(self):
+        for code, definition in get_sensor_definitions().items():
+            sensor = dict(definition)
+            sensor.update({
+                "code": code,
                 "value": None,
                 "connected": False,
                 "source": "simulated"
-            },
-            "GYR": {
-                "code": "GYR",
-                "name": "Gyroscope",
-                "address": "in3",
-                "mode": "GYRO-ANG",
-                "unit": "deg",
-                "value": None,
-                "connected": False,
-                "source": "simulated"
-            },
-            "RCS": {
-                "code": "RCS",
-                "name": "Right Color Sensor",
-                "address": "in2:i2c80:mux1",
-                "mode": "COL-REFLECT",
-                "unit": "%",
-                "value": None,
-                "connected": False,
-                "source": "simulated"
-            },
-            "LCS": {
-                "code": "LCS",
-                "name": "Left Color Sensor",
-                "address": "in2:i2c81:mux2",
-                "mode": "COL-REFLECT",
-                "unit": "%",
-                "value": None,
-                "connected": False,
-                "source": "simulated"
-            },
-            "TCH": {
-                "code": "TCH",
-                "name": "Touch Sensor",
-                "address": "in2:i2c82:mux3",
-                "mode": "TOUCH",
-                "unit": "pressed",
-                "value": None,
-                "connected": False,
-                "source": "simulated"
-            }
-        }
-
-        for code, sensor in sensors.items():
+            })
             self.state_store.update_sensor(code, sensor)
 
     def on_cycle(self):

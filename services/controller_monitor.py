@@ -6,6 +6,7 @@
 import platform
 import socket
 
+from app.rover_config import MONITOR_INTERVAL_SECONDS
 from services.controller_state_store import ControllerStateStore
 from services.monitor_base import MonitorBase
 
@@ -13,8 +14,13 @@ from services.monitor_base import MonitorBase
 class ControllerMonitor(MonitorBase):
     """Publishes controller, network, battery and system snapshots."""
 
-    def __init__(self, state_store=None, interval_seconds=1.0):
-        MonitorBase.__init__(self, "ControllerMonitor", interval_seconds)
+    def __init__(self, state_store=None, interval_seconds=None):
+        interval = (
+            MONITOR_INTERVAL_SECONDS
+            if interval_seconds is None
+            else interval_seconds
+        )
+        MonitorBase.__init__(self, "ControllerMonitor", interval)
         self.state_store = state_store or ControllerStateStore()
         self._refresh()
 
