@@ -19,6 +19,8 @@ class CommandService(object):
     MAX_REL_POSITION = 1000000
     MIN_PRIORITY = 0
     MAX_PRIORITY = 100
+    MIN_SAFETY_TIMEOUT_MS = 100
+    MAX_SAFETY_TIMEOUT_MS = 600000
 
     def __init__(
         self,
@@ -133,6 +135,22 @@ class CommandService(object):
             )
         return None
 
+    def _validate_safety_timeout(self, value, parameter_name):
+        if value is None:
+            return None
+        if not self._is_integer(value):
+            return CommandResult.bad_request(
+                "Parameter {} must be an integer".format(parameter_name)
+            )
+        if value < self.MIN_SAFETY_TIMEOUT_MS or value > self.MAX_SAFETY_TIMEOUT_MS:
+            return CommandResult.bad_request(
+                "Parameter {} must be between {} and {} milliseconds".format(
+                    parameter_name, self.MIN_SAFETY_TIMEOUT_MS,
+                    self.MAX_SAFETY_TIMEOUT_MS
+                )
+            )
+        return None
+
     def _execute_sensor(self, action, params):
         if self.sensor_port is None:
             return CommandResult.service_unavailable(
@@ -217,6 +235,12 @@ class CommandService(object):
         validation = self._validate_priority(params.get("priority"))
         if validation is not None:
             return None, validation
+        for parameter_name in ("timeout_ms", "watchdog_ms"):
+            validation = self._validate_safety_timeout(
+                params.get(parameter_name), parameter_name
+            )
+            if validation is not None:
+                return None, validation
         return code, None
 
     @staticmethod
@@ -261,7 +285,8 @@ class CommandService(object):
             params["speed_sp"],
             time_sp,
             params.get("priority"),
-            params.get("stop_action")
+            params.get("stop_action"),
+            params.get("timeout_ms")
         )
         return self._execution_result(data, code)
 
@@ -275,7 +300,9 @@ class CommandService(object):
             code,
             params["speed_sp"],
             params.get("priority"),
-            params.get("stop_action")
+            params.get("stop_action"),
+            params.get("watchdog_ms"),
+            params.get("timeout_ms")
         )
         return self._execution_result(data, code)
 
@@ -301,7 +328,8 @@ class CommandService(object):
             params["speed_sp"],
             position_sp,
             params.get("priority"),
-            params.get("stop_action")
+            params.get("stop_action"),
+            params.get("timeout_ms")
         )
         return self._execution_result(data, code)
 
@@ -382,7 +410,9 @@ class CommandService(object):
 
         params = {
             "speed_sp": raw_item.get("speed_sp"),
-            "stop_action": raw_item.get("stop_action")
+            "stop_action": raw_item.get("stop_action"),
+            "timeout_ms": raw_item.get("timeout_ms"),
+            "watchdog_ms": raw_item.get("watchdog_ms")
         }
         validation = self._validate_speed(params["speed_sp"])
         if validation is not None:
@@ -390,6 +420,12 @@ class CommandService(object):
         validation = self._validate_stop_action(params.get("stop_action"))
         if validation is not None:
             return None, validation
+        for parameter_name in ("timeout_ms", "watchdog_ms"):
+            validation = self._validate_safety_timeout(
+                params.get(parameter_name), parameter_name
+            )
+            if validation is not None:
+                return None, validation
 
         if action == "run-timed":
             time_sp = raw_item.get("time_sp")

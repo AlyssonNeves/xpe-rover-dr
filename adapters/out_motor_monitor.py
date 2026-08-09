@@ -26,25 +26,27 @@ class MotorMonitorAdapter(MotorPort):
         return self.motor_monitor.stop_motor(motor_code, stop_action)
 
     def run_timed_motor(
-        self, motor_code, speed_sp, time_sp, priority=None, stop_action=None
+        self, motor_code, speed_sp, time_sp, priority=None, stop_action=None,
+        timeout_ms=None
     ):
         return self.motor_monitor.run_timed_motor(
-            motor_code, speed_sp, time_sp, priority, stop_action
+            motor_code, speed_sp, time_sp, priority, stop_action, timeout_ms
         )
 
     def run_forever_motor(
-        self, motor_code, speed_sp, priority=None, stop_action=None
+        self, motor_code, speed_sp, priority=None, stop_action=None,
+        watchdog_ms=None, timeout_ms=None
     ):
         return self.motor_monitor.run_forever_motor(
-            motor_code, speed_sp, priority, stop_action
+            motor_code, speed_sp, priority, stop_action, watchdog_ms, timeout_ms
         )
 
     def run_to_rel_pos_motor(
         self, motor_code, speed_sp, position_sp, priority=None,
-        stop_action=None
+        stop_action=None, timeout_ms=None
     ):
         return self.motor_monitor.run_to_rel_pos_motor(
-            motor_code, speed_sp, position_sp, priority, stop_action
+            motor_code, speed_sp, position_sp, priority, stop_action, timeout_ms
         )
 
     def reset_motor(self, motor_code, priority=None):

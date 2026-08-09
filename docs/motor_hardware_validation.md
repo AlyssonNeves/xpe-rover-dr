@@ -58,4 +58,18 @@ Before moving to watchdog/safety validation, verify the orchestration layer inde
 5. submit a synchronized two-motor batch and confirm both commands share the same `batch_id` and scheduled start timestamp;
 6. verify one motor queue does not block commands sent to another motor.
 
-No watchdog or execution deadline should be expected in this commit.
+
+
+## Safety validation introduced in Commit 11
+
+Validate each configured motor with the following conditions before increasing
+speed or load:
+
+1. confirm that a `run-forever` command stops automatically when its watchdog expires;
+2. confirm that a blocked motor is classified as `STALLED` and is stopped;
+3. confirm that an intentionally slow/unfinished bounded command reaches `TIMED_OUT`;
+4. confirm that application shutdown stops active motors using the configured safe-stop action;
+5. confirm that `ramp_up_sp` and `ramp_down_sp` are accepted by the installed EV3 driver;
+6. inspect `last_safety_event` in the motor snapshot after timeout or stall scenarios.
+
+Perform these checks with the rover lifted from the floor first.

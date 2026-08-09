@@ -205,17 +205,33 @@ The server assigns a shared `batch_id` and `scheduled_start_at` timestamp. Indep
 - `position_sp`: integer with absolute value no greater than `1000000`;
 - `priority`: integer from `0` through `100`;
 - `stop_action`: `coast`, `brake` or `hold`;
+- `timeout_ms`: optional integer from `100` through `600000` milliseconds;
+- `watchdog_ms`: optional integer from `100` through `600000` milliseconds for `run-forever`;
 - request body: JSON object no larger than 8192 bytes.
 
-## Deliberately deferred safety mechanisms
+## Deliberately deferred capabilities
 
-This commit does **not** provide:
+This commit still does **not** provide differential drive, odometry/navigation or
+authentication/tokens. Those capabilities remain reserved for later commits.
 
-- watchdog supervision for `run-forever`;
-- command execution deadlines/timeouts;
-- stall detection;
-- automatic emergency stop based on elapsed time;
-- differential drive or navigation;
-- authentication/tokens.
+## Motor safety supervision
 
-These safety mechanisms are intentionally introduced by later commits so that the history remains technically incremental.
+Movement commands are supervised after queue admission. The optional `timeout_ms`
+parameter overrides the general execution deadline for bounded commands.
+`run-forever` additionally accepts `watchdog_ms`; if it is omitted, the centralized
+`motor_run_forever_watchdog_ms` value is used. Safety decisions use a monotonic
+clock. A command can finish as `TIMED_OUT` or `STALLED`; in both cases the service
+issues a safe motor stop before publishing the final command state.
+
+Example:
+
+```json
+{
+  "speed_sp": 300,
+  "watchdog_ms": 2000,
+  "stop_action": "brake",
+  "priority": 50
+}
+```
+
+Accepted safety timeout values range from 100 to 600000 milliseconds.

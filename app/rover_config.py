@@ -61,6 +61,27 @@ def load_json_configuration(config_file_path=ROVER_CONFIG_FILE):
 
 
 ROVER_JSON_CONFIG = load_json_configuration()
+
+# Motor safety defaults. These values are centralized so execution workers,
+# adapters and API validation use the same operational policy.
+MOTOR_COMMAND_TIMEOUT_MS = int(
+    ROVER_JSON_CONFIG.get("motor_command_timeout_ms", 10000)
+)
+MOTOR_RUN_FOREVER_WATCHDOG_MS = int(
+    ROVER_JSON_CONFIG.get("motor_run_forever_watchdog_ms", 2000)
+)
+MOTOR_STALL_TIMEOUT_MS = int(
+    ROVER_JSON_CONFIG.get("motor_stall_timeout_ms", 1500)
+)
+MOTOR_POSITION_TOLERANCE = int(
+    ROVER_JSON_CONFIG.get("motor_position_tolerance", 5)
+)
+MOTOR_DEFAULT_STOP_ACTION = ROVER_JSON_CONFIG.get(
+    "motor_default_stop_action", "brake"
+)
+MOTOR_RAMP_UP_MS = int(ROVER_JSON_CONFIG.get("motor_ramp_up_ms", 300))
+MOTOR_RAMP_DOWN_MS = int(ROVER_JSON_CONFIG.get("motor_ramp_down_ms", 300))
+
 SENSOR_DEFINITIONS = ROVER_JSON_CONFIG.get("sensor_definitions", {})
 MOTOR_DEFINITIONS = ROVER_JSON_CONFIG.get("motor_definitions", {})
 

@@ -1,4 +1,11 @@
 {
+  "motor_command_timeout_ms": 10000,
+  "motor_run_forever_watchdog_ms": 2000,
+  "motor_stall_timeout_ms": 1500,
+  "motor_position_tolerance": 5,
+  "motor_default_stop_action": "brake",
+  "motor_ramp_up_ms": 300,
+  "motor_ramp_down_ms": 300,
   "sensor_definitions": {
     "TMP": {
       "name": "Temperature",
@@ -57,25 +64,41 @@
       "name": "Left Large Motor",
       "address": "outA",
       "motor_class": "LargeMotor",
-      "polarity": "normal"
+      "polarity": "normal",
+      "limits": {
+        "max_relative_position_sp": 7200,
+        "max_speed_ratio": 1.0
+      }
     },
     "LMM": {
       "name": "Left Medium Motor",
       "address": "outB",
       "motor_class": "MediumMotor",
-      "polarity": "normal"
+      "polarity": "normal",
+      "limits": {
+        "max_relative_position_sp": 7200,
+        "max_speed_ratio": 1.0
+      }
     },
     "RMM": {
       "name": "Right Medium Motor",
       "address": "outC",
       "motor_class": "MediumMotor",
-      "polarity": "normal"
+      "polarity": "normal",
+      "limits": {
+        "max_relative_position_sp": 7200,
+        "max_speed_ratio": 1.0
+      }
     },
     "RLM": {
       "name": "Right Large Motor",
       "address": "outD",
       "motor_class": "LargeMotor",
-      "polarity": "inversed"
+      "polarity": "inversed",
+      "limits": {
+        "max_relative_position_sp": 7200,
+        "max_speed_ratio": 1.0
+      }
     }
   }
 }

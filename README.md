@@ -8,7 +8,7 @@ Educational and experimental mobile robotics platform based on LEGO MINDSTORMS E
 
 Rover-DR provides a modular foundation for the progressive development of monitoring, control, navigation and autonomous robotics capabilities on the LEGO EV3 platform.
 
-This increment introduces asynchronous motor-command orchestration. Motor requests are now accepted into independent per-motor queues, receive a `command_id`, can carry priorities, expose lifecycle status and may be cancelled. Multi-motor commands can also be submitted as a synchronized batch with a shared `batch_id` and scheduled start time.
+This increment adds motor safety supervision to the asynchronous command architecture. Every movement is now bounded by execution deadlines, continuous `run-forever` commands have an automatic watchdog, stalled motors are detected, safe-stop behavior is centralized and EV3 ramp parameters are applied before movement.
 
 ## Platform
 
@@ -32,20 +32,25 @@ This increment introduces asynchronous motor-command orchestration. Motor reques
 - Per-motor asynchronous command queues
 - Numeric command priorities from `0` to `100`, where `100` is highest
 - Stable FIFO ordering between commands with the same priority
-- Public `command_id` lifecycle tracking (`QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`, `CANCELLED`)
+- Public `command_id` lifecycle tracking (`QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`, `CANCELLED`, `TIMED_OUT`, `STALLED`)
 - Command history queries globally or per motor
 - Cancellation of queued and active motor work
 - Immediate stop that preempts pending work for the selected motor
 - Synchronized multi-motor batches with shared `batch_id` and scheduled start timestamp
 - Queued `run-timed`, `run-forever`, `run-to-rel-pos` and `reset` operations
 - Validated speed, duration, position, stop action and priority parameters
+- Monotonic execution deadlines for bounded motor movements
+- Automatic watchdog for `run-forever` commands
+- Driver-level and logical stall detection based on motor progress
+- Centralized default safe-stop action (`brake`)
+- Native EV3 acceleration/deceleration ramps before movement
+- Safety event metadata exposed in motor state snapshots
 - Consistent `400`, `404`, `405`, `500` and `503` API responses
 - Basic CORS/OPTIONS support
 - Graceful fallback when EV3 motor hardware or `ev3dev2` is unavailable
 - Coordinated startup and orderly shutdown
 - `SIGINT` and `SIGTERM` process handling
 
-> This increment introduces orchestration, but **does not yet implement watchdogs, execution deadlines, stall protection or motor safety supervision**. Those mechanisms belong to the next commit.
 
 ## Project structure
 
@@ -160,7 +165,7 @@ Use `Ctrl+C` to request an orderly application shutdown.
 
 ## Status
 
-Centralized configuration, live EV3 motor integration, per-motor priority queues, command lifecycle tracking, cancellation and synchronized multi-motor scheduling.
+Centralized configuration, live EV3 motor integration, prioritized command orchestration, synchronized scheduling, monotonic deadlines, run-forever watchdogs, stall detection and safe motor shutdown.
 
 ## Author
 

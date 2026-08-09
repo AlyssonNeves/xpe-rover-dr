@@ -7,7 +7,12 @@ import queue
 import threading
 import time
 
-from app.rover_config import MONITOR_INTERVAL_SECONDS, get_motor_definitions
+from app.rover_config import (
+    MONITOR_INTERVAL_SECONDS, MOTOR_COMMAND_TIMEOUT_MS,
+    MOTOR_DEFAULT_STOP_ACTION, MOTOR_POSITION_TOLERANCE,
+    MOTOR_RAMP_DOWN_MS, MOTOR_RAMP_UP_MS, MOTOR_RUN_FOREVER_WATCHDOG_MS,
+    MOTOR_STALL_TIMEOUT_MS, get_motor_definitions
+)
 from services.monitor_base import MonitorBase
 from services.motor.registries import MotorCommandRegistry
 from services.motor_state_store import MotorStateStore
@@ -22,6 +27,8 @@ class MotorLifecycleStates(object):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+    TIMED_OUT = "TIMED_OUT"
+    STALLED = "STALLED"
 
 
 class MotorCommandActions(object):
@@ -168,7 +175,27 @@ class MotorRegistry(object):
         if stop_action is not None:
             motor.stop_action = stop_action
 
+    def configure_motion(
+        self, motor_code, stop_action=None, ramp_up_sp=None, ramp_down_sp=None
+    ):
+        """Applies supported EV3 safety parameters before movement."""
+        stop_action = stop_action or MOTOR_DEFAULT_STOP_ACTION
+
+        def operation(motor):
+            self._apply_stop_action(motor, stop_action)
+            if hasattr(motor, "ramp_up_sp"):
+                motor.ramp_up_sp = max(0, int(
+                    MOTOR_RAMP_UP_MS if ramp_up_sp is None else ramp_up_sp
+                ))
+            if hasattr(motor, "ramp_down_sp"):
+                motor.ramp_down_sp = max(0, int(
+                    MOTOR_RAMP_DOWN_MS if ramp_down_sp is None else ramp_down_sp
+                ))
+
+        return self.execute(motor_code, "configure-motion", operation)
+
     def stop_motor(self, motor_code, stop_action=None):
+        stop_action = stop_action or MOTOR_DEFAULT_STOP_ACTION
         def operation(motor):
             self._apply_stop_action(motor, stop_action)
             motor.stop()
@@ -269,7 +296,14 @@ class MotorMonitor(MonitorBase):
             "lifecycle_state": MotorLifecycleStates.IDLE,
             "command_queue_size": 0,
             "active_command_id": None,
-            "last_command_id": None
+            "last_command_id": None,
+            "last_safety_event": None,
+            "safety": {
+                "command_timeout_ms": MOTOR_COMMAND_TIMEOUT_MS,
+                "run_forever_watchdog_ms": MOTOR_RUN_FOREVER_WATCHDOG_MS,
+                "stall_timeout_ms": MOTOR_STALL_TIMEOUT_MS,
+                "default_stop_action": MOTOR_DEFAULT_STOP_ACTION
+            }
         }
 
     def _load_configured_motors(self):
@@ -284,7 +318,8 @@ class MotorMonitor(MonitorBase):
         snapshot = self._base_snapshot(motor_code, definition)
         for field in (
             "lifecycle_state", "command_queue_size",
-            "active_command_id", "last_command_id"
+            "active_command_id", "last_command_id", "last_safety_event",
+            "safety"
         ):
             if field in previous:
                 snapshot[field] = previous[field]
@@ -494,58 +529,140 @@ class MotorMonitor(MonitorBase):
             time.sleep(min(0.01, max(0.0, remaining)))
         return True
 
-    def _wait_until_not_running(self, motor_code, cancel_event):
-        """Waits without timeout; Commit 11 introduces safety deadlines."""
+    def _position_progressed(self, previous_position, current_position):
+        if previous_position is None or current_position is None:
+            return True
+        try:
+            return abs(current_position - previous_position) > MOTOR_POSITION_TOLERANCE
+        except TypeError:
+            return True
+
+    def _wait_for_motion_completion(
+        self, motor_code, cancel_event, deadline_monotonic, stall_timeout_ms
+    ):
+        """Waits for bounded motion and enforces timeout/stall protection."""
+        last_progress_at = time.monotonic()
+        snapshot = self.motor_registry.read_motor(motor_code) or {}
+        last_position = snapshot.get("position")
+
         while self.motor_registry.is_running(motor_code):
             if cancel_event.is_set() or self._worker_stop_event.is_set():
-                self.motor_registry.stop_motor(motor_code, "brake")
-                return False
+                self.motor_registry.stop_motor(
+                    motor_code, MOTOR_DEFAULT_STOP_ACTION
+                )
+                return "cancelled", "Command cancelled"
+
+            now = time.monotonic()
+            if now >= deadline_monotonic:
+                self.motor_registry.stop_motor(
+                    motor_code, MOTOR_DEFAULT_STOP_ACTION
+                )
+                return "timed_out", "Motor command execution timeout expired"
+
+            snapshot = self.motor_registry.read_motor(motor_code) or {}
+            states = snapshot.get("state") or []
+            if "stalled" in states:
+                self.motor_registry.stop_motor(
+                    motor_code, MOTOR_DEFAULT_STOP_ACTION
+                )
+                return "stalled", "Motor driver reported stalled state"
+
+            current_position = snapshot.get("position")
+            if self._position_progressed(last_position, current_position):
+                last_position = current_position
+                last_progress_at = now
+            elif (now - last_progress_at) * 1000.0 >= stall_timeout_ms:
+                self.motor_registry.stop_motor(
+                    motor_code, MOTOR_DEFAULT_STOP_ACTION
+                )
+                return "stalled", "Motor position did not progress within stall timeout"
+
             time.sleep(0.02)
-        return True
+        return "completed", None
 
     def _execute_hardware_command(self, command, cancel_event):
         motor_code = command["motor_code"]
         action = command["action"]
         params = command.get("parameters", {})
+        stop_action = params.get("stop_action") or MOTOR_DEFAULT_STOP_ACTION
+        timeout_ms = params.get("timeout_ms") or MOTOR_COMMAND_TIMEOUT_MS
+        stall_timeout_ms = params.get("stall_timeout_ms") or MOTOR_STALL_TIMEOUT_MS
+
+        configured, error = self.motor_registry.configure_motion(
+            motor_code, stop_action=stop_action
+        )
+        if not configured:
+            return False, error, "failed"
 
         if action == MotorCommandActions.RUN_TIMED:
             accepted, error = self.motor_registry.run_timed_motor(
-                motor_code, params["speed_sp"], params["time_sp"],
-                params.get("stop_action")
+                motor_code, params["speed_sp"], params["time_sp"], stop_action
             )
-            if accepted and not self._wait_until_not_running(
-                motor_code, cancel_event
-            ):
-                return False, "Command cancelled", True
-            return accepted, error, False
+            if not accepted:
+                return False, error, "failed"
+            # Give run-timed its requested duration plus the general safety margin.
+            deadline = time.monotonic() + (
+                float(params["time_sp"] + timeout_ms) / 1000.0
+            )
+            outcome, error = self._wait_for_motion_completion(
+                motor_code, cancel_event, deadline, stall_timeout_ms
+            )
+            return outcome == "completed", error, outcome
 
         if action == MotorCommandActions.RUN_FOREVER:
             accepted, error = self.motor_registry.run_forever_motor(
-                motor_code, params["speed_sp"], params.get("stop_action")
+                motor_code, params["speed_sp"], stop_action
             )
             if not accepted:
-                return False, error, False
-            while not cancel_event.is_set() and not self._worker_stop_event.is_set():
+                return False, error, "failed"
+            watchdog_ms = params.get("watchdog_ms") or MOTOR_RUN_FOREVER_WATCHDOG_MS
+            watchdog_deadline = time.monotonic() + float(watchdog_ms) / 1000.0
+            execution_deadline = time.monotonic() + float(timeout_ms) / 1000.0
+            last_progress_at = time.monotonic()
+            snapshot = self.motor_registry.read_motor(motor_code) or {}
+            last_position = snapshot.get("position")
+            while True:
+                if cancel_event.is_set() or self._worker_stop_event.is_set():
+                    self.motor_registry.stop_motor(motor_code, stop_action)
+                    return False, "Command cancelled", "cancelled"
+                now = time.monotonic()
+                if now >= watchdog_deadline:
+                    self.motor_registry.stop_motor(motor_code, stop_action)
+                    return False, "run-forever watchdog expired", "timed_out"
+                if now >= execution_deadline:
+                    self.motor_registry.stop_motor(motor_code, stop_action)
+                    return False, "Motor command execution timeout expired", "timed_out"
+                snapshot = self.motor_registry.read_motor(motor_code) or {}
+                states = snapshot.get("state") or []
+                if "stalled" in states:
+                    self.motor_registry.stop_motor(motor_code, stop_action)
+                    return False, "Motor driver reported stalled state", "stalled"
+                current_position = snapshot.get("position")
+                if self._position_progressed(last_position, current_position):
+                    last_position = current_position
+                    last_progress_at = now
+                elif (now - last_progress_at) * 1000.0 >= stall_timeout_ms:
+                    self.motor_registry.stop_motor(motor_code, stop_action)
+                    return False, "Motor position did not progress within stall timeout", "stalled"
                 time.sleep(0.02)
-            self.motor_registry.stop_motor(motor_code, params.get("stop_action") or "brake")
-            return False, "Command cancelled", True
 
         if action == MotorCommandActions.RUN_TO_REL_POS:
             accepted, error = self.motor_registry.run_to_rel_pos_motor(
-                motor_code, params["speed_sp"], params["position_sp"],
-                params.get("stop_action")
+                motor_code, params["speed_sp"], params["position_sp"], stop_action
             )
-            if accepted and not self._wait_until_not_running(
-                motor_code, cancel_event
-            ):
-                return False, "Command cancelled", True
-            return accepted, error, False
+            if not accepted:
+                return False, error, "failed"
+            deadline = time.monotonic() + float(timeout_ms) / 1000.0
+            outcome, error = self._wait_for_motion_completion(
+                motor_code, cancel_event, deadline, stall_timeout_ms
+            )
+            return outcome == "completed", error, outcome
 
         if action == MotorCommandActions.RESET:
             accepted, error = self.motor_registry.reset_motor(motor_code)
-            return accepted, error, False
+            return accepted, error, "completed" if accepted else "failed"
 
-        return False, "Unsupported queued motor action", False
+        return False, "Unsupported queued motor action", "failed"
 
     def _execute_queued_command(self, command):
         motor_code = command["motor_code"]
@@ -567,23 +684,39 @@ class MotorMonitor(MonitorBase):
         )
 
         if not self._wait_for_scheduled_start(command, cancel_event):
-            accepted, error, cancelled = False, "Command cancelled", True
+            accepted, error, outcome = False, "Command cancelled", "cancelled"
         else:
-            accepted, error, cancelled = self._execute_hardware_command(
+            accepted, error, outcome = self._execute_hardware_command(
                 command, cancel_event
             )
 
         finished_at = time.time()
-        if cancelled:
-            final_status = MotorLifecycleStates.CANCELLED
-        elif accepted:
-            final_status = MotorLifecycleStates.COMPLETED
-        else:
-            final_status = MotorLifecycleStates.FAILED
+        status_by_outcome = {
+            "cancelled": MotorLifecycleStates.CANCELLED,
+            "timed_out": MotorLifecycleStates.TIMED_OUT,
+            "stalled": MotorLifecycleStates.STALLED,
+            "completed": MotorLifecycleStates.COMPLETED,
+            "failed": MotorLifecycleStates.FAILED
+        }
+        final_status = status_by_outcome.get(
+            outcome, MotorLifecycleStates.COMPLETED if accepted else MotorLifecycleStates.FAILED
+        )
 
         self.command_registry.update(
             command_id, final_status, completed_at=finished_at, error=error
         )
+
+        if final_status in (
+            MotorLifecycleStates.TIMED_OUT, MotorLifecycleStates.STALLED
+        ):
+            motor_snapshot = self.state_store.get_motor(motor_code) or {}
+            motor_snapshot["last_safety_event"] = {
+                "command_id": command_id,
+                "status": final_status,
+                "message": error,
+                "timestamp": finished_at
+            }
+            self.state_store.update_motor(motor_code, motor_snapshot)
 
         with self._queue_lock:
             self._active_commands.pop(motor_code, None)
@@ -666,7 +799,7 @@ class MotorMonitor(MonitorBase):
                     cancelled_ids.append(active["command_id"])
 
         if stop_running and active is not None:
-            self.motor_registry.stop_motor(motor_code, "brake")
+            self.motor_registry.stop_motor(motor_code, MOTOR_DEFAULT_STOP_ACTION)
 
         motor = self._update_motor_queue_metadata(
             motor_code,
@@ -691,7 +824,7 @@ class MotorMonitor(MonitorBase):
             return None
         self._cancel_motor_commands(motor_code, stop_running=False)
         accepted, error = self.motor_registry.stop_motor(
-            motor_code, stop_action
+            motor_code, stop_action or MOTOR_DEFAULT_STOP_ACTION
         )
         return self._register_immediate_command(
             motor_code, MotorCommandActions.STOP,
@@ -699,37 +832,46 @@ class MotorMonitor(MonitorBase):
         )
 
     def run_timed_motor(
-        self, motor_code, speed_sp, time_sp, priority=None, stop_action=None
+        self, motor_code, speed_sp, time_sp, priority=None, stop_action=None,
+        timeout_ms=None
     ):
         return self._enqueue_motor_command(
             motor_code, MotorCommandActions.RUN_TIMED,
             {
                 "speed_sp": speed_sp,
                 "time_sp": time_sp,
-                "stop_action": stop_action
+                "stop_action": stop_action,
+                "timeout_ms": timeout_ms
             },
             priority=priority
         )
 
     def run_forever_motor(
-        self, motor_code, speed_sp, priority=None, stop_action=None
+        self, motor_code, speed_sp, priority=None, stop_action=None,
+        watchdog_ms=None, timeout_ms=None
     ):
         return self._enqueue_motor_command(
             motor_code, MotorCommandActions.RUN_FOREVER,
-            {"speed_sp": speed_sp, "stop_action": stop_action},
+            {
+                "speed_sp": speed_sp,
+                "stop_action": stop_action,
+                "watchdog_ms": watchdog_ms,
+                "timeout_ms": timeout_ms
+            },
             priority=priority
         )
 
     def run_to_rel_pos_motor(
         self, motor_code, speed_sp, position_sp, priority=None,
-        stop_action=None
+        stop_action=None, timeout_ms=None
     ):
         return self._enqueue_motor_command(
             motor_code, MotorCommandActions.RUN_TO_REL_POS,
             {
                 "speed_sp": speed_sp,
                 "position_sp": position_sp,
-                "stop_action": stop_action
+                "stop_action": stop_action,
+                "timeout_ms": timeout_ms
             },
             priority=priority
         )
