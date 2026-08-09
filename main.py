@@ -8,6 +8,7 @@ import signal
 import sys
 
 from adapters.in_rest_api_server import RestApiServer
+from adapters.out_ev3_operator_alert import Ev3OperatorAlertAdapter
 from adapters.out_controller_monitor import ControllerMonitorAdapter
 from adapters.out_drive_service import DriveServiceAdapter
 from adapters.out_motor_monitor import MotorMonitorAdapter
@@ -29,6 +30,7 @@ from services.motor_state_store import MotorStateStore
 from services.rover_state_service import RoverStateService
 from services.sensor_monitor import SensorMonitor
 from services.sensor_state_store import SensorStateStore
+from services.startup_error_notifier import StartupErrorNotifier
 
 
 def build_application():
@@ -113,6 +115,23 @@ def main():
         rover_config.validate_security_configuration()
     except RuntimeError as error:
         AppLogger.error("Security configuration error: {}".format(error))
+
+        startup_error_notifier = StartupErrorNotifier(
+            Ev3OperatorAlertAdapter()
+        )
+        AppLogger.status(
+            "Attempting to present the startup error on the EV3 brick."
+        )
+        shown = startup_error_notifier.show(str(error))
+        if shown:
+            AppLogger.status(
+                "EV3 startup alert acknowledged by the operator."
+            )
+        else:
+            AppLogger.status(
+                "EV3 startup alert unavailable; terminating startup."
+            )
+
         return 1
 
     application = build_application()

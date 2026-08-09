@@ -8,7 +8,7 @@ Educational and experimental mobile robotics platform based on LEGO MINDSTORMS E
 
 Rover-DR provides a modular foundation for the progressive development of monitoring, control, navigation and autonomous robotics capabilities on the LEGO EV3 platform.
 
-This increment adds the first differential-drive abstraction above the motor command layer. The Rover can now treat the configured left and right traction motors as one drive subsystem, issue independent tank-style setpoints and stop both sides through a single application command while retaining the watchdog and motor-safety mechanisms introduced earlier.
+This increment adds operator-visible fatal startup alerts on the EV3 brick. Configuration failures can now be presented through the display, alternating red status LEDs and an audible warning, with physical-button acknowledgement before termination, while preserving a safe fallback for development environments without EV3 hardware.
 
 ## Platform
 
@@ -53,6 +53,9 @@ This increment adds the first differential-drive abstraction above the motor com
 - Graceful fallback when EV3 motor hardware or `ev3dev2` is unavailable
 - Coordinated startup and orderly shutdown
 - `SIGINT` and `SIGTERM` process handling
+- Operator-visible fatal startup alerts on the EV3 display
+- Alternating red status LEDs and audible warning for fatal startup configuration errors
+- Physical-button acknowledgement before terminating after a displayed fatal startup error
 
 
 ## Project structure
@@ -167,6 +170,22 @@ Every `/api/ev3dev2/motor/...` request requires the dedicated
 `ROVER_HARDWARE_API_TOKEN`, supplied through `X-Rover-Hardware-Token` or
 `Authorization: Bearer ...`. Regular monitoring, motor-command and drive routes
 retain their existing behavior in this historical increment.
+
+## EV3 startup alerts
+
+Commit 18 adds an operator-facing fallback for fatal startup configuration errors.
+When security validation fails, Rover-DR attempts to show a compact message on the
+EV3 console, alternates the left/right status LEDs in red and emits an audible tone.
+The alert remains active until the operator acknowledges it by pressing a physical
+brick button.
+
+This mechanism is intentionally implemented through the `OperatorAlertPort` output
+contract and `StartupErrorNotifier` application service. If the process is running
+on a development computer where EV3 display, LED, sound or button interfaces are
+unavailable, the adapter fails safely and startup still terminates with status `1`.
+
+The global hardware enable/disable switch and interactive operating-mode selection
+are not part of this historical increment; they are introduced in Commit 19.
 
 ## Execution
 

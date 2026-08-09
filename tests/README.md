@@ -16,10 +16,12 @@ pode ser executado sem hardware EV3 físico.
 - gateway controlado `ev3dev2.motor` com módulo simulado;
 - autenticação dos endpoints protegidos e validação dos tokens obrigatórios;
 - shutdown/restart remoto com confirmação explícita;
+- formatação de erros fatais de startup para a tela do EV3;
+- adapter de alerta com display, LEDs, som e reconhecimento por botão;
 - contratos abstratos das portas.
 
-Alertas operacionais e seleção global do modo de hardware não fazem parte deste
-marco e terão testes adicionados nos commits correspondentes.
+A seleção global do modo de hardware não faz parte deste marco e terá testes
+adicionados no Commit 19.
 
 ## Execução
 
