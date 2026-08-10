@@ -14,4 +14,4 @@ A configuração oficial está em `.coveragerc`. O arquivo `coverage.xml` é um 
 de execução/CI e não deve ser versionado.
 
 
-Neste Commit 19, **59 testes** foram aprovados e a cobertura global medida foi de **69%**, mantendo o gate mínimo de 60%.
+Neste Commit 20 (S02.01), **67 testes** foram aprovados e a cobertura global medida foi de **70%**, mantendo o gate mínimo de 60%.

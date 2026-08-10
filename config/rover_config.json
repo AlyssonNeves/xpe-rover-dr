@@ -106,6 +106,15 @@
       }
     }
   },
+  "joystick": {
+    "max_speed_sp": 600,
+    "auxiliary_speed_sp": 400,
+    "axis_center": 127,
+    "axis_max": 255,
+    "left_auxiliary_motor_code": "LMM",
+    "right_auxiliary_motor_code": "RMM",
+    "poll_seconds": 0.02
+  },
   "drive": {
     "left_motor_code": "LLM",
     "right_motor_code": "RLM",

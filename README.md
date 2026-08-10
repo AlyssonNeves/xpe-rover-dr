@@ -58,6 +58,7 @@ This release consolidates deployment configuration for EV3 and simulation enviro
 - Physical-button acknowledgement before terminating after a displayed fatal startup error
 - Global `ROVER_HARDWARE_ENABLED` deployment switch for physical EV3 integrations
 - EV3 startup selector for `LOCAL/REMOTE` command mode and `MANUAL/AUTOMATIC` operation mode
+- Local manual joystick control through generic controller events
 - Simulation-safe startup with physical hardware disabled
 - Application version override through `ROVER_APPLICATION_VERSION`
 
@@ -302,3 +303,15 @@ bash scripts/quality.sh
 
 Os testes não exigem hardware EV3 físico; dependências de hardware são simuladas nas
 verificações automatizadas. Consulte `tests/README.md` para o escopo atual.
+
+## Local manual joystick control
+
+The `LOCAL + MANUAL` application mode now includes an application service that
+translates generic joystick events into differential traction commands. Left
+stick Y controls forward/backward motion, right stick X controls steering and
+rotation, the D-pad controls the two auxiliary Medium motors, and the X button
+requests an immediate stop.
+
+This first increment deliberately depends only on the existing `DrivePort` and
+`MotorPort`. Linux device discovery and `evdev` integration are kept outside
+the application logic and are introduced in the next evolution step.

@@ -19,7 +19,8 @@ pode ser executado sem hardware EV3 físico.
 - formatação de erros fatais de startup para a tela do EV3;
 - adapter de alerta com display, LEDs, som e reconhecimento por botão;
 - contratos abstratos das portas;
-- configuração global de hardware e seleção do modo de operação.
+- configuração global de hardware e seleção do modo de operação;
+- controle manual local por joystick sobre as portas existentes, incluindo tração diferencial, motores auxiliares e parada de emergência.
 
 ## Execução
 

@@ -17,7 +17,9 @@ from adapters.out_rover_state_query import RoverStateQueryAdapter
 from adapters.out_sensor_monitor import SensorMonitorAdapter
 from app import rover_config
 from app.command_service import CommandService
-from app.operation_mode_service import OperationModeService
+from app.operation_mode_service import (
+    CommandModes, OperationModes, OperationModeService
+)
 from app.rover_application import RoverApplication
 from app.rover_config import REST_HOST, REST_PORT
 from services.app_logger import AppLogger
@@ -27,6 +29,7 @@ from services.drive_service import DriveService
 from services.ev3dev2_motor_gateway import (
     Ev3Dev2MotorGateway, Ev3Dev2MotorGatewayError
 )
+from services.joystick_control_service import JoystickControlService
 from services.motor_monitor import MotorMonitor
 from services.motor_state_store import MotorStateStore
 from services.rover_state_service import RoverStateService
@@ -35,7 +38,7 @@ from services.sensor_state_store import SensorStateStore
 from services.startup_error_notifier import StartupErrorNotifier
 
 
-def build_application(operation_mode_service=None):
+def build_application(operation_mode_service=None, joystick_port=None):
     """Builds the Rover-DR dependency graph for the selected deployment mode."""
     sensor_state_store = SensorStateStore()
     motor_state_store = MotorStateStore()
@@ -67,6 +70,38 @@ def build_application(operation_mode_service=None):
     drive_service = DriveService(motor_port=motor_port, sensor_port=sensor_port)
     drive_port = DriveServiceAdapter(drive_service)
 
+    joystick_control_service = None
+    selected_mode = (
+        operation_mode_service.get_mode()
+        if operation_mode_service is not None
+        else {
+            "command_mode": CommandModes.LOCAL,
+            "operation_mode": OperationModes.MANUAL
+        }
+    )
+    if (joystick_port is not None and
+            selected_mode.get("command_mode") == CommandModes.LOCAL and
+            selected_mode.get("operation_mode") == OperationModes.MANUAL):
+        joystick_config = rover_config.get_joystick_config()
+        joystick_control_service = JoystickControlService(
+            joystick_port=joystick_port,
+            drive_port=drive_port,
+            motor_port=motor_port,
+            max_speed_sp=joystick_config.get("max_speed_sp", 600),
+            auxiliary_speed_sp=joystick_config.get(
+                "auxiliary_speed_sp", 400
+            ),
+            axis_center=joystick_config.get("axis_center", 127),
+            axis_max=joystick_config.get("axis_max", 255),
+            left_auxiliary_motor_code=joystick_config.get(
+                "left_auxiliary_motor_code", "LMM"
+            ),
+            right_auxiliary_motor_code=joystick_config.get(
+                "right_auxiliary_motor_code", "RMM"
+            ),
+            poll_seconds=joystick_config.get("poll_seconds", 0.02)
+        )
+
     command_service = CommandService(
         sensor_port=sensor_port,
         motor_port=motor_port,
@@ -94,9 +129,11 @@ def build_application(operation_mode_service=None):
         command_service, REST_HOST, REST_PORT,
         ev3dev2_motor_gateway=ev3dev2_motor_gateway
     )
-    managed_services = (
-        [ev3dev2_motor_gateway] if ev3dev2_motor_gateway is not None else []
-    )
+    managed_services = []
+    if ev3dev2_motor_gateway is not None:
+        managed_services.append(ev3dev2_motor_gateway)
+    if joystick_control_service is not None:
+        managed_services.append(joystick_control_service)
     application = RoverApplication(
         monitors=monitors, rest_api=rest_api, managed_services=managed_services
     )

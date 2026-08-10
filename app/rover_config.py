@@ -134,6 +134,8 @@ MOTOR_GATEWAY_WAIT_MAX_TIMEOUT_MS = int(
 SENSOR_DEFINITIONS = ROVER_JSON_CONFIG.get("sensor_definitions", {})
 MOTOR_DEFINITIONS = ROVER_JSON_CONFIG.get("motor_definitions", {})
 
+JOYSTICK_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("joystick", {}))
+
 DRIVE_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("drive", {}))
 DRIVE_LEFT_MOTOR_CODE = DRIVE_CONFIG.get("left_motor_code", "LLM")
 DRIVE_RIGHT_MOTOR_CODE = DRIVE_CONFIG.get("right_motor_code", "RLM")
@@ -208,6 +210,11 @@ def get_sensor_definitions():
 def get_motor_definitions():
     """Returns an isolated copy of the configured motor registry."""
     return copy.deepcopy(MOTOR_DEFINITIONS)
+
+
+def get_joystick_config():
+    """Returns an isolated copy of the local-manual joystick configuration."""
+    return copy.deepcopy(JOYSTICK_CONFIG)
 
 
 def get_drive_config():

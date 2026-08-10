@@ -51,6 +51,16 @@ class RoverApplication(object):
             monitor.start()
             AppLogger.status("Started {}.".format(monitor.name))
 
+        for service in self.managed_services:
+            start = getattr(service, "start", None)
+            if callable(start):
+                start()
+                AppLogger.status(
+                    "Started managed service {}.".format(
+                        service.__class__.__name__
+                    )
+                )
+
         self._rest_thread = threading.Thread(
             target=self.rest_api.start,
             name="RestApiThread"
