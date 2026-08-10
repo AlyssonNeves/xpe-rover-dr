@@ -1,83 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Output port for querying and orchestrating Rover-DR motors."""
+"""Compatibility aggregate for segregated Rover motor contracts."""
 
-from abc import ABCMeta, abstractmethod
+from ports.guarded_motor_operation_port import GuardedMotorOperationPort
+from ports.motor_command_port import MotorCommandPort
+from ports.motor_command_query_port import MotorCommandQueryPort
+from ports.motor_query_port import MotorQueryPort
 
 
-class MotorPort(object, metaclass=ABCMeta):
-    """Defines motor query, queue and execution operations."""
-
-    @abstractmethod
-    def list_motors(self):
-        raise NotImplementedError
-
-    @abstractmethod
-    def read_motor(self, motor_code):
-        raise NotImplementedError
-
-    @abstractmethod
-    def read_all_motors(self):
-        raise NotImplementedError
-
-    @abstractmethod
-    def stop_motor(self, motor_code, stop_action=None):
-        raise NotImplementedError
-
-    @abstractmethod
-    def run_timed_motor(
-        self, motor_code, speed_sp, time_sp, priority=None, stop_action=None,
-        timeout_ms=None
-    ):
-        raise NotImplementedError
-
-    @abstractmethod
-    def run_forever_motor(
-        self, motor_code, speed_sp, priority=None, stop_action=None,
-        watchdog_ms=None, timeout_ms=None
-    ):
-        raise NotImplementedError
-
-    @abstractmethod
-    def run_to_rel_pos_motor(
-        self, motor_code, speed_sp, position_sp, priority=None,
-        stop_action=None, timeout_ms=None
-    ):
-        raise NotImplementedError
-
-    @abstractmethod
-    def reset_motor(self, motor_code, priority=None):
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_command(self, command_id):
-        raise NotImplementedError
-
-    @abstractmethod
-    def list_commands(self, motor_code=None):
-        raise NotImplementedError
-
-    @abstractmethod
-    def cancel_motor_commands(self, motor_code):
-        raise NotImplementedError
-
-    @abstractmethod
-    def run_synchronized_motors(self, commands):
-        raise NotImplementedError
-    @abstractmethod
-    def execute_guarded_operation(self, motor_codes, operation_name, operation):
-        """Executes a native EV3Dev2 operation inside the motor safety boundary."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def begin_guarded_operation(self, motor_codes, operation_name, operation_id):
-        """Reserves motors for a persistent native EV3Dev2 operation."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def end_guarded_operation(self, operation_id, status="COMPLETED",
-                              error=None, stop=False):
-        """Releases a persistent native EV3Dev2 operation."""
-        raise NotImplementedError
-
+class MotorPort(MotorQueryPort, MotorCommandPort, MotorCommandQueryPort,
+                GuardedMotorOperationPort):
+    """Legacy aggregate retained while callers migrate to focused ports."""
+    pass

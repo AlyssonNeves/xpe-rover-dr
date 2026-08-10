@@ -6,7 +6,18 @@
 import threading
 
 from app.rover_config import SHUTDOWN_JOIN_TIMEOUT_SECONDS
-from services.app_logger import AppLogger
+
+
+class NullApplicationLogger(object):
+    """No-op lifecycle logger used outside an assembled runtime."""
+
+    @staticmethod
+    def status(message):
+        del message
+
+    @staticmethod
+    def error(message):
+        del message
 
 
 class RoverApplication(object):
@@ -18,7 +29,8 @@ class RoverApplication(object):
     STOPPING = "stopping"
     STOPPED = "stopped"
 
-    def __init__(self, monitors, rest_api, managed_services=None):
+    def __init__(self, monitors, rest_api, managed_services=None, logger=None):
+        self.logger = logger or NullApplicationLogger
         self.monitors = list(monitors)
         self.rest_api = rest_api
         self.managed_services = list(managed_services or [])
@@ -45,17 +57,17 @@ class RoverApplication(object):
 
         self._stopped_event.clear()
         self._set_status(self.STARTING)
-        AppLogger.status("Starting Rover-DR application.")
+        self.logger.status("Starting Rover-DR application.")
 
         for monitor in self.monitors:
             monitor.start()
-            AppLogger.status("Started {}.".format(monitor.name))
+            self.logger.status("Started {}.".format(monitor.name))
 
         for service in self.managed_services:
             start = getattr(service, "start", None)
             if callable(start):
                 start()
-                AppLogger.status(
+                self.logger.status(
                     "Started managed service {}.".format(
                         service.__class__.__name__
                     )
@@ -69,7 +81,7 @@ class RoverApplication(object):
         self._rest_thread.start()
 
         self._set_status(self.RUNNING)
-        AppLogger.status("Rover-DR application is running.")
+        self.logger.status("Rover-DR application is running.")
 
     def stop(self):
         """Stops the REST adapter and all monitoring threads in order."""
@@ -78,7 +90,7 @@ class RoverApplication(object):
             return
 
         self._set_status(self.STOPPING)
-        AppLogger.status("Stopping Rover-DR application.")
+        self.logger.status("Stopping Rover-DR application.")
 
         self.rest_api.stop()
 
@@ -95,7 +107,7 @@ class RoverApplication(object):
                 try:
                     close()
                 except Exception as error:
-                    AppLogger.error(
+                    self.logger.error(
                         "Error while closing managed service {}: {}".format(
                             service.__class__.__name__, error
                         )
@@ -106,13 +118,13 @@ class RoverApplication(object):
 
         self._set_status(self.STOPPED)
         self._stopped_event.set()
-        AppLogger.status("Rover-DR application stopped.")
+        self.logger.status("Rover-DR application stopped.")
 
     def restart(self):
         """Requests an orderly application restart after shutdown."""
         with self._restart_lock:
             self._restart_requested = True
-        AppLogger.status("Remote Rover-DR restart requested.")
+        self.logger.status("Remote Rover-DR restart requested.")
         self.stop()
 
     def is_restart_requested(self):

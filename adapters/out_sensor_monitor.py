@@ -3,10 +3,10 @@
 
 """Output adapter exposing sensor state through SensorPort."""
 
-from ports.sensor_port import SensorPort
+from ports.sensor_query_port import SensorQueryPort
 
 
-class SensorMonitorAdapter(SensorPort):
+class SensorMonitorAdapter(SensorQueryPort):
     """Exposes the sensor repository through the application output port."""
 
     def __init__(self, sensor_monitor, state_store=None):

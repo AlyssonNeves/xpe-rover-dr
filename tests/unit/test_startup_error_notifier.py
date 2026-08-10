@@ -10,7 +10,7 @@ try:
 except ImportError:  # pragma: no cover
     import mock
 
-from services.startup_error_notifier import StartupErrorNotifier
+from app.services.startup_error_notifier import StartupErrorNotifier
 
 
 class StartupErrorNotifierTestCase(unittest.TestCase):

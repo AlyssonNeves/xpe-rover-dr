@@ -1,7 +1,7 @@
 import math
 import pytest
 
-from services.drive_service import DriveService
+from app.services.drive_service import DriveService
 from tests.unit.fakes import FakeMotorPort, FakeSensorPort
 
 

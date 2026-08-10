@@ -5,8 +5,8 @@
 
 import time
 
-from adapters.ev3_button_feedback import Ev3ButtonFeedback
-from adapters.ev3_screen_image import (
+from infrastructure.ev3.button_feedback import Ev3ButtonFeedback
+from infrastructure.ev3.screen_image import (
     load_monochrome_screen,
     screen_asset_path
 )

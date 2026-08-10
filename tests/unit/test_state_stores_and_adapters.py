@@ -2,10 +2,10 @@ from adapters.out_controller_monitor import ControllerMonitorAdapter
 from adapters.out_motor_monitor import MotorMonitorAdapter
 from adapters.out_rover_state_query import RoverStateQueryAdapter
 from adapters.out_sensor_monitor import SensorMonitorAdapter
-from services.controller_state_store import ControllerStateStore
-from services.motor_state_store import MotorStateStore
-from services.rover_state_service import RoverStateService
-from services.sensor_state_store import SensorStateStore
+from infrastructure.state.controller_state_store import ControllerStateStore
+from infrastructure.state.motor_state_store import MotorStateStore
+from app.services.rover_state_service import RoverStateService
+from infrastructure.state.sensor_state_store import SensorStateStore
 from tests.unit.fakes import FakeControllerPort, FakeMotorPort, FakeSensorPort
 
 

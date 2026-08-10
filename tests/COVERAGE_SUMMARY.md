@@ -1,7 +1,7 @@
 # Cobertura automatizada
 
 O projeto utiliza cobertura de linhas e branches por meio de `coverage.py`.
-O quality gate deste estágio mantém cobertura global mínima de **60%**.
+O quality gate atual mantém cobertura global mínima de **65%**. Os marcos anteriores preservam abaixo os valores históricos vigentes em cada estágio.
 
 ```bash
 coverage erase
@@ -47,3 +47,14 @@ gate mínimo de 60%.
 - Consultas REST preservadas por adaptadores read-only e snapshots publicados pelo controle manual.
 - Escritas REST de motor/drive bloqueadas enquanto o controle manual possui o hardware.
 - A suíte completa possui **147 testes aprovados**.
+
+## S02.10 - Reforço da arquitetura hexagonal
+
+- Serviços de aplicação movidos para `app/services/` e infraestrutura técnica segregada em `infrastructure/`.
+- Composição concreta concentrada em `bootstrap/rover_assembly.py`; `main.py` reduzido ao entry point do processo.
+- Contratos de motor e sensor divididos em portas focadas, mantendo agregados somente para compatibilidade incremental.
+- `MotorMonitor` passa a delegar acesso aos drivers a um repositório compartilhado e coleta de snapshots a um componente dedicado.
+- Handlers de domínio e rotas REST foram decompostos em módulos explícitos, com tabela declarativa de rotas.
+- Gates automatizados verificam direção das dependências, ausência do pacote legado `services/` e compatibilidade sintática com Python 3.5.
+- A suíte completa possui **160 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.
+- A partir deste marco, o quality gate de cobertura global passa a ser **65%**.

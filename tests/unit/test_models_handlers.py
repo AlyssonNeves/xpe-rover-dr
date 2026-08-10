@@ -1,6 +1,6 @@
 import pytest
 
-from app.commands.domain_handlers import CommandHandlerRegistry, DomainCommandHandler
+from app.commands.base_handler import CommandHandlerRegistry, DomainCommandHandler
 from app.models import CommandResult, CommandTargets
 
 

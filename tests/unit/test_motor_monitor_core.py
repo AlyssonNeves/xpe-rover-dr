@@ -2,10 +2,11 @@ import threading
 
 import pytest
 
-from services.motor_monitor import (
-    MotorCommandActions, MotorLifecycleStates, MotorMonitor, MotorRegistry,
+from infrastructure.monitoring.motor_monitor import (
+    MotorCommandActions, MotorLifecycleStates, MotorMonitor,
 )
-from services.motor_state_store import MotorStateStore
+from infrastructure.motor.driver_repository import Ev3MotorDriverRepository
+from infrastructure.state.motor_state_store import MotorStateStore
 
 
 class FakeMotor(object):
@@ -65,7 +66,7 @@ def test_motor_registry_connect_read_and_execute_commands():
     definitions = {
         "A": {"name": "A", "address": "outA", "motor_class": "LargeMotor", "polarity": "inversed"}
     }
-    registry = MotorRegistry(definitions, FakeBackend())
+    registry = Ev3MotorDriverRepository(definitions, FakeBackend())
     motor = registry.connect_motor("A")
     assert motor.address == "outA"
     assert motor.polarity == "inversed"
@@ -87,13 +88,13 @@ def test_motor_registry_disconnected_and_missing_class_paths():
     definitions = {
         "A": {"name": "A", "address": "outA", "motor_class": "Missing"}
     }
-    registry = MotorRegistry(definitions, FakeBackend())
+    registry = Ev3MotorDriverRepository(definitions, FakeBackend())
     assert registry.connect_motor("missing") is None
     assert registry.connect_motor("A") is None
     assert registry.get_error("A")
 
     definitions["A"]["motor_class"] = "LargeMotor"
-    registry = MotorRegistry(definitions, FakeBackend())
+    registry = Ev3MotorDriverRepository(definitions, FakeBackend())
     motor = registry.get_motor("A")
     motor.connected = False
     assert registry.get_motor("A") is None

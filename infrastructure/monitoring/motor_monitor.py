@@ -13,9 +13,14 @@ from app.rover_config import (
     MOTOR_RAMP_DOWN_MS, MOTOR_RAMP_UP_MS, MOTOR_RUN_FOREVER_WATCHDOG_MS,
     MOTOR_STALL_TIMEOUT_MS, get_motor_definitions
 )
-from services.monitor_base import MonitorBase
-from services.motor.registries import GuardedOperationRegistry, MotorCommandRegistry
-from services.motor_state_store import MotorStateStore
+from infrastructure.ev3.motor_driver_factory import Ev3MotorDriverFactory
+from infrastructure.monitoring.monitor_base import MonitorBase
+from infrastructure.motor.driver_repository import Ev3MotorDriverRepository
+from infrastructure.motor.registries import (
+    GuardedOperationRegistry, MotorCommandRegistry
+)
+from infrastructure.motor.state_collector import MotorStateCollector
+from infrastructure.state.motor_state_store import MotorStateStore
 
 
 class MotorLifecycleStates(object):
@@ -41,203 +46,6 @@ class MotorCommandActions(object):
     RESET = "reset"
 
 
-class Ev3MotorHardwareBackend(object):
-    """Loads the supported python-ev3dev2 motor classes when available."""
-
-    def __init__(self, enabled=True):
-        self._motor_classes = {}
-        self.error_message = None
-        if enabled:
-            self._load_motor_classes()
-        else:
-            self.error_message = "Physical EV3 hardware is disabled"
-
-    def _load_motor_classes(self):
-        try:
-            from ev3dev2.motor import LargeMotor  # pylint: disable=import-error
-            from ev3dev2.motor import MediumMotor  # pylint: disable=import-error
-
-            self._motor_classes = {
-                "LargeMotor": LargeMotor,
-                "MediumMotor": MediumMotor
-            }
-            self.error_message = None
-        except Exception as error:  # pragma: no cover - environment dependent
-            self._motor_classes = {}
-            self.error_message = str(error)
-
-    def is_available(self):
-        return bool(self._motor_classes)
-
-    def get_motor_class(self, motor_class_name):
-        return self._motor_classes.get(motor_class_name)
-
-
-class MotorRegistry(object):
-    """Owns physical motor instances and performs EV3 read/write access."""
-
-    def __init__(self, motor_definitions, hardware_backend):
-        self.motor_definitions = motor_definitions
-        self.hardware_backend = hardware_backend
-        self._motors = {}
-        self._errors = {}
-
-    @staticmethod
-    def _safe_get(motor, attribute_name, default=None):
-        try:
-            return getattr(motor, attribute_name)
-        except Exception:  # pragma: no cover - depends on EV3 driver
-            return default
-
-    @staticmethod
-    def _normalize_state(value):
-        if value is None:
-            return []
-        if isinstance(value, (tuple, set)):
-            return list(value)
-        if isinstance(value, list):
-            return value
-        return [value]
-
-    def connect_motor(self, motor_code):
-        definition = self.motor_definitions.get(motor_code)
-        if definition is None:
-            return None
-
-        motor_class = self.hardware_backend.get_motor_class(
-            definition.get("motor_class")
-        )
-        if motor_class is None:
-            self._errors[motor_code] = (
-                self.hardware_backend.error_message
-                or "Configured motor class is not available"
-            )
-            return None
-
-        try:
-            motor = motor_class(definition["address"])
-            polarity = definition.get("polarity")
-            if polarity is not None:
-                motor.polarity = polarity
-            self._motors[motor_code] = motor
-            self._errors[motor_code] = None
-            return motor
-        except Exception as error:  # pragma: no cover - hardware dependent
-            self._motors.pop(motor_code, None)
-            self._errors[motor_code] = str(error)
-            return None
-
-    def get_motor(self, motor_code):
-        motor = self._motors.get(motor_code)
-        if motor is None:
-            motor = self.connect_motor(motor_code)
-        if motor is None:
-            return None
-
-        connected = self._safe_get(motor, "connected", True)
-        if connected is False:
-            self._motors.pop(motor_code, None)
-            self._errors[motor_code] = "Motor is disconnected"
-            return None
-        return motor
-
-    def read_motor(self, motor_code):
-        motor = self.get_motor(motor_code)
-        if motor is None:
-            return None
-
-        return {
-            "position": self._safe_get(motor, "position", 0),
-            "speed": self._safe_get(motor, "speed", 0),
-            "duty_cycle": self._safe_get(motor, "duty_cycle", 0),
-            "state": self._normalize_state(self._safe_get(motor, "state", [])),
-            "driver_name": self._safe_get(motor, "driver_name"),
-            "max_speed": self._safe_get(motor, "max_speed"),
-            "polarity": self._safe_get(motor, "polarity"),
-            "connected": True
-        }
-
-    def execute(self, motor_code, operation_name, operation):
-        """Executes one hardware operation and captures driver failures."""
-        motor = self.get_motor(motor_code)
-        if motor is None:
-            return False, self.get_error(motor_code)
-
-        try:
-            operation(motor)
-            self._errors[motor_code] = None
-            return True, None
-        except Exception as error:  # pragma: no cover - hardware dependent
-            self._errors[motor_code] = "{} failed: {}".format(
-                operation_name, error
-            )
-            return False, self._errors[motor_code]
-
-    @staticmethod
-    def _apply_stop_action(motor, stop_action):
-        if stop_action is not None:
-            motor.stop_action = stop_action
-
-    def configure_motion(
-        self, motor_code, stop_action=None, ramp_up_sp=None, ramp_down_sp=None
-    ):
-        """Applies supported EV3 safety parameters before movement."""
-        stop_action = stop_action or MOTOR_DEFAULT_STOP_ACTION
-
-        def operation(motor):
-            self._apply_stop_action(motor, stop_action)
-            if hasattr(motor, "ramp_up_sp"):
-                motor.ramp_up_sp = max(0, int(
-                    MOTOR_RAMP_UP_MS if ramp_up_sp is None else ramp_up_sp
-                ))
-            if hasattr(motor, "ramp_down_sp"):
-                motor.ramp_down_sp = max(0, int(
-                    MOTOR_RAMP_DOWN_MS if ramp_down_sp is None else ramp_down_sp
-                ))
-
-        return self.execute(motor_code, "configure-motion", operation)
-
-    def stop_motor(self, motor_code, stop_action=None):
-        stop_action = stop_action or MOTOR_DEFAULT_STOP_ACTION
-        def operation(motor):
-            self._apply_stop_action(motor, stop_action)
-            motor.stop()
-        return self.execute(motor_code, "stop", operation)
-
-    def run_timed_motor(self, motor_code, speed_sp, time_sp, stop_action=None):
-        def operation(motor):
-            self._apply_stop_action(motor, stop_action)
-            motor.run_timed(speed_sp=speed_sp, time_sp=time_sp)
-        return self.execute(motor_code, "run-timed", operation)
-
-    def run_forever_motor(self, motor_code, speed_sp, stop_action=None):
-        def operation(motor):
-            self._apply_stop_action(motor, stop_action)
-            motor.run_forever(speed_sp=speed_sp)
-        return self.execute(motor_code, "run-forever", operation)
-
-    def run_to_rel_pos_motor(
-        self, motor_code, speed_sp, position_sp, stop_action=None
-    ):
-        def operation(motor):
-            self._apply_stop_action(motor, stop_action)
-            motor.run_to_rel_pos(speed_sp=speed_sp, position_sp=position_sp)
-        return self.execute(motor_code, "run-to-rel-pos", operation)
-
-    def reset_motor(self, motor_code):
-        return self.execute(motor_code, "reset", lambda motor: motor.reset())
-
-    def is_running(self, motor_code):
-        motor = self.get_motor(motor_code)
-        if motor is None:
-            return False
-        state = self._normalize_state(self._safe_get(motor, "state", []))
-        return "running" in state
-
-    def get_error(self, motor_code):
-        return self._errors.get(motor_code)
-
-
 class MotorMonitor(MonitorBase):
     """Publishes motor state and orchestrates commands through per-motor queues."""
 
@@ -257,11 +65,24 @@ class MotorMonitor(MonitorBase):
         MonitorBase.__init__(self, "MotorMonitor", interval)
         self.state_store = state_store or MotorStateStore()
         self.motor_definitions = get_motor_definitions()
-        self.hardware_backend = hardware_backend or Ev3MotorHardwareBackend(
+        self.hardware_backend = hardware_backend or Ev3MotorDriverFactory(
             enabled=HARDWARE_ENABLED
         )
-        self.motor_registry = MotorRegistry(
+        self.motor_registry = Ev3MotorDriverRepository(
             self.motor_definitions, self.hardware_backend
+        )
+        self.state_collector = MotorStateCollector(
+            self.state_store,
+            self.motor_definitions,
+            self.motor_registry,
+            HARDWARE_ENABLED,
+            MotorLifecycleStates.IDLE,
+            {
+                "command_timeout_ms": MOTOR_COMMAND_TIMEOUT_MS,
+                "run_forever_watchdog_ms": MOTOR_RUN_FOREVER_WATCHDOG_MS,
+                "stall_timeout_ms": MOTOR_STALL_TIMEOUT_MS,
+                "default_stop_action": MOTOR_DEFAULT_STOP_ACTION
+            }
         )
         self.command_registry = MotorCommandRegistry()
         self.guarded_operation_registry = GuardedOperationRegistry()
@@ -283,66 +104,14 @@ class MotorMonitor(MonitorBase):
         self._load_configured_motors()
         self._refresh_all_motors()
 
-    def _base_snapshot(self, motor_code, definition):
-        return {
-            "code": motor_code,
-            "name": definition["name"],
-            "address": definition["address"],
-            "motor_class": definition.get("motor_class"),
-            "polarity": definition.get("polarity"),
-            "position": 0,
-            "speed": 0,
-            "duty_cycle": 0,
-            "state": [],
-            "driver_name": None,
-            "max_speed": None,
-            "connected": False,
-            "source": "ev3dev2" if HARDWARE_ENABLED else "disabled",
-            "error": None,
-            "lifecycle_state": MotorLifecycleStates.IDLE,
-            "command_queue_size": 0,
-            "active_command_id": None,
-            "last_command_id": None,
-            "last_safety_event": None,
-            "safety": {
-                "command_timeout_ms": MOTOR_COMMAND_TIMEOUT_MS,
-                "run_forever_watchdog_ms": MOTOR_RUN_FOREVER_WATCHDOG_MS,
-                "stall_timeout_ms": MOTOR_STALL_TIMEOUT_MS,
-                "default_stop_action": MOTOR_DEFAULT_STOP_ACTION
-            }
-        }
-
     def _load_configured_motors(self):
-        for code, definition in self.motor_definitions.items():
-            self.state_store.update_motor(
-                code, self._base_snapshot(code, definition)
-            )
+        self.state_collector.load_initial_motors()
 
     def _refresh_motor(self, motor_code):
-        definition = self.motor_definitions[motor_code]
-        previous = self.state_store.get_motor(motor_code) or {}
-        snapshot = self._base_snapshot(motor_code, definition)
-        for field in (
-            "lifecycle_state", "command_queue_size",
-            "active_command_id", "last_command_id", "last_safety_event",
-            "safety"
-        ):
-            if field in previous:
-                snapshot[field] = previous[field]
-
-        hardware_snapshot = self.motor_registry.read_motor(motor_code)
-        if hardware_snapshot is not None:
-            snapshot.update(hardware_snapshot)
-            snapshot["error"] = None
-        else:
-            snapshot["error"] = self.motor_registry.get_error(motor_code)
-
-        self.state_store.update_motor(motor_code, snapshot)
-        return snapshot
+        return self.state_collector.refresh_motor(motor_code)
 
     def _refresh_all_motors(self):
-        for motor_code in self.motor_definitions:
-            self._refresh_motor(motor_code)
+        self.state_collector.refresh_all_motors()
 
     def on_initialize(self):
         """Starts one queue worker for every configured motor."""

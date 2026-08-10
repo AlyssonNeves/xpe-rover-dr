@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 MAX_COMPLEXITY = 25
-PATHS = ["app", "adapters", "services", "ports", "main.py"]
+PATHS = ["app", "adapters", "bootstrap", "infrastructure", "ports", "main.py"]
 
 
 def main():

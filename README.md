@@ -19,121 +19,77 @@ This release consolidates deployment configuration for EV3 and simulation enviro
 
 ## Current capabilities
 
-- Periodic monitoring infrastructure based on threads
-- Sensor registry and state queries
-- Motor registry and state queries
-- Controller, network, battery and system status queries
-- Dedicated thread-safe sensor, motor and controller state repositories
+- Hexagonal Architecture with explicit application, port, adapter, infrastructure and bootstrap boundaries
+- Dedicated `LOCAL + MANUAL` runtime for low-latency joystick control
+- Direct synchronous motor control isolated from monitoring command queues
+- Linux joystick integration through `evdev`
+- Fail-safe stop and neutral-safety barrier after joystick disconnection
+- EV3 graphical mode selection and operational status feedback
+- Periodic sensor, motor and controller monitoring for the standard runtime
+- Thread-safe state repositories and read-only query adapters
 - HTTP/JSON REST API on TCP port `8080`
 - Consolidated Rover state through `GET /api/rover/state`
-- Centralized runtime and hardware registry configuration
-- Physical `LargeMotor` and `MediumMotor` integration through `python-ev3dev2`
-- Live EV3 motor position, speed, duty cycle, state, driver name, maximum speed and polarity
-- Per-motor asynchronous command queues
-- Numeric command priorities from `0` to `100`, where `100` is highest
-- Stable FIFO ordering between commands with the same priority
-- Public `command_id` lifecycle tracking (`QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`, `CANCELLED`, `TIMED_OUT`, `STALLED`)
-- Command history queries globally or per motor
-- Cancellation of queued and active motor work
-- Immediate stop that preempts pending work for the selected motor
-- Synchronized multi-motor batches with shared `batch_id` and scheduled start timestamp
-- Queued `run-timed`, `run-forever`, `run-to-rel-pos` and `reset` operations
-- Validated speed, duration, position, stop action and priority parameters
-- Monotonic execution deadlines for bounded motor movements
-- Automatic watchdog for `run-forever` commands
-- Driver-level and logical stall detection based on motor progress
-- Centralized default safe-stop action (`brake`)
-- Native EV3 acceleration/deceleration ramps before movement
-- Safety event metadata exposed in motor state snapshots
-- Differential-drive service using configured `LLM` and `RLM` traction motors
-- Independent left/right tank speed control through a synchronized motor batch
-- Unified drive status and two-motor stop operations
-- Consistent `400`, `404`, `405`, `500` and `503` API responses
-- Basic CORS/OPTIONS support
-- Graceful fallback when EV3 motor hardware or `ev3dev2` is unavailable
-- Coordinated startup and orderly shutdown
-- `SIGINT` and `SIGTERM` process handling
-- Operator-visible fatal startup alerts on the EV3 display
-- Alternating red status LEDs and audible warning for fatal startup configuration errors
-- Physical-button acknowledgement before terminating after a displayed fatal startup error
-- Global `ROVER_HARDWARE_ENABLED` deployment switch for physical EV3 integrations
-- EV3 startup selector for `LOCAL/REMOTE` command mode and `MANUAL/AUTOMATIC` operation mode
-- Local manual joystick control through generic controller events
-- Simulation-safe startup with physical hardware disabled
-- Application version override through `ROVER_APPLICATION_VERSION`
-
+- Explicit motor query, command, guarded-operation and gateway ports
+- Declarative REST route table with explicit gateway dispatch
+- Shared EV3 motor-driver repository used by monitored and manual-control paths
+- Motor state collection extracted from the monitor orchestration
+- Centralized concrete composition in `bootstrap/rover_assembly.py`
+- Architecture and Python 3.5 compatibility quality gates
+- Graceful fallback when EV3 hardware integrations are disabled or unavailable
 
 ## Project structure
 
 ```text
 xpe-rover-dr/
-├── adapters/
-│   ├── in_rest_api_server.py
-│   ├── out_controller_monitor.py
-│   ├── out_drive_service.py
-│   ├── out_motor_monitor.py
-│   ├── out_rover_state_query.py
-│   └── out_sensor_monitor.py
+├── adapters/                 # inbound/outbound adapters
+│   └── rest/                 # HTTP routing and declarative API route table
 ├── app/
+│   ├── commands/             # focused command handlers
+│   ├── services/             # application use cases
 │   ├── command_service.py
-│   ├── models.py
 │   ├── rover_application.py
 │   └── rover_config.py
+├── bootstrap/
+│   └── rover_assembly.py     # concrete composition root
+├── infrastructure/
+│   ├── ev3/                  # EV3 gateways, drivers and UI helpers
+│   ├── logging/              # application logging implementation
+│   ├── monitoring/           # runtime monitors
+│   ├── motor/                # driver repository and state collection
+│   └── state/                # thread-safe state stores
+├── ports/                    # focused input/output contracts
 ├── assets/
-│   └── images/
 ├── config/
-│   └── rover_config.json
 ├── docs/
-│   ├── motor_hardware_validation.md
-│   └── rest_api_contract.md
-├── ports/
-│   ├── controller_port.py
-│   ├── drive_port.py
-│   ├── motor_port.py
-│   ├── rover_state_query_port.py
-│   └── sensor_port.py
-├── services/
-│   ├── motor/
-│   │   ├── __init__.py
-│   │   └── registries.py
-│   ├── app_logger.py
-│   ├── controller_monitor.py
-│   ├── controller_state_store.py
-│   ├── drive_service.py
-│   ├── monitor_base.py
-│   ├── motor_monitor.py
-│   ├── motor_state_store.py
-│   ├── rover_state_service.py
-│   ├── sensor_monitor.py
-│   └── sensor_state_store.py
+├── scripts/
 ├── tests/
-│   └── postman/
-│       └── rover_dr_rest_api_collection.json
-├── .vscode/
-├── main.py
-├── requirements.txt
-├── LICENSE
-└── README.md
+└── main.py                   # process entry point
 ```
+
+The former top-level `services/` package no longer exists. Application services live
+under `app/services/`, while monitoring, state, logging and EV3-specific concerns live
+under `infrastructure/`.
 
 ## Architecture
 
-The project continues to follow Hexagonal Architecture boundaries:
+The S02.10 structure reinforces the dependency direction of the hexagonal design:
 
-1. `rover_config.py` loads centralized runtime settings and hardware definitions;
-2. monitoring services collect physical state and own runtime execution workers;
-3. `MotorCommandRegistry` stores externally consultable command lifecycle records;
-4. one priority queue and one worker are maintained per configured motor;
-5. thread-safe `StateStore` repositories keep current hardware snapshots;
-6. output ports define query and motor-orchestration contracts;
-7. adapters expose the stores, motor service and differential-drive service to the application layer;
-8. `DriveService` coordinates differential drive, encoder odometry, gyroscope heading and basic geometric navigation without accessing EV3 motor hardware directly;
-9. `CommandService` validates requests before queue admission;
-10. `Ev3Dev2MotorGateway` exposes an allowlisted `ev3dev2.motor` surface through the existing motor safety boundary;
-11. `RestApiServer` maps HTTP requests to application commands and gateway operations;
-12. `RoverApplication` owns startup and orderly shutdown, including gateway cleanup.
+1. `app/` contains use cases and orchestration and does not import concrete adapters or infrastructure;
+2. `ports/` contains focused contracts and does not depend on application or concrete layers;
+3. `adapters/` translate external protocols and application-facing queries;
+4. `infrastructure/` implements EV3 hardware, monitoring, logging and state persistence details;
+5. `bootstrap/rover_assembly.py` is the single concrete composition point introduced in this increment;
+6. `main.py` delegates composition to bootstrap and remains focused on process signals and execution;
+7. the `LOCAL + MANUAL` graph retains synchronous motor writes and read-only REST queries, without monitoring queues in its control path;
+8. the standard runtime preserves the monitored command path;
+9. the broad motor contract is retained only as a compatibility aggregate over focused query, command, guarded-operation and gateway contracts;
+10. REST command routing uses an explicit declarative route table rather than reflective dispatch over concrete gateways;
+11. `MotorMonitor` delegates EV3 driver access to a shared driver repository and snapshot acquisition to a dedicated state collector;
+12. automated architecture checks protect these dependency rules and Python 3.5 compatibility.
 
 ![Hexagonal Architecture](assets/images/hexagonal_architecture.png)
+
+The broader application lifecycle abstraction and the final consolidation of runtime/security configuration are intentionally deferred to later Sprint 2 increments.
 
 ## Deployment modes
 

@@ -5,7 +5,18 @@
 
 import threading
 
-from services.app_logger import AppLogger
+
+
+class NullApplicationLogger(object):
+    """No-op logger used when no output logger is injected."""
+
+    @staticmethod
+    def status(message):
+        del message
+
+    @staticmethod
+    def error(message):
+        del message
 
 
 class JoystickControlService(object):
@@ -51,7 +62,7 @@ class JoystickControlService(object):
         self.right_auxiliary_motor_code = right_auxiliary_motor_code
         self.poll_seconds = max(0.001, float(poll_seconds))
         self.session_id = session_id
-        self.logger = logger or AppLogger
+        self.logger = logger or NullApplicationLogger
 
         self._translation = 0.0
         self._rotation = 0.0

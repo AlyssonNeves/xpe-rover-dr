@@ -6,11 +6,11 @@
 import copy
 
 from ports.controller_port import ControllerPort
-from ports.motor_port import MotorPort
-from ports.sensor_port import SensorPort
+from ports.motor_query_port import MotorQueryPort
+from ports.sensor_query_port import SensorQueryPort
 
 
-class LocalManualSensorQueryAdapter(SensorPort):
+class LocalManualSensorQueryAdapter(SensorQueryPort):
     """Exposes configured sensor metadata without starting SensorMonitor."""
 
     def __init__(self, sensor_definitions=None):
@@ -43,7 +43,7 @@ class LocalManualSensorQueryAdapter(SensorPort):
         return [copy.deepcopy(item) for item in self._sensors.values()]
 
 
-class LocalManualMotorQueryAdapter(MotorPort):
+class LocalManualMotorQueryAdapter(MotorQueryPort):
     """Exposes manual motor snapshots while rejecting queued motor writes."""
 
     READ_ONLY_ERROR = (
@@ -82,61 +82,7 @@ class LocalManualMotorQueryAdapter(MotorPort):
     def read_all_motors(self):
         return self._state_store.get_all_motors()
 
-    @classmethod
-    def _rejected(cls):
-        return {"accepted": False, "success": False, "error": cls.READ_ONLY_ERROR}
 
-    def stop_motor(self, motor_code, stop_action=None):
-        del motor_code, stop_action
-        return self._rejected()
-
-    def run_timed_motor(self, motor_code, speed_sp, time_sp, priority=None,
-                        stop_action=None, timeout_ms=None):
-        del motor_code, speed_sp, time_sp, priority, stop_action, timeout_ms
-        return self._rejected()
-
-    def run_forever_motor(self, motor_code, speed_sp, priority=None,
-                          stop_action=None, watchdog_ms=None, timeout_ms=None):
-        del motor_code, speed_sp, priority, stop_action, watchdog_ms, timeout_ms
-        return self._rejected()
-
-    def run_to_rel_pos_motor(self, motor_code, speed_sp, position_sp,
-                             priority=None, stop_action=None, timeout_ms=None):
-        del motor_code, speed_sp, position_sp, priority, stop_action, timeout_ms
-        return self._rejected()
-
-    def reset_motor(self, motor_code, priority=None):
-        del motor_code, priority
-        return self._rejected()
-
-    def get_command(self, command_id):
-        del command_id
-        return None
-
-    def list_commands(self, motor_code=None):
-        del motor_code
-        return []
-
-    def cancel_motor_commands(self, motor_code):
-        del motor_code
-        return self._rejected()
-
-    def run_synchronized_motors(self, commands):
-        del commands
-        return self._rejected()
-
-    def execute_guarded_operation(self, motor_codes, operation_name, operation):
-        del motor_codes, operation_name, operation
-        return self._rejected()
-
-    def begin_guarded_operation(self, motor_codes, operation_name, operation_id):
-        del motor_codes, operation_name, operation_id
-        return self._rejected()
-
-    def end_guarded_operation(self, operation_id, status="COMPLETED",
-                              error=None, stop=False):
-        del operation_id, status, error, stop
-        return self._rejected()
 
 
 class LocalManualControllerQueryAdapter(ControllerPort):

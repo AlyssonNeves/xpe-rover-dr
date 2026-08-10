@@ -18,7 +18,9 @@ EV3_SCREEN_SIZE = (EV3_SCREEN_WIDTH, EV3_SCREEN_HEIGHT)
 
 def screen_assets_path():
     """Returns the directory containing the currently deployed EV3 screens."""
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
     return os.path.join(project_root, "assets", "screens")
 
 

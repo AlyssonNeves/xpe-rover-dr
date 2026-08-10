@@ -3,7 +3,7 @@
 
 """Best-effort audible feedback for EV3 brick button presses."""
 
-from services.app_logger import AppLogger
+from infrastructure.logging.app_logger import AppLogger
 
 
 class Ev3ButtonFeedback(object):

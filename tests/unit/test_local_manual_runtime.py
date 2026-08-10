@@ -6,8 +6,8 @@ from adapters.out_local_manual_queries import (
 from app.command_service import CommandService
 from app.models import CommandActions as A, CommandTargets as T
 from app.operation_mode_service import Controls, OperationModeService
-from services.motor_state_store import MotorStateStore
-import main as main_module
+from infrastructure.state.motor_state_store import MotorStateStore
+from bootstrap import rover_assembly as main_module
 
 
 class FakeRestApi(object):
@@ -69,14 +69,15 @@ def test_local_manual_motor_query_is_seeded_from_definitions():
     assert motor["control_source"] == "local_manual"
 
 
-def test_local_manual_motor_query_rejects_queue_writes():
+def test_local_manual_motor_query_exposes_no_write_shaped_operations():
     adapter = LocalManualMotorQueryAdapter(MotorStateStore(), {
         "LLM": {"name": "Left", "address": "outA"}
     })
-    result = adapter.run_forever_motor("LLM", 300)
-    assert result["accepted"] is False
-    assert "LOCAL + MANUAL" in result["error"]
-    assert adapter.list_commands() == []
+    forbidden = (
+        "run_forever_motor", "run_timed_motor", "stop_motor",
+        "run_synchronized_motors", "execute_guarded_operation"
+    )
+    assert not any(hasattr(adapter, name) for name in forbidden)
 
 
 def test_local_manual_controller_query_does_not_require_monitor_thread():

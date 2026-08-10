@@ -13,7 +13,7 @@ from ports.joystick_port import JoystickPort
 from ports.manual_drive_port import ManualDrivePort
 from ports.motor_hardware_port import MotorHardwarePort
 from ports.motor_state_publisher_port import MotorStatePublisherPort
-from services.manual_drive_service import ManualDriveService
+from app.services.manual_drive_service import ManualDriveService
 
 
 ROOT = Path(__file__).parents[2]
@@ -39,8 +39,8 @@ def test_manual_control_implementations_conform_to_explicit_ports():
 
 def test_manual_application_services_do_not_import_concrete_adapters():
     for relative_path in (
-        "services/joystick_control_service.py",
-        "services/manual_drive_service.py"
+        "app/services/joystick_control_service.py",
+        "app/services/manual_drive_service.py"
     ):
         imports = _imports(relative_path)
         assert not any(name.startswith("adapters") for name in imports), (
@@ -49,10 +49,10 @@ def test_manual_application_services_do_not_import_concrete_adapters():
 
 
 def test_manual_drive_service_does_not_depend_on_monitor_or_state_store():
-    imports = _imports("services/manual_drive_service.py")
-    assert "services.motor_monitor" not in imports
-    assert "services.motor_state_store" not in imports
-    tree = ast.parse((ROOT / "services/manual_drive_service.py").read_text())
+    imports = _imports("app/services/manual_drive_service.py")
+    assert "infrastructure.monitoring.motor_monitor" not in imports
+    assert "infrastructure.state.motor_state_store" not in imports
+    tree = ast.parse((ROOT / "app/services/manual_drive_service.py").read_text())
     referenced_names = {
         node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
     }
@@ -68,7 +68,7 @@ def test_manual_control_ports_are_independent_from_implementations():
         "ports/motor_state_publisher_port.py"
     ):
         imports = _imports(relative_path)
-        forbidden = ("adapters", "services", "app")
+        forbidden = ("adapters", "infrastructure", "app")
         assert not any(name.startswith(forbidden) for name in imports), (
             relative_path, imports
         )
@@ -85,13 +85,13 @@ def test_hardware_write_and_state_publication_are_separate_contracts():
 
 def test_direct_motor_adapter_does_not_import_motor_monitor():
     imports = _imports("adapters/out_ev3_motor_hardware.py")
-    assert "services.motor_monitor" not in imports
+    assert "infrastructure.monitoring.motor_monitor" not in imports
 
 
 def test_local_manual_runtime_builder_does_not_reference_monitor_registry():
-    source = (ROOT / "main.py").read_text()
-    start = source.index("def _build_local_manual_application")
-    end = source.index("def _build_standard_application")
+    source = (ROOT / "bootstrap/rover_assembly.py").read_text()
+    start = source.index("def build_local_manual_application")
+    end = source.index("def build_standard_application")
     local_builder = source[start:end]
     assert "MotorMonitor(" not in local_builder
     assert "SensorMonitor(" not in local_builder

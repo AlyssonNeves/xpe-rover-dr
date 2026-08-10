@@ -1,9 +1,9 @@
 from unittest import mock
 
 from adapters.out_drive_service import DriveServiceAdapter
-from services.controller_monitor import ControllerMonitor
-from services.sensor_monitor import SensorMonitor
-from services.sensor_state_store import SensorStateStore
+from infrastructure.monitoring.controller_monitor import ControllerMonitor
+from infrastructure.monitoring.sensor_monitor import SensorMonitor
+from infrastructure.state.sensor_state_store import SensorStateStore
 
 
 class Gyro(object):
@@ -63,7 +63,7 @@ def test_controller_monitor_refresh_and_ip_fallback():
     assert monitor.read_battery_status()["status"] == "not_available"
     assert "python_version" in monitor.read_system_status()
     monitor.on_cycle()
-    with mock.patch("services.controller_monitor.socket.gethostbyname", side_effect=OSError()):
+    with mock.patch("infrastructure.monitoring.controller_monitor.socket.gethostbyname", side_effect=OSError()):
         assert monitor._resolve_ip("bad-host") == "0.0.0.0"
 
 

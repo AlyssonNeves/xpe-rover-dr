@@ -5,7 +5,7 @@
 
 from adapters.out_motor_state_publisher import MotorStateStorePublisherAdapter
 from ports.motor_state_publisher_port import MotorStatePublisherPort
-from services.motor_state_store import MotorStateStore
+from infrastructure.state.motor_state_store import MotorStateStore
 
 
 def test_adapter_implements_motor_state_publisher_port():

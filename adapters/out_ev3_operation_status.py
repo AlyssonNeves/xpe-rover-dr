@@ -6,8 +6,8 @@
 import socket
 import threading
 
-from adapters.ev3_screen_image import load_monochrome_screen, screen_asset_path
-from services.app_logger import AppLogger
+from infrastructure.ev3.screen_image import load_monochrome_screen, screen_asset_path
+from infrastructure.logging.app_logger import AppLogger
 
 
 class Ev3OperationStatusAdapter(object):

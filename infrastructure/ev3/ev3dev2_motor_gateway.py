@@ -15,7 +15,8 @@ import time
 import uuid
 
 from app import rover_config
-from services.app_logger import AppLogger
+from infrastructure.logging.app_logger import AppLogger
+from ports.motor_gateway_port import MotorGatewayPort
 
 
 class Ev3Dev2MotorGatewayError(Exception):
@@ -32,7 +33,7 @@ class OperationKinds(object):
     STOP = "STOP"
 
 
-class Ev3Dev2MotorGateway(object):
+class Ev3Dev2MotorGateway(MotorGatewayPort):
     """Creates and operates EV3Dev2 objects supported by the Rover domain."""
 
     SUPPORTED_CLASSES = frozenset((

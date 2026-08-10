@@ -24,7 +24,7 @@ from app.rover_config import (
     REST_SHUTDOWN_CONFIRMATION_REQUIRED,
     REST_SHUTDOWN_TOKEN,
 )
-from services.app_logger import AppLogger
+from infrastructure.logging.app_logger import AppLogger
 
 
 class RestApiServer(object):

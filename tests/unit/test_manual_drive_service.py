@@ -3,7 +3,7 @@
 
 """Tests for the direct, no-queue manual motor-control service."""
 
-from services.manual_drive_service import ManualDriveService
+from app.services.manual_drive_service import ManualDriveService
 
 
 DRIVE = {"left_motor_code": "LLM", "right_motor_code": "RLM"}

@@ -27,8 +27,8 @@ class Gateway(object):
 def test_parse_command_id_and_gateway_router():
     assert parse_command_id("12") == 12
     assert parse_command_id("abc") == "abc"
-    assert GatewayRouter(None).call("catalog").status_code == 503
-    assert GatewayRouter(Gateway()).call("catalog").data["catalog"] is True
+    assert GatewayRouter(None).catalog().status_code == 503
+    assert GatewayRouter(Gateway()).catalog().data["catalog"] is True
 
 
 def test_command_routes_get_post_delete():

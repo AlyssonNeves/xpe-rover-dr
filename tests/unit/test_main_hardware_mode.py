@@ -1,4 +1,5 @@
 import main as main_module
+from bootstrap import rover_assembly as assembly
 
 
 class FakeApplication(object):
@@ -13,16 +14,16 @@ class FakeApplication(object):
 
 
 def test_mode_selection_defaults_without_physical_hardware(monkeypatch):
-    monkeypatch.setattr(main_module.rover_config, "HARDWARE_ENABLED", False)
-    service = main_module._select_operation_mode()
+    monkeypatch.setattr(assembly.rover_config, "HARDWARE_ENABLED", False)
+    service = assembly.select_operation_mode()
     assert service.get_mode() == {"command": "LOCAL", "control": "MANUAL"}
 
 
 def test_mode_selection_uses_ev3_selector_in_hardware_mode(monkeypatch):
-    monkeypatch.setattr(main_module.rover_config, "HARDWARE_ENABLED", True)
+    monkeypatch.setattr(assembly.rover_config, "HARDWARE_ENABLED", True)
     selector = object()
     monkeypatch.setattr(
-        main_module, "Ev3CommandControlSelectorAdapter", lambda: selector
+        assembly, "Ev3CommandControlSelectorAdapter", lambda: selector
     )
     selected = {"command": "REMOTE", "control": None}
 
@@ -32,46 +33,40 @@ def test_mode_selection_uses_ev3_selector_in_hardware_mode(monkeypatch):
         def select_command_control(self): return selected
         def get_mode(self): return dict(selected)
 
-    monkeypatch.setattr(main_module, "OperationModeService", FakeModeService)
-    service = main_module._select_operation_mode()
+    monkeypatch.setattr(assembly, "OperationModeService", FakeModeService)
+    service = assembly.select_operation_mode()
     assert service.get_mode() == selected
 
 
 def test_invalid_security_skips_ev3_alert_when_hardware_disabled(monkeypatch):
-    monkeypatch.setattr(main_module.rover_config, "HARDWARE_ENABLED", False)
+    monkeypatch.setattr(assembly.rover_config, "HARDWARE_ENABLED", False)
     monkeypatch.setattr(
-        main_module.rover_config, "validate_security_configuration",
+        assembly.rover_config, "validate_security_configuration",
         lambda: (_ for _ in ()).throw(RuntimeError("missing token"))
     )
     called = {"alert": False}
     monkeypatch.setattr(
-        main_module, "StartupErrorNotifier",
+        assembly, "StartupErrorNotifier",
         lambda *args, **kwargs: called.update(alert=True)
     )
-    assert main_module._validate_startup_configuration() is False
+    assert assembly.validate_startup_configuration() is False
     assert called["alert"] is False
 
 
-def test_main_passes_selected_mode_to_application_builder(monkeypatch):
-    mode_service = object()
+def test_main_delegates_application_preparation_to_bootstrap(monkeypatch):
     app = FakeApplication()
-    monkeypatch.setattr(main_module, "_validate_startup_configuration", lambda: True)
-    monkeypatch.setattr(main_module, "_select_operation_mode", lambda: mode_service)
-    captured = {}
-    def build_application(operation_mode_service=None):
-        captured["mode"] = operation_mode_service
-        return app
-    monkeypatch.setattr(main_module, "build_application", build_application)
+    monkeypatch.setattr(
+        main_module.rover_assembly, "prepare_rover_application", lambda: app
+    )
     monkeypatch.setattr(main_module.signal, "signal", lambda *args: None)
     assert main_module.main() == 0
-    assert captured["mode"] is mode_service
     assert app.started and app.waited and app.stopped
 
 
 def test_build_application_adds_operation_status_in_hardware_mode(monkeypatch):
-    monkeypatch.setattr(main_module.rover_config, "HARDWARE_ENABLED", True)
+    monkeypatch.setattr(assembly.rover_config, "HARDWARE_ENABLED", True)
     monkeypatch.setattr(
-        main_module.rover_config, "get_joystick_config",
+        assembly.rover_config, "get_joystick_config",
         lambda: {"device_name": "Wireless Controller"}
     )
 
@@ -83,12 +78,9 @@ def test_build_application_adds_operation_status_in_hardware_mode(monkeypatch):
         captured_status["name"] = joystick_device_name
         return status_service
 
-    monkeypatch.setattr(main_module, "Ev3OperationStatusAdapter", make_status)
-
-    # Physical gateway creation is unrelated to this test and is allowed to
-    # fall back to the existing guarded unavailable path.
-    mode_service = main_module.OperationModeService()
-    application = main_module.build_application(
+    monkeypatch.setattr(assembly, "Ev3OperationStatusAdapter", make_status)
+    mode_service = assembly.OperationModeService()
+    application = assembly.build_rover_application(
         operation_mode_service=mode_service
     )
 
@@ -99,9 +91,9 @@ def test_build_application_adds_operation_status_in_hardware_mode(monkeypatch):
 
 
 def test_local_manual_joystick_is_wired_to_direct_manual_drive_path(monkeypatch):
-    monkeypatch.setattr(main_module.rover_config, "HARDWARE_ENABLED", True)
+    monkeypatch.setattr(assembly.rover_config, "HARDWARE_ENABLED", True)
     monkeypatch.setattr(
-        main_module.rover_config, "get_joystick_config",
+        assembly.rover_config, "get_joystick_config",
         lambda: {
             "device_name": "Wireless Controller",
             "max_speed_sp": 600,
@@ -131,15 +123,15 @@ def test_local_manual_joystick_is_wired_to_direct_manual_drive_path(monkeypatch)
         captured["joystick"] = kwargs
         return joystick_service
 
-    monkeypatch.setattr(main_module, "Ev3MotorHardwareAdapter", make_hardware)
-    monkeypatch.setattr(main_module, "ManualDriveService", make_manual)
-    monkeypatch.setattr(main_module, "JoystickControlService", make_joystick)
+    monkeypatch.setattr(assembly, "Ev3MotorHardwareAdapter", make_hardware)
+    monkeypatch.setattr(assembly, "ManualDriveService", make_manual)
+    monkeypatch.setattr(assembly, "JoystickControlService", make_joystick)
     monkeypatch.setattr(
-        main_module, "Ev3OperationStatusAdapter", lambda **kwargs: object()
+        assembly, "Ev3OperationStatusAdapter", lambda **kwargs: object()
     )
 
-    mode_service = main_module.OperationModeService()
-    application = main_module.build_application(
+    mode_service = assembly.OperationModeService()
+    application = assembly.build_rover_application(
         operation_mode_service=mode_service,
         joystick_port=object()
     )

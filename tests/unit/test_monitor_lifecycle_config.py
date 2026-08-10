@@ -7,7 +7,7 @@ import pytest
 
 from app import rover_config
 from app.rover_application import RoverApplication
-from services.monitor_base import MonitorBase
+from infrastructure.monitoring.monitor_base import MonitorBase
 
 
 class CountingMonitor(MonitorBase):

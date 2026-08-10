@@ -1,7 +1,7 @@
 import types
 import pytest
 
-from services.ev3dev2_motor_gateway import Ev3Dev2MotorGateway, Ev3Dev2MotorGatewayError
+from infrastructure.ev3.ev3dev2_motor_gateway import Ev3Dev2MotorGateway, Ev3Dev2MotorGatewayError
 from tests.unit.fakes import FakeMotorPort
 
 

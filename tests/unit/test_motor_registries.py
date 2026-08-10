@@ -1,6 +1,6 @@
 import pytest
 
-from services.motor.registries import GuardedOperationRegistry, MotorCommandRegistry
+from infrastructure.motor.registries import GuardedOperationRegistry, MotorCommandRegistry
 
 
 def test_motor_command_registry_create_get_list_update_and_copy_isolation():

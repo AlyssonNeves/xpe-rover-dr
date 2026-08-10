@@ -9,8 +9,8 @@ from app.rover_config import (
     MONITOR_INTERVAL_SECONDS,
     get_sensor_definitions,
 )
-from services.monitor_base import MonitorBase
-from services.sensor_state_store import SensorStateStore
+from infrastructure.monitoring.monitor_base import MonitorBase
+from infrastructure.state.sensor_state_store import SensorStateStore
 
 
 class Ev3GyroHardwareBackend(object):

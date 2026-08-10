@@ -6,7 +6,8 @@
 import copy
 
 from ports.motor_hardware_port import MotorHardwarePort
-from services.manual_motor_hardware import DirectMotorRegistry
+from infrastructure.ev3.motor_driver_factory import Ev3MotorDriverFactory
+from infrastructure.motor.driver_repository import Ev3MotorDriverRepository
 
 
 class Ev3MotorHardwareAdapter(MotorHardwarePort):
@@ -25,8 +26,9 @@ class Ev3MotorHardwareAdapter(MotorHardwarePort):
         if motor_registry is None:
             # LOCAL + MANUAL owns a private low-level registry. No monitor or
             # command queue participates in this path.
-            motor_registry = DirectMotorRegistry(
-                self._motor_definitions, hardware_backend=hardware_backend
+            backend = hardware_backend or Ev3MotorDriverFactory()
+            motor_registry = Ev3MotorDriverRepository(
+                self._motor_definitions, backend
             )
         self._motor_registry = motor_registry
         self._default_stop_action = default_stop_action or "brake"

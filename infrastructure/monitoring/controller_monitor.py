@@ -7,8 +7,8 @@ import platform
 import socket
 
 from app.rover_config import MONITOR_INTERVAL_SECONDS
-from services.controller_state_store import ControllerStateStore
-from services.monitor_base import MonitorBase
+from infrastructure.state.controller_state_store import ControllerStateStore
+from infrastructure.monitoring.monitor_base import MonitorBase
 
 
 class ControllerMonitor(MonitorBase):

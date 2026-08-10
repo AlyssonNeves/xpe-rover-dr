@@ -5,7 +5,7 @@
 
 import re
 
-from app.commands.domain_handlers import (
+from app.commands import (
     CommandHandlerRegistry,
     ControllerCommandHandler,
     DriveCommandHandler,

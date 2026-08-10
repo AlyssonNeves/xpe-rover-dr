@@ -6,7 +6,7 @@
 import time
 
 from ports.joystick_port import JoystickPort
-from services.joystick_control_service import JoystickControlService
+from app.services.joystick_control_service import JoystickControlService
 
 
 class FakeJoystickPort(JoystickPort):

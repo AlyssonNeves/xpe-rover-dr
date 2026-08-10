@@ -10,7 +10,7 @@ import unittest
 
 from PIL import Image
 
-from adapters.ev3_screen_image import (
+from infrastructure.ev3.screen_image import (
     EV3_SCREEN_SIZE,
     load_monochrome_screen,
     screen_asset_path,

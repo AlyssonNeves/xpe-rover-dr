@@ -12,7 +12,7 @@ try:
 except ImportError:  # pragma: no cover
     import mock
 
-from adapters.ev3_button_feedback import Ev3ButtonFeedback
+from infrastructure.ev3.button_feedback import Ev3ButtonFeedback
 
 
 class Ev3ButtonFeedbackTests(unittest.TestCase):
@@ -61,7 +61,7 @@ class Ev3ButtonFeedbackTests(unittest.TestCase):
         with mock.patch.dict(
                 sys.modules,
                 {"ev3dev2": None, "ev3dev2.sound": None}), mock.patch(
-                "adapters.ev3_button_feedback.AppLogger.warning") as warning:
+                "infrastructure.ev3.button_feedback.AppLogger.warning") as warning:
             emitted = Ev3ButtonFeedback.play()
 
         self.assertFalse(emitted)
