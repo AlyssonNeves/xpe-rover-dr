@@ -116,7 +116,12 @@
     "left_auxiliary_motor_code": "LMM",
     "right_auxiliary_motor_code": "RMM",
     "poll_seconds": 0.02,
-    "device_name": "Wireless Controller"
+    "device_name": "Wireless Controller",
+    "device_address": "41:42:76:52:94:E8",
+    "auto_connect": true,
+    "connection_retry_seconds": 3.0,
+    "connection_timeout_seconds": 10.0,
+    "discovery_poll_seconds": 0.25
   },
   "drive": {
     "left_motor_code": "LLM",

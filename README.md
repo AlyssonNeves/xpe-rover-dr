@@ -342,11 +342,15 @@ failures as a lost Bluetooth joystick connection. Rover-DR synchronously stops
 all motors owned by the manual path, invalidates the active manual session and
 discards the previous traction/steering state before the worker terminates.
 
-At this stage recovery is intentionally explicit rather than automatic. If the
-manual joystick service is started again after the controller reappears, motion
-remains blocked until both traction axes have been observed at their neutral
-position. Automatic `bluetoothctl` connection/reconnection is reserved for the
-later Bluetooth reconnection increment.
+S02.19 extends this fail-safe with automatic recovery. The adapter first checks
+whether the configured controller is already exposed by Linux `evdev`; when it
+is absent and automatic connection is enabled, Rover-DR executes
+`bluetoothctl connect <MAC>` and waits for the named device to appear. After a
+connection loss the manual service stays alive, stops the motors, releases the
+session, reports the Bluetooth error on the EV3 display and retries after the
+configured interval. Motion remains blocked by the neutral-safety barrier until
+the required traction axes return to neutral. Capability-based selection among
+same-name HID nodes remains reserved for S02.24.
 
 ## EV3 battery monitoring and operational feedback
 
@@ -476,3 +480,14 @@ como `(-right, -left)`. No Mecanum, o referencial translacional é rotacionado
 em 180 graus por `(-RR, -FR, -RL, -FL)`, preservando o sentido solicitado de
 rotação. Polaridade física, inversões do drivetrain e calibração permanecem
 responsabilidades independentes do `ManualDriveService` e da fronteira EV3.
+
+
+## S02.19 - Conexão e reconexão automática do joystick Bluetooth
+
+- `EvdevJoystickAdapter` reutiliza primeiro um joystick já disponível em `evdev`.
+- Na ausência do dispositivo, `bluetoothctl connect <MAC>` é executado quando `auto_connect` está habilitado.
+- Endereço Bluetooth, timeout de conexão, intervalo de retry e polling de descoberta passam a ser configuráveis.
+- `JoystickControlService` permanece ativo após desconexões, aplica parada fail-safe, libera a sessão e tenta reconectar automaticamente.
+- A retomada continua condicionada à barreira de neutralidade estabelecida no S02.07.
+- `Ev3OperationStatusAdapter` utiliza `Screen 03 - Bluetooth Error.pbm` durante falhas e restaura o General Status após a recuperação.
+- A seleção do nó `evdev` ainda é por nome; descoberta por capacidades fica reservada ao S02.24.

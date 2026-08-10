@@ -86,6 +86,7 @@ def test_open_reports_when_configured_device_is_not_exposed_by_evdev():
     keyboard = FakeInputDevice("/dev/input/event0", "AT Keyboard")
     adapter = EvdevJoystickAdapter(
         device_name="Wireless Controller",
+        auto_connect=False,
         evdev_module=FakeEvdevModule({keyboard.path: keyboard})
     )
 
@@ -93,7 +94,7 @@ def test_open_reports_when_configured_device_is_not_exposed_by_evdev():
         adapter.open()
 
     assert "Wireless Controller" in str(error.value)
-    assert "Linux evdev" in str(error.value)
+    assert "automatic Bluetooth connection is disabled" in str(error.value)
 
 
 def test_read_event_waits_for_descriptor_and_normalizes_evdev_values():
@@ -280,3 +281,98 @@ def test_select_failure_is_normalized_as_connection_loss():
 
     assert "Bluetooth joystick connection lost" in str(error.value)
     assert adapter.device is None
+
+
+class FakeBluetoothProcess(object):
+    def __init__(self, returncode=0, output="Connection successful", on_create=None):
+        self.returncode = returncode
+        self.output = output
+        self.terminated = False
+        self.killed = False
+        if on_create is not None:
+            on_create()
+
+    def poll(self):
+        return self.returncode
+
+    def communicate(self):
+        return self.output, None
+
+    def terminate(self):
+        self.terminated = True
+        self.returncode = -15
+
+    def kill(self):
+        self.killed = True
+        self.returncode = -9
+
+
+def test_is_available_checks_existing_evdev_node_without_leaving_it_open():
+    gamepad = FakeInputDevice("/dev/input/event4", "Wireless Controller")
+    evdev_module = FakeEvdevModule({gamepad.path: gamepad})
+    adapter = EvdevJoystickAdapter(evdev_module=evdev_module)
+
+    assert adapter.is_available() is True
+    assert evdev_module.created[-1].closed is True
+
+def test_open_uses_existing_device_without_running_bluetoothctl():
+    gamepad = FakeInputDevice("/dev/input/event4", "Wireless Controller")
+    calls = []
+    adapter = EvdevJoystickAdapter(
+        evdev_module=FakeEvdevModule({gamepad.path: gamepad}),
+        device_address="41:42:76:52:94:E8",
+        popen_factory=lambda *args, **kwargs: calls.append((args, kwargs))
+    )
+
+    assert adapter.open() == "Wireless Controller"
+    assert calls == []
+
+def test_open_requests_bluetoothctl_connect_and_waits_for_evdev_node():
+    evdev_module = FakeEvdevModule({})
+    gamepad = FakeInputDevice("/dev/input/event4", "Wireless Controller")
+    calls = []
+
+    def make_process(args, **kwargs):
+        calls.append((args, kwargs))
+        evdev_module.devices[gamepad.path] = gamepad
+        return FakeBluetoothProcess()
+
+    adapter = EvdevJoystickAdapter(
+        evdev_module=evdev_module,
+        device_address="41:42:76:52:94:E8",
+        popen_factory=make_process
+    )
+
+    assert adapter.open() == "Wireless Controller"
+    assert calls[0][0] == [
+        "bluetoothctl", "connect", "41:42:76:52:94:E8"
+    ]
+    assert adapter.device.path == "/dev/input/event4"
+
+def test_open_requires_bluetooth_address_when_auto_connect_is_enabled():
+    adapter = EvdevJoystickAdapter(
+        evdev_module=FakeEvdevModule({}),
+        device_address="", auto_connect=True
+    )
+
+    with pytest.raises(RuntimeError, match="device_address"):
+        adapter.open()
+
+def test_bluetoothctl_failure_is_reported_with_command_output():
+    def make_process(args, **kwargs):
+        del args, kwargs
+        return FakeBluetoothProcess(
+            returncode=1, output="Failed to connect: org.bluez.Error.Failed"
+        )
+
+    adapter = EvdevJoystickAdapter(
+        evdev_module=FakeEvdevModule({}),
+        device_address="41:42:76:52:94:E8",
+        popen_factory=make_process
+    )
+
+    with pytest.raises(RuntimeError) as error:
+        adapter.open()
+
+    assert "bluetoothctl could not connect" in str(error.value)
+    assert "org.bluez.Error.Failed" in str(error.value)

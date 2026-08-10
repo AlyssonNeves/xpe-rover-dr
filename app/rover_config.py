@@ -157,10 +157,18 @@ def validate_joystick_configuration(configuration):
         deadzone = int(configuration.get("axis_deadzone", 7))
         maximum = int(configuration.get("axis_max", 255))
         intensity = float(configuration.get("axis_response_intensity", 1.0))
+        retry_seconds = float(
+            configuration.get("connection_retry_seconds", 3.0)
+        )
+        timeout_seconds = float(
+            configuration.get("connection_timeout_seconds", 10.0)
+        )
+        discovery_poll_seconds = float(
+            configuration.get("discovery_poll_seconds", 0.25)
+        )
     except (TypeError, ValueError):
         raise RuntimeError(
-            "Joystick axis_center, axis_deadzone, axis_max and "
-            "axis_response_intensity must be numeric."
+            "Joystick axis and Bluetooth timing values must be numeric."
         )
 
     if center <= 0 or center >= maximum:
@@ -179,11 +187,40 @@ def validate_joystick_configuration(configuration):
             "joystick.axis_response_intensity must be finite and greater "
             "than zero."
         )
+    for name, value in (
+            ("connection_retry_seconds", retry_seconds),
+            ("connection_timeout_seconds", timeout_seconds),
+            ("discovery_poll_seconds", discovery_poll_seconds)):
+        if not math.isfinite(value) or value <= 0.0:
+            raise RuntimeError(
+                "joystick.{0} must be finite and greater than zero.".format(
+                    name
+                )
+            )
+    device_name = str(
+        configuration.get("device_name", "Wireless Controller") or ""
+    ).strip()
+    if not device_name:
+        raise RuntimeError("joystick.device_name must not be empty.")
+    auto_connect = parse_boolean(
+        configuration.get("auto_connect"), default=False
+    )
+    device_address = str(configuration.get("device_address", "") or "").strip()
+    if auto_connect and not device_address:
+        raise RuntimeError(
+            "joystick.device_address is required when auto_connect is enabled."
+        )
 
     configuration["axis_center"] = center
     configuration["axis_deadzone"] = deadzone
     configuration["axis_max"] = maximum
     configuration["axis_response_intensity"] = intensity
+    configuration["device_name"] = device_name
+    configuration["device_address"] = device_address
+    configuration["auto_connect"] = auto_connect
+    configuration["connection_retry_seconds"] = retry_seconds
+    configuration["connection_timeout_seconds"] = timeout_seconds
+    configuration["discovery_poll_seconds"] = discovery_poll_seconds
     return configuration
 
 

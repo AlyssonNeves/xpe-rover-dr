@@ -25,6 +25,7 @@ pode ser executado sem hardware EV3 físico.
 - telas gráficas PBM para a seleção inicial dos modos no display do EV3, com validação de formato e dimensões.
 - monitoração de bateria, rede, joystick e feedback operacional no display do EV3;
 - seleção explícita de Command & Control, com `Control` não aplicável em `REMOTE` e navegação por linhas no brick.
+- conexão e reconexão automática do joystick Bluetooth por `bluetoothctl`, mantendo fail-safe e barreira de neutralidade.
 
 ## Execução
 

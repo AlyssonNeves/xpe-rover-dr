@@ -10,6 +10,11 @@ class JoystickPort(object, metaclass=ABCMeta):
     """Defines the minimal controller contract used by manual control."""
 
     @abstractmethod
+    def is_available(self):
+        """Returns whether the configured joystick is already in evdev."""
+        raise NotImplementedError
+
+    @abstractmethod
     def open(self):
         """Opens the configured joystick and returns its display name."""
         raise NotImplementedError

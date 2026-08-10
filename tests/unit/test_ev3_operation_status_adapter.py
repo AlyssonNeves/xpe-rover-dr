@@ -197,3 +197,50 @@ class Ev3OperationStatusAdapterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_bluetooth_error_background_is_packaged_as_valid_pbm():
+    path = Ev3OperationStatusAdapter._bluetooth_error_asset_path()
+    assert os.path.isfile(path)
+    background = Ev3OperationStatusAdapter._load_bluetooth_error_background()
+    assert background.size == (178, 128)
+    assert background.mode == "1"
+    background.close()
+
+
+def test_connection_error_switches_to_bluetooth_screen_and_retry_message():
+    adapter = Ev3OperationStatusAdapter()
+    adapter._display = RecordingDisplay()
+    adapter._background = object()
+    adapter._bluetooth_error_background = object()
+    adapter._font = object()
+    adapter._compact_font = object()
+
+    adapter.show_joystick_connection_error(
+        "Joystick unavailable. Automatic retry pending.", 3.0
+    )
+
+    assert adapter._bluetooth_error_active is True
+    assert adapter._display.image.paste_calls[-1][0] is adapter._bluetooth_error_background
+    texts = [call[1] for call in adapter._display.draw.text_calls]
+    assert any("Joystick unavailable" in text for text in texts)
+    assert "Retry: 3.0s" in texts
+
+
+def test_connection_recovery_restores_general_status_screen():
+    adapter = Ev3OperationStatusAdapter()
+    adapter._display = RecordingDisplay()
+    adapter._background = object()
+    adapter._bluetooth_error_background = object()
+    adapter._font = object()
+    adapter._compact_font = object()
+    adapter._bluetooth_error_active = True
+
+    with mock.patch.object(adapter, "_read_values", return_value={
+        "battery": "90%", "ip": "10.0.0.2", "joystick": "Connected",
+        "command": "Local", "control": "Manual"
+    }):
+        adapter.show_joystick_connected("Wireless Controller")
+
+    assert adapter._bluetooth_error_active is False
+    assert adapter._display.image.paste_calls[-1][0] is adapter._background

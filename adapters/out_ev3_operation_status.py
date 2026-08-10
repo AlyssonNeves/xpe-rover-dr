@@ -11,13 +11,15 @@ from infrastructure.ev3.screen_image import (
     load_monochrome_screen
 )
 from infrastructure.logging.app_logger import AppLogger
+from ports.joystick_connection_status_port import JoystickConnectionStatusPort
 
 
-class Ev3OperationStatusAdapter(object):
-    """Displays battery, IP, joystick and current Command/Control values."""
+class Ev3OperationStatusAdapter(JoystickConnectionStatusPort):
+    """Displays operation status and Bluetooth connection recovery feedback."""
 
     REFRESH_SECONDS = 1.0
     BACKGROUND_FILENAME = "Screen 05 - General Status.pbm"
+    BLUETOOTH_ERROR_FILENAME = "Screen 03 - Bluetooth Error.pbm"
     EV3_POWER_SUPPLY_ADDRESS = "legoev3-battery"
     OPERATOR_READY_SPEECH = "Rover D R Online"
     OPERATOR_READY_ESPEAK_OPTIONS = "-a 200 -s 130 -ven-us"
@@ -30,6 +32,8 @@ class Ev3OperationStatusAdapter(object):
         "control": (133, 71)
     }
     COMPACT_VALUE_FIELDS = frozenset(("battery", "ip", "joystick"))
+    BLUETOOTH_MESSAGE_POSITION = (51, 58)
+    BLUETOOTH_RETRY_POSITION = (51, 84)
 
     def __init__(self, operation_mode_service=None,
                  joystick_device_name="Wireless Controller"):
@@ -41,12 +45,16 @@ class Ev3OperationStatusAdapter(object):
         self._thread = None
         self._display = None
         self._background = None
+        self._bluetooth_error_background = None
         self._font = None
         self._compact_font = None
         self._display_lock = threading.RLock()
+        self._bluetooth_error_active = False
+        self._bluetooth_error_message = "Joystick unavailable"
+        self._bluetooth_retry_seconds = 0.0
 
     def start(self):
-        """Shows the status screen immediately and starts periodic updates."""
+        """Shows the current screen immediately and starts periodic updates."""
         if self._thread is not None and self._thread.is_alive():
             return
 
@@ -55,6 +63,9 @@ class Ev3OperationStatusAdapter(object):
 
             self._display = Display()
             self._background = self._load_background()
+            self._bluetooth_error_background = (
+                self._load_bluetooth_error_background()
+            )
             self._font = self._load_font(8)
             self._compact_font = self._load_font(6)
             self._stop_event.clear()
@@ -88,6 +99,27 @@ class Ev3OperationStatusAdapter(object):
         """Provides the lifecycle method expected by RoverApplication."""
         self.stop()
 
+    def show_joystick_connection_error(self, message, retry_seconds):
+        """Keeps the Bluetooth error artwork visible during retry cycles."""
+        with self._display_lock:
+            self._bluetooth_error_active = True
+            self._bluetooth_error_message = str(
+                message or "Joystick unavailable"
+            )
+            self._bluetooth_retry_seconds = max(
+                0.0, float(retry_seconds)
+            )
+            if self._display is not None:
+                self._draw_current_screen_locked()
+
+    def show_joystick_connected(self, device_name):
+        """Restores General Status after a successful Bluetooth recovery."""
+        del device_name
+        with self._display_lock:
+            self._bluetooth_error_active = False
+            if self._display is not None:
+                self._draw_current_screen_locked()
+
     def _run(self):
         while not self._stop_event.wait(self.REFRESH_SECONDS):
             try:
@@ -106,10 +138,21 @@ class Ev3OperationStatusAdapter(object):
         return cached_screen_path(cls.BACKGROUND_FILENAME)
 
     @classmethod
+    def _bluetooth_error_asset_path(cls):
+        return cached_screen_path(cls.BLUETOOTH_ERROR_FILENAME)
+
+    @classmethod
     def _load_background(cls):
         return load_monochrome_screen(
             cls._asset_path(),
             "Operation-status screen"
+        )
+
+    @classmethod
+    def _load_bluetooth_error_background(cls):
+        return load_monochrome_screen(
+            cls._bluetooth_error_asset_path(),
+            "Bluetooth-error screen"
         )
 
     @staticmethod
@@ -129,23 +172,57 @@ class Ev3OperationStatusAdapter(object):
     def _draw_current_screen(self):
         if self._display is None or self._background is None:
             return
-
         with self._display_lock:
-            self._display.image.paste(self._background, (0, 0))
-            values = self._read_values()
-            for field_name, position in self.VALUE_POSITIONS.items():
-                font = (
-                    self._compact_font
-                    if field_name in self.COMPACT_VALUE_FIELDS
-                    else self._font
-                )
-                self._display.draw.text(
-                    position,
-                    values[field_name],
-                    font=font,
-                    fill="black"
-                )
-            self._display.update()
+            self._draw_current_screen_locked()
+
+    def _draw_current_screen_locked(self):
+        if self._bluetooth_error_active:
+            self._draw_bluetooth_error_locked()
+            return
+        self._draw_general_status_locked()
+
+    def _draw_general_status_locked(self):
+        self._display.image.paste(self._background, (0, 0))
+        values = self._read_values()
+        for field_name, position in self.VALUE_POSITIONS.items():
+            font = (
+                self._compact_font
+                if field_name in self.COMPACT_VALUE_FIELDS
+                else self._font
+            )
+            self._display.draw.text(
+                position,
+                values[field_name],
+                font=font,
+                fill="black"
+            )
+        self._display.update()
+
+    def _draw_bluetooth_error_locked(self):
+        background = self._bluetooth_error_background or self._background
+        self._display.image.paste(background, (0, 0))
+        message = self._short_bluetooth_message(self._bluetooth_error_message)
+        self._display.draw.text(
+            self.BLUETOOTH_MESSAGE_POSITION,
+            message,
+            font=self._compact_font,
+            fill="black"
+        )
+        self._display.draw.text(
+            self.BLUETOOTH_RETRY_POSITION,
+            "Retry: {0:.1f}s".format(self._bluetooth_retry_seconds),
+            font=self._compact_font,
+            fill="black"
+        )
+        self._display.update()
+
+    @staticmethod
+    def _short_bluetooth_message(message):
+        """Keeps dynamic text compact enough for the fixed EV3 artwork."""
+        normalized = " ".join(str(message or "Joystick unavailable").split())
+        if len(normalized) <= 34:
+            return normalized
+        return normalized[:31] + "..."
 
     def _read_values(self):
         selected_mode = self._read_operation_mode()

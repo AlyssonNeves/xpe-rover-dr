@@ -21,6 +21,19 @@ class NullApplicationLogger(object):
         del message
 
 
+class NullJoystickConnectionStatus(object):
+    """No-op operator feedback when no connection display is assembled."""
+
+    @staticmethod
+    def show_joystick_connection_error(message, retry_seconds):
+        del message
+        del retry_seconds
+
+    @staticmethod
+    def show_joystick_connected(device_name):
+        del device_name
+
+
 class JoystickControlService(object):
     """Translates normalized joystick events into direct manual-drive calls."""
 
@@ -56,7 +69,10 @@ class JoystickControlService(object):
             mecanum_strafe_compensation=1.0,
             poll_seconds=0.02,
             session_id="local-manual",
-            logger=None):
+            logger=None,
+            device_name="Wireless Controller",
+            connection_retry_seconds=3.0,
+            connection_status_port=None):
         if manual_drive_port is None:
             raise ValueError("manual_drive_port is required.")
         self.joystick_port = joystick_port
@@ -97,6 +113,13 @@ class JoystickControlService(object):
         self.poll_seconds = max(0.001, float(poll_seconds))
         self.session_id = session_id
         self.logger = logger or NullApplicationLogger
+        self.device_name = str(device_name or "Wireless Controller")
+        self.connection_retry_seconds = max(
+            0.05, float(connection_retry_seconds)
+        )
+        self.connection_status_port = (
+            connection_status_port or NullJoystickConnectionStatus()
+        )
 
         self._strafe = 0.0
         self._translation = 0.0
@@ -159,41 +182,100 @@ class JoystickControlService(object):
         self.stop()
 
     def _run(self):
-        try:
-            opened_name = self.joystick_port.open()
-            acquired = self.manual_drive_port.acquire(self.session_id)
-            if not acquired.get("success"):
-                raise RuntimeError(
-                    acquired.get("error") or "Unable to acquire manual motors."
-                )
-            self._acquired = True
-            self.logger.status(
-                "Local manual joystick connected: {}.".format(opened_name)
-            )
-            if self._neutral_required:
-                self.logger.status(
-                    "Joystick safety gate active; return traction controls "
-                    "to neutral before resuming motion."
-                )
-            while not self._stop_event.is_set():
-                event = self.joystick_port.read_event(self.poll_seconds)
-                if event is not None:
-                    self.process_event(event)
-        except Exception as error:
-            if not self._stop_event.is_set():
-                self.logger.error(
-                    "Local manual joystick connection lost: {}".format(error)
-                )
-                self._invalidate_disconnected_session()
-        finally:
+        """Keeps LOCAL + MANUAL control available across disconnects."""
+        while not self._stop_event.is_set():
             try:
-                self.joystick_port.close()
-            except Exception as error:
-                self.logger.error(
-                    "Unable to close joystick input after session: {}".format(
-                        error
+                self._stop_before_connection_attempt()
+                if self._joystick_is_available() is False:
+                    self._notify_connection_error(
+                        "Joystick not found. Trying Bluetooth connection."
                     )
+                opened_name = self.joystick_port.open()
+                acquired = self.manual_drive_port.acquire(self.session_id)
+                if not acquired.get("success"):
+                    raise RuntimeError(
+                        acquired.get("error") or
+                        "Unable to acquire manual motors."
+                    )
+                self._acquired = True
+                self._reset_axis_state_for_connection()
+                self.logger.status(
+                    "Local manual joystick connected: {}.".format(opened_name)
                 )
+                if self._neutral_required:
+                    self.logger.status(
+                        "Joystick safety gate active; return traction "
+                        "controls to neutral before resuming motion."
+                    )
+                self._notify_connected(opened_name)
+
+                while not self._stop_event.is_set():
+                    event = self.joystick_port.read_event(self.poll_seconds)
+                    if event is not None:
+                        self.process_event(event)
+            except Exception as error:
+                if not self._stop_event.is_set():
+                    self.logger.error(
+                        "Local manual joystick unavailable: {}".format(error)
+                    )
+                    self._invalidate_disconnected_session()
+                    self._notify_connection_error(
+                        "Joystick unavailable. Automatic retry pending."
+                    )
+            finally:
+                try:
+                    self.joystick_port.close()
+                except Exception as error:
+                    self.logger.error(
+                        "Unable to close joystick input after session: {}"
+                        .format(error)
+                    )
+
+            if self._stop_event.wait(self.connection_retry_seconds):
+                break
+
+    def _joystick_is_available(self):
+        probe = getattr(self.joystick_port, "is_available", None)
+        if not callable(probe):
+            return None
+        try:
+            return bool(probe())
+        except Exception as error:
+            self.logger.error(
+                "Unable to probe joystick availability: {}".format(error)
+            )
+            return None
+
+    def _stop_before_connection_attempt(self):
+        """Leaves physical outputs safe before every connection attempt."""
+        self._strafe = 0.0
+        self._translation = 0.0
+        self._rotation = 0.0
+        self.emergency_stop()
+
+    def _reset_axis_state_for_connection(self):
+        """Never reuses axis values from a previous Bluetooth session."""
+        self._strafe = 0.0
+        self._translation = 0.0
+        self._rotation = 0.0
+
+    def _notify_connection_error(self, message):
+        try:
+            self.connection_status_port.show_joystick_connection_error(
+                message, self.connection_retry_seconds
+            )
+        except Exception as error:
+            self.logger.error(
+                "Unable to update Bluetooth error status: {}".format(error)
+            )
+
+    def _notify_connected(self, device_name):
+        try:
+            self.connection_status_port.show_joystick_connected(device_name)
+        except Exception as error:
+            self.logger.error(
+                "Unable to restore joystick connected status: {}".format(error)
+            )
 
     def process_event(self, event):
         """Processes one normalized joystick event."""

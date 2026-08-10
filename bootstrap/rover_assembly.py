@@ -133,19 +133,27 @@ def build_local_manual_application(operation_mode_service=None,
         joystick_port = EvdevJoystickAdapter(
             device_name=joystick_config.get(
                 "device_name", "Wireless Controller"
+            ),
+            device_address=joystick_config.get("device_address", ""),
+            auto_connect=joystick_config.get("auto_connect", True),
+            connection_timeout_seconds=joystick_config.get(
+                "connection_timeout_seconds", 10.0
+            ),
+            discovery_poll_seconds=joystick_config.get(
+                "discovery_poll_seconds", 0.25
             )
         )
 
     managed_services = []
+    joystick_connection_status_port = None
     if rover_config.HARDWARE_ENABLED:
-        managed_services.append(
-            Ev3OperationStatusAdapter(
-                operation_mode_service=mode_service,
-                joystick_device_name=joystick_config.get(
-                    "device_name", "Wireless Controller"
-                )
+        joystick_connection_status_port = Ev3OperationStatusAdapter(
+            operation_mode_service=mode_service,
+            joystick_device_name=joystick_config.get(
+                "device_name", "Wireless Controller"
             )
         )
+        managed_services.append(joystick_connection_status_port)
 
     if joystick_port is not None:
         joystick_control_service = JoystickControlService(
@@ -174,7 +182,14 @@ def build_local_manual_application(operation_mode_service=None,
                 "strafe_compensation", 1.0
             ),
             poll_seconds=joystick_config.get("poll_seconds", 0.02),
-            logger=AppLogger
+            logger=AppLogger,
+            device_name=joystick_config.get(
+                "device_name", "Wireless Controller"
+            ),
+            connection_retry_seconds=joystick_config.get(
+                "connection_retry_seconds", 3.0
+            ),
+            connection_status_port=joystick_connection_status_port
         )
         managed_services.extend([joystick_control_service, manual_drive_port])
     else:

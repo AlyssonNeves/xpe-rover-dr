@@ -168,8 +168,10 @@ def test_local_manual_builder_autowires_evdev_in_hardware_mode(monkeypatch):
     joystick = object()
     captured = {}
 
-    def make_evdev(device_name=None):
-        captured["device_name"] = device_name
+    def make_evdev(**kwargs):
+        captured["device_name"] = kwargs.get("device_name")
+        captured["device_address"] = kwargs.get("device_address")
+        captured["auto_connect"] = kwargs.get("auto_connect")
         return joystick
 
     def make_service(**kwargs):
@@ -184,6 +186,8 @@ def test_local_manual_builder_autowires_evdev_in_hardware_mode(monkeypatch):
         operation_mode_service=OperationModeService()
     )
     assert captured["device_name"] == "Wireless Controller"
+    assert captured["device_address"] == "41:42:76:52:94:E8"
+    assert captured["auto_connect"] is True
     assert captured["joystick_port"] is joystick
     assert captured["manual_drive_port"] is manual
     assert application.monitors == []

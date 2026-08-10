@@ -17,8 +17,12 @@ class FakeJoystickPort(JoystickPort):
         self.opened = False
         self.closed = False
 
+    def is_available(self):
+        return self.opened and not self.closed
+
     def open(self):
         self.opened = True
+        self.closed = False
         return "Test Controller"
 
     def read_event(self, timeout_seconds=None):
@@ -218,15 +222,15 @@ def test_disconnect_stops_motors_invalidates_session_and_clears_axis_state():
     )
     manual = FakeManualDrivePort()
     service = JoystickControlService(
-        joystick, manual, poll_seconds=0.001
+        joystick, manual, poll_seconds=0.001, connection_retry_seconds=0.01
     )
 
     service.start()
     deadline = time.time() + 0.2
-    while service._thread.is_alive() and time.time() < deadline:
+    while not manual.release_calls and time.time() < deadline:
         time.sleep(0.002)
+    service.stop()
 
-    assert service._thread.is_alive() is False
     assert manual.drive_calls[0][1:] == (600, 600)
     assert manual.stop_calls >= 1
     assert manual.release_calls == [("local-manual", True)]
@@ -241,17 +245,17 @@ def test_post_disconnect_restart_blocks_motion_until_both_axes_are_neutral():
     joystick = FakeJoystickPort(read_error=OSError("Bluetooth lost"))
     manual = FakeManualDrivePort()
     service = JoystickControlService(
-        joystick, manual, poll_seconds=0.001
+        joystick, manual, poll_seconds=0.001, connection_retry_seconds=0.01
     )
 
     service.start()
     deadline = time.time() + 0.2
-    while service._thread.is_alive() and time.time() < deadline:
+    while not service._neutral_required and time.time() < deadline:
         time.sleep(0.002)
     assert service._neutral_required is True
 
-    # Reappearance is explicit in S02.07; automatic reconnection belongs to
-    # S02.19. Non-neutral input must not restart the Rover.
+    # S02.19 reconnects automatically. Non-neutral input remains blocked until
+    # both Differential traction axes have been observed at neutral.
     joystick.closed = False
     joystick.events = [
         {"type": 3, "code": 1, "value": 0},
@@ -259,8 +263,9 @@ def test_post_disconnect_restart_blocks_motion_until_both_axes_are_neutral():
         {"type": 3, "code": 1, "value": 127},
         {"type": 3, "code": 1, "value": 0}
     ]
-    service.start()
-    deadline = time.time() + 0.2
+    deadline = time.time() + 0.3
+    while len(manual.acquire_calls) < 2 and time.time() < deadline:
+        time.sleep(0.002)
     while len(manual.drive_calls) < 1 and time.time() < deadline:
         time.sleep(0.002)
     service.stop()
@@ -288,17 +293,68 @@ def test_unexpected_input_failure_still_uses_fail_safe_stop_boundary():
     joystick = FakeJoystickPort(read_error=RuntimeError("unexpected input error"))
     manual = FakeManualDrivePort()
     service = JoystickControlService(
-        joystick, manual, poll_seconds=0.001
+        joystick, manual, poll_seconds=0.001, connection_retry_seconds=0.01
     )
 
     service.start()
     deadline = time.time() + 0.2
-    while service._thread.is_alive() and time.time() < deadline:
+    while not manual.release_calls and time.time() < deadline:
         time.sleep(0.002)
+    service.stop()
 
     assert manual.stop_calls >= 1
     assert manual.release_calls == [("local-manual", True)]
     assert service._neutral_required is True
+
+
+class FakeConnectionStatusPort(object):
+    def __init__(self):
+        self.errors = []
+        self.connected = []
+
+    def show_joystick_connection_error(self, message, retry_seconds):
+        self.errors.append((message, retry_seconds))
+
+    def show_joystick_connected(self, device_name):
+        self.connected.append(device_name)
+
+
+def test_automatic_reconnect_reports_failure_then_connected_status():
+    joystick = FakeJoystickPort(read_error=OSError("Bluetooth lost"))
+    manual = FakeManualDrivePort()
+    status = FakeConnectionStatusPort()
+    service = JoystickControlService(
+        joystick, manual, poll_seconds=0.001,
+        connection_retry_seconds=0.01, connection_status_port=status
+    )
+
+    service.start()
+    deadline = time.time() + 0.3
+    while len(manual.acquire_calls) < 2 and time.time() < deadline:
+        time.sleep(0.002)
+    service.stop()
+
+    assert len(manual.acquire_calls) >= 2
+    assert status.errors
+    assert len(status.connected) >= 2
+    assert status.connected[0] == "Test Controller"
+
+
+def test_each_reconnect_attempt_stops_outputs_before_opening_session():
+    joystick = FakeJoystickPort(read_error=OSError("Bluetooth lost"))
+    manual = FakeManualDrivePort()
+    service = JoystickControlService(
+        joystick, manual, poll_seconds=0.001, connection_retry_seconds=0.01
+    )
+
+    service.start()
+    deadline = time.time() + 0.3
+    while len(manual.acquire_calls) < 2 and time.time() < deadline:
+        time.sleep(0.002)
+    service.stop()
+
+    # Initial attempt + fail-safe disconnect + retry attempt + shutdown stop.
+    assert manual.stop_calls >= 4
 
 
 def test_mecanum_kinematics_use_standard_logical_wheel_ratios():

@@ -131,3 +131,13 @@ gate mínimo de 60%.
 - Em Mecanum, `TAIL` aplica `(-RR, -FR, -RL, -FL)`, equivalente a rotacionar o referencial translacional do operador em 180 graus sem inverter o sentido de rotação solicitado.
 - A transformação de orientação permanece separada de polaridade física, fatores Mecanum e futura compensação de RPM.
 - A suíte completa possui **214 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.
+
+
+## S02.19 - Conexão e reconexão automática do joystick Bluetooth
+
+- `bluetoothctl connect <MAC>` é acionado somente quando o joystick ainda não está disponível em `evdev`.
+- Falhas de conexão e perdas durante leitura mantêm o worker ativo em ciclo automático de retry.
+- Cada tentativa começa com parada síncrona dos motores e conexões recuperadas continuam protegidas pela neutral-safety barrier.
+- A tela `Screen 03 - Bluetooth Error.pbm` apresenta o estado de falha até a recuperação.
+- Configuração explícita: `device_address`, `auto_connect`, `connection_retry_seconds`, `connection_timeout_seconds` e `discovery_poll_seconds`.
+- A suíte completa possui **226 testes aprovados**.
