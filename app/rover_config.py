@@ -221,6 +221,16 @@ for key in MECANUM_SPEED_FACTOR_KEYS:
         )
 
 
+try:
+    MECANUM_STRAFE_COMPENSATION = float(
+        MECANUM_CONFIG.get("strafe_compensation", 1.0)
+    )
+except (TypeError, ValueError):
+    raise RuntimeError("Mecanum strafe_compensation must be numeric.")
+if MECANUM_STRAFE_COMPENSATION <= 0.0:
+    raise RuntimeError("Mecanum strafe_compensation must be positive.")
+
+
 def validate_security_configuration():
     """Validates credentials required by the selected deployment mode.
 

@@ -40,6 +40,7 @@ class FakeManualDrivePort(object):
         self.acquire_success = acquire_success
         self.acquire_calls = []
         self.drive_calls = []
+        self.mecanum_calls = []
         self.auxiliary_calls = []
         self.stop_calls = 0
         self.release_calls = []
@@ -53,6 +54,15 @@ class FakeManualDrivePort(object):
     def apply_drive_setpoint(self, session_id, left, right, stop_action=None):
         del stop_action
         self.drive_calls.append((session_id, left, right))
+        return {"success": True, "direct_hardware": True}
+
+    def apply_mecanum_setpoint(
+            self, session_id, front_left, rear_left, front_right, rear_right,
+            stop_action=None):
+        del stop_action
+        self.mecanum_calls.append((
+            session_id, front_left, rear_left, front_right, rear_right
+        ))
         return {"success": True, "direct_hardware": True}
 
     def apply_auxiliary_setpoint(
@@ -312,3 +322,111 @@ def test_linux_evdev_y_axis_is_converted_to_positive_forward_convention():
     assert service._normalize_axis(0) == -1.0
     assert -service._normalize_axis(0) == 1.0
     assert -service._normalize_axis(255) == -1.0
+
+
+def build_mecanum_service(strafe_compensation=1.0):
+    joystick = FakeJoystickPort()
+    manual = FakeManualDrivePort()
+    service = JoystickControlService(
+        joystick_port=joystick,
+        manual_drive_port=manual,
+        max_speed_sp=600,
+        auxiliary_speed_sp=400,
+        axis_center=127,
+        axis_max=255,
+        drive_mode=JoystickControlService.DRIVE_MECANUM,
+        centric=JoystickControlService.CENTRIC_CHASSIS,
+        mecanum_strafe_compensation=strafe_compensation,
+        poll_seconds=0.001
+    )
+    return service, joystick, manual
+
+
+def test_robot_centric_forward_uses_all_four_mecanum_wheels():
+    service, _, manual = build_mecanum_service()
+
+    service.process_event({"type": 3, "code": 1, "value": 0})
+
+    assert manual.mecanum_calls[-1][1:] == (600, 600, 600, 600)
+    assert manual.drive_calls == []
+
+
+def test_robot_centric_right_strafe_uses_left_stick_x():
+    service, _, manual = build_mecanum_service()
+
+    service.process_event({"type": 3, "code": 0, "value": 255})
+
+    assert manual.mecanum_calls[-1][1:] == (600, -600, -600, 600)
+
+
+def test_robot_centric_right_stick_x_rotates_in_place():
+    service, _, manual = build_mecanum_service()
+
+    service.process_event({"type": 3, "code": 3, "value": 255})
+
+    assert manual.mecanum_calls[-1][1:] == (600, 600, -600, -600)
+
+
+def test_robot_centric_translation_rotation_share_one_denominator():
+    service, _, manual = build_mecanum_service()
+
+    service.process_event({"type": 3, "code": 0, "value": 255})
+    service.process_event({"type": 3, "code": 1, "value": 0})
+    service.process_event({"type": 3, "code": 3, "value": 255})
+
+    assert manual.mecanum_calls[-1][1:] == (600, 200, -200, 200)
+
+
+def test_strafe_compensation_is_applied_before_shared_normalization():
+    service, _, manual = build_mecanum_service(strafe_compensation=1.1)
+
+    service.process_event({"type": 3, "code": 0, "value": 255})
+    service.process_event({"type": 3, "code": 1, "value": 0})
+    service.process_event({"type": 3, "code": 3, "value": 255})
+
+    assert manual.mecanum_calls[-1][1:] == (600, 174, -213, 213)
+
+
+def test_dpad_is_ignored_when_medium_motors_are_mecanum_traction():
+    service, _, manual = build_mecanum_service()
+
+    service.process_event({"type": 3, "code": 17, "value": -1})
+    service.process_event({"type": 3, "code": 16, "value": 1})
+
+    assert manual.auxiliary_calls == []
+    assert manual.mecanum_calls == []
+
+
+def test_mecanum_disconnect_gate_requires_x_y_and_rx_neutral():
+    service, _, _ = build_mecanum_service()
+    service._invalidate_disconnected_session()
+
+    assert service._neutral_pending_axes == {0, 1, 3}
+
+    service.process_event({"type": 3, "code": 0, "value": 127})
+    service.process_event({"type": 3, "code": 1, "value": 127})
+    assert service._neutral_required is True
+    service.process_event({"type": 3, "code": 3, "value": 127})
+    assert service._neutral_required is False
+
+
+def test_robot_centric_configuration_rejects_invalid_values():
+    try:
+        JoystickControlService(
+            FakeJoystickPort(), FakeManualDrivePort(),
+            drive_mode="UNKNOWN"
+        )
+    except ValueError as error:
+        assert "drive mode" in str(error)
+    else:
+        raise AssertionError("Invalid drive mode was accepted")
+
+    try:
+        JoystickControlService(
+            FakeJoystickPort(), FakeManualDrivePort(),
+            mecanum_strafe_compensation=0.0
+        )
+    except ValueError as error:
+        assert "strafe_compensation" in str(error)
+    else:
+        raise AssertionError("Invalid strafe compensation was accepted")

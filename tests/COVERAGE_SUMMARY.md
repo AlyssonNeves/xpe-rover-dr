@@ -84,3 +84,13 @@ gate mínimo de 60%.
 - `warm_monochrome_screen_cache()` pré-carrega os PBMs no startup quando o hardware EV3 está habilitado; falhas são reportadas e a tela afetada pode tentar novo carregamento quando utilizada.
 - Não há conversão TIFF/SVG no runtime do Rover; os adaptadores de Command & Control e General Status leem diretamente do cache deployável.
 - A suíte completa possui **179 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.
+
+
+## S02.14 - Configuração Robot-Centric
+
+- Runtime `LOCAL + MANUAL` configurado para `MECANUM + CHASSIS` (Robot-Centric).
+- Stick esquerdo X/Y controla strafe/avanço e stick direito X controla rotação.
+- `strafe_compensation = 1.1` é aplicado antes da normalização Mecanum comum.
+- D-pad não comanda `LMM`/`RMM` enquanto os quatro motores pertencem à tração Mecanum.
+- A barreira pós-desconexão passa a exigir neutralidade de X, Y e RX em Mecanum.
+- A suíte completa possui **187 testes aprovados**, com **75% de cobertura combinada de linhas e branches**.

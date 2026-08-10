@@ -83,6 +83,7 @@ def test_configuration_copy_and_invalid_files():
     assert mecanum["rear_right_motor_code"] == "RMM"
     mecanum["front_left_speed_factor"] = 99.0
     assert rover_config.get_mecanum_config()["front_left_speed_factor"] == -1.0
+    assert rover_config.get_mecanum_config()["strafe_compensation"] == 1.1
     motors = rover_config.get_motor_definitions()
     assert motors["LLM"]["polarity"] == "inversed"
     assert motors["LMM"]["polarity"] == "inversed"

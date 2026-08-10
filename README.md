@@ -321,7 +321,7 @@ The joystick service also defines the standard normalized logical Mecanum
 equations for forward/backward, strafe, diagonals and rotation. Linux `evdev`
 reports stick-up as negative Y, so the existing Y inversion establishes
 positive logical forward before those equations are evaluated. Runtime
-selection and continuous Robot-Centric dispatch remain deferred to S02.14.
+selection and continuous Robot-Centric dispatch are activated in S02.14.
 
 ## Graphical EV3 mode-selection screens
 
@@ -397,3 +397,18 @@ e General Status resolvem seus fundos diretamente no cache deployável. As telas
 serão conectadas a funcionalidades posteriores (Bluetooth, Front/Drive/Centric e
 status de motores/inicialização) já ficam empacotadas e validadas, sem antecipar a
 lógica desses requisitos.
+
+
+## S02.14 - Configuração Robot-Centric
+
+O runtime `LOCAL + MANUAL` passa a ativar o controle Mecanum no referencial do
+próprio chassi, denominado `CHASSIS` no código. O stick esquerdo fornece
+translação longitudinal (Y) e lateral (X), enquanto o eixo horizontal do stick
+direito fornece rotação. Os três componentes são combinados pelas equações
+Mecanum normalizadas já validadas no S02.12.
+
+A configuração Mecanum introduz `strafe_compensation = 1.1`, aplicada ao eixo X
+antes do denominador comum de normalização. Como `LMM` e `RMM` passam a compor a
+tração de quatro rodas neste modo, comandos auxiliares pelo D-pad são ignorados.
+A seleção dinâmica de `DIFFERENTIAL`/`MECANUM` e `CHASSIS`/`FIELD` permanece
+reservada ao fluxo canônico do S02.16 e ao pipeline FIELD-centric do S02.20.

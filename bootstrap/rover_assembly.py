@@ -155,6 +155,11 @@ def build_local_manual_application(operation_mode_service=None,
             right_auxiliary_motor_code=joystick_config.get(
                 "right_auxiliary_motor_code", "RMM"
             ),
+            drive_mode="MECANUM",
+            centric="CHASSIS",
+            mecanum_strafe_compensation=rover_config.get_mecanum_config().get(
+                "strafe_compensation", 1.0
+            ),
             poll_seconds=joystick_config.get("poll_seconds", 0.02),
             logger=AppLogger
         )

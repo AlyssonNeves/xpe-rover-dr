@@ -26,8 +26,13 @@ class JoystickControlService(object):
     EVENT_ABSOLUTE = 3
 
     BUTTON_EMERGENCY_STOP = 304
+    AXIS_DIRECTION_HORIZONTAL = 0
     AXIS_STEERING = 3
     AXIS_TRACTION = 1
+
+    DRIVE_DIFFERENTIAL = "DIFFERENTIAL"
+    DRIVE_MECANUM = "MECANUM"
+    CENTRIC_CHASSIS = "CHASSIS"
     AXIS_AUXILIARY_HORIZONTAL = 16
     AXIS_AUXILIARY_VERTICAL = 17
 
@@ -41,6 +46,9 @@ class JoystickControlService(object):
             axis_max=255,
             left_auxiliary_motor_code="LMM",
             right_auxiliary_motor_code="RMM",
+            drive_mode=DRIVE_DIFFERENTIAL,
+            centric=CENTRIC_CHASSIS,
+            mecanum_strafe_compensation=1.0,
             poll_seconds=0.02,
             session_id="local-manual",
             logger=None):
@@ -60,10 +68,24 @@ class JoystickControlService(object):
             )
         self.left_auxiliary_motor_code = left_auxiliary_motor_code
         self.right_auxiliary_motor_code = right_auxiliary_motor_code
+        if drive_mode not in (self.DRIVE_DIFFERENTIAL, self.DRIVE_MECANUM):
+            raise ValueError(
+                "Unsupported manual drive mode: {}".format(drive_mode)
+            )
+        if centric != self.CENTRIC_CHASSIS:
+            raise ValueError(
+                "Unsupported Mecanum centric mode: {}".format(centric)
+            )
+        self.drive_mode = drive_mode
+        self.centric = centric
+        self.mecanum_strafe_compensation = float(mecanum_strafe_compensation)
+        if self.mecanum_strafe_compensation <= 0.0:
+            raise ValueError("mecanum_strafe_compensation must be positive.")
         self.poll_seconds = max(0.001, float(poll_seconds))
         self.session_id = session_id
         self.logger = logger or NullApplicationLogger
 
+        self._strafe = 0.0
         self._translation = 0.0
         self._rotation = 0.0
         # A Bluetooth/input failure invalidates the current manual session.
@@ -177,6 +199,10 @@ class JoystickControlService(object):
         if event_type != self.EVENT_ABSOLUTE:
             return
 
+        if self.drive_mode == self.DRIVE_MECANUM:
+            self._process_mecanum_axis(code, value)
+            return
+
         if code == self.AXIS_TRACTION:
             self._translation = -self._normalize_axis(value)
             if self._neutral_gate_blocks(code, self._translation):
@@ -200,15 +226,40 @@ class JoystickControlService(object):
                 self.right_auxiliary_motor_code, value
             )
 
+    def _process_mecanum_axis(self, code, value):
+        """Updates CHASSIS-centric Mecanum state from the three drive axes."""
+        if code == self.AXIS_DIRECTION_HORIZONTAL:
+            self._strafe = self._normalize_axis(value)
+            if self._neutral_gate_blocks(code, self._strafe):
+                return
+        elif code == self.AXIS_TRACTION:
+            # Linux evdev reports stick-up as negative Y.
+            self._translation = -self._normalize_axis(value)
+            if self._neutral_gate_blocks(code, self._translation):
+                return
+        elif code == self.AXIS_STEERING:
+            self._rotation = self._normalize_axis(value)
+            if self._neutral_gate_blocks(code, self._rotation):
+                return
+        else:
+            # In Mecanum mode LMM/RMM are traction motors, so D-pad auxiliary
+            # commands are intentionally unavailable.
+            return
+
+        self._apply_mecanum_drive()
+
 
     def _invalidate_disconnected_session(self):
         """Stops motion and invalidates input state after connection loss."""
+        self._strafe = 0.0
         self._translation = 0.0
         self._rotation = 0.0
         self._neutral_required = True
         self._neutral_pending_axes = {
             self.AXIS_TRACTION, self.AXIS_STEERING
         }
+        if self.drive_mode == self.DRIVE_MECANUM:
+            self._neutral_pending_axes.add(self.AXIS_DIRECTION_HORIZONTAL)
 
         # Stop first: session invalidation must never delay the physical stop.
         self.emergency_stop()
@@ -235,7 +286,9 @@ class JoystickControlService(object):
             self._neutral_pending_axes.discard(axis_code)
 
         controls_are_neutral = (
-            self._translation == 0.0 and self._rotation == 0.0
+            self._translation == 0.0 and
+            self._rotation == 0.0 and
+            (self.drive_mode != self.DRIVE_MECANUM or self._strafe == 0.0)
         )
         if not self._neutral_pending_axes and controls_are_neutral:
             self._neutral_required = False
@@ -246,6 +299,7 @@ class JoystickControlService(object):
 
     def emergency_stop(self):
         """Synchronously stops every motor owned by the manual path."""
+        self._strafe = 0.0
         self._translation = 0.0
         self._rotation = 0.0
         try:
@@ -303,6 +357,18 @@ class JoystickControlService(object):
                 x_value, y_value, rotation
             )
         )
+
+
+    def _apply_mecanum_drive(self):
+        """Dispatches one CHASSIS-centric Mecanum setpoint synchronously."""
+        x_value = self._strafe * self.mecanum_strafe_compensation
+        setpoint = self._mecanum_setpoint(
+            x_value, self._translation, self._rotation
+        )
+        result = self.manual_drive_port.apply_mecanum_setpoint(
+            self.session_id, *setpoint
+        )
+        self._log_failure("Mecanum CHASSIS drive", result)
 
     def _apply_differential_drive(self):
         left = self._translation + self._rotation
