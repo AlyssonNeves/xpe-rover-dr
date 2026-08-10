@@ -16,9 +16,9 @@ MECANUM = {
     "rear_left_motor_code": "LMM",
     "front_right_motor_code": "RLM",
     "rear_right_motor_code": "RMM",
-    "front_left_speed_factor": 1.0,
+    "front_left_speed_factor": -1.0,
     "rear_left_speed_factor": 1.0,
-    "front_right_speed_factor": 1.0,
+    "front_right_speed_factor": -1.0,
     "rear_right_speed_factor": 1.0
 }
 
@@ -225,11 +225,11 @@ def test_mecanum_setpoint_drives_all_four_configured_motors():
     )
 
     assert result["success"] is True
-    assert result["setpoint"] == (100, 200, -300, -400)
+    assert result["setpoint"] == (-100, 200, 300, -400)
     assert result["motor_codes"] == ["LLM", "LMM", "RLM", "RMM"]
     assert hardware.run_calls == [
-        ("LLM", 100), ("LMM", 200),
-        ("RLM", -300), ("RMM", -400)
+        ("LLM", -100), ("LMM", 200),
+        ("RLM", 300), ("RMM", -400)
     ]
 
 
@@ -307,7 +307,7 @@ def test_mecanum_requires_four_distinct_motor_codes():
         raise AssertionError("Invalid Mecanum mapping was accepted.")
 
 
-def test_mecanum_speed_factors_must_be_positive_numbers():
+def test_mecanum_speed_factors_must_be_nonzero_numbers():
     invalid = dict(MECANUM)
     invalid["front_left_speed_factor"] = 0
 
@@ -317,6 +317,25 @@ def test_mecanum_speed_factors_must_be_positive_numbers():
             default_stop_action="brake"
         )
     except ValueError as error:
-        assert "front_left_speed_factor must be positive" in str(error)
+        assert "front_left_speed_factor must not be zero" in str(error)
     else:
         raise AssertionError("Invalid Mecanum speed factor was accepted.")
+
+
+def test_mecanum_signed_factors_are_independent_from_hardware_polarity():
+    hardware = FakeHardware()
+    service = ManualDriveService(
+        hardware, DRIVE, MECANUM, JOYSTICK, default_stop_action="brake"
+    )
+    assert service.acquire("session-1")["success"] is True
+    hardware.run_calls[:] = []
+
+    result = service.apply_mecanum_setpoint(
+        "session-1", 600, 600, 600, 600
+    )
+
+    assert result["setpoint"] == (-600, 600, -600, 600)
+    assert hardware.run_calls == [
+        ("LLM", -600), ("LMM", 600),
+        ("RLM", -600), ("RMM", 600)
+    ]

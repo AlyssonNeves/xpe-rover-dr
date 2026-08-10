@@ -268,6 +268,42 @@ class JoystickControlService(object):
             normalized = (value - self.axis_center) / span
         return max(-1.0, min(1.0, normalized))
 
+    @staticmethod
+    def _mecanum_ratios(x_value, y_value, rotation=0.0):
+        """Returns normalized logical Mecanum wheel ratios.
+
+        Positive ``y_value`` means forward, positive ``x_value`` means right
+        strafe and positive ``rotation`` means clockwise rotation. Linux evdev
+        reports stick-up as a negative raw Y value; the existing traction-axis
+        inversion converts it to this positive-forward logical convention.
+
+        Physical motor polarity is deliberately absent from these equations.
+        It belongs to the EV3 hardware boundary, while Mecanum-only gear
+        inversion/calibration belongs to ``ManualDriveService``.
+        """
+        x_value = float(x_value)
+        y_value = float(y_value)
+        rotation = float(rotation)
+        denominator = max(
+            abs(y_value) + abs(x_value) + abs(rotation),
+            1.0
+        )
+        return (
+            (y_value + x_value + rotation) / denominator,
+            (y_value - x_value + rotation) / denominator,
+            (y_value - x_value - rotation) / denominator,
+            (y_value + x_value - rotation) / denominator
+        )
+
+    def _mecanum_setpoint(self, x_value, y_value, rotation=0.0):
+        """Scales logical Mecanum ratios to the configured speed range."""
+        return tuple(
+            int(round(self.max_speed_sp * ratio))
+            for ratio in self._mecanum_ratios(
+                x_value, y_value, rotation
+            )
+        )
+
     def _apply_differential_drive(self):
         left = self._translation + self._rotation
         right = self._translation - self._rotation

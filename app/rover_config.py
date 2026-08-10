@@ -134,6 +134,15 @@ MOTOR_GATEWAY_WAIT_MAX_TIMEOUT_MS = int(
 SENSOR_DEFINITIONS = ROVER_JSON_CONFIG.get("sensor_definitions", {})
 MOTOR_DEFINITIONS = ROVER_JSON_CONFIG.get("motor_definitions", {})
 
+for motor_code, motor_definition in MOTOR_DEFINITIONS.items():
+    polarity = motor_definition.get("polarity", "normal")
+    if polarity not in ("normal", "inversed"):
+        raise RuntimeError(
+            "Motor '{}' has invalid polarity '{}'.".format(
+                motor_code, polarity
+            )
+        )
+
 JOYSTICK_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("joystick", {}))
 
 DRIVE_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("drive", {}))
@@ -206,9 +215,9 @@ for key in MECANUM_SPEED_FACTOR_KEYS:
         raise RuntimeError(
             "Mecanum speed factor '{}' must be numeric.".format(key)
         )
-    if factor <= 0.0:
+    if factor == 0.0:
         raise RuntimeError(
-            "Mecanum speed factor '{}' must be positive.".format(key)
+            "Mecanum speed factor '{}' must not be zero.".format(key)
         )
 
 

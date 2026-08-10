@@ -66,3 +66,12 @@ gate mínimo de 60%.
 - `ManualDrivePort` passa a expor `apply_mecanum_setpoint()` para escrita síncrona dos quatro motores.
 - `ManualDriveService` valida quatro códigos distintos, aplica a calibração individual e realiza rollback dos quatro motores quando qualquer comando falha.
 - A suíte completa possui **166 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.
+
+## S02.12 - Correção da polaridade e cinemática
+
+- Polaridade física global validada e aplicada exclusivamente pela fábrica de drivers EV3.
+- Fatores Mecanum passam a aceitar sinais, mantendo a inversão específica do drivetrain separada da polaridade global.
+- Fatores direcionais deste marco: dianteiros `-1.0` e traseiros `+1.0`; compensação de magnitude por RPM permanece para S02.23.
+- Cinemática lógica Mecanum normalizada cobre avanço, ré, strafe, diagonais e rotação sem embutir polaridade física.
+- Convenção Linux `evdev` de Y negativo para cima é convertida para avanço lógico positivo.
+- A suíte completa possui **171 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.

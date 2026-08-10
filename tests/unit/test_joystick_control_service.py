@@ -287,3 +287,28 @@ def test_unexpected_input_failure_still_uses_fail_safe_stop_boundary():
     assert manual.stop_calls >= 1
     assert manual.release_calls == [("local-manual", True)]
     assert service._neutral_required is True
+
+
+def test_mecanum_kinematics_use_standard_logical_wheel_ratios():
+    service, _, _ = build_service()
+
+    assert service._mecanum_setpoint(0.0, 1.0) == (600, 600, 600, 600)
+    assert service._mecanum_setpoint(0.0, -1.0) == (-600, -600, -600, -600)
+    assert service._mecanum_setpoint(1.0, 0.0) == (600, -600, -600, 600)
+    assert service._mecanum_setpoint(-1.0, 0.0) == (-600, 600, 600, -600)
+
+
+def test_mecanum_diagonal_and_rotation_share_one_normalization_denominator():
+    service, _, _ = build_service()
+
+    assert service._mecanum_setpoint(1.0, 1.0) == (600, 0, 0, 600)
+    assert service._mecanum_setpoint(0.0, 0.0, 1.0) == (600, 600, -600, -600)
+    assert service._mecanum_setpoint(1.0, 1.0, 1.0) == (600, 200, -200, 200)
+
+
+def test_linux_evdev_y_axis_is_converted_to_positive_forward_convention():
+    service, _, _ = build_service()
+
+    assert service._normalize_axis(0) == -1.0
+    assert -service._normalize_axis(0) == 1.0
+    assert -service._normalize_axis(255) == -1.0

@@ -61,6 +61,16 @@ class FakeBackend(object):
             return FakeMotor
         return None
 
+    def create_motor(self, motor_definition):
+        motor_class = self.get_motor_class(motor_definition.get("motor_class"))
+        if motor_class is None:
+            raise RuntimeError("Configured motor class is not available")
+        motor = motor_class(motor_definition.get("address"))
+        polarity = motor_definition.get("polarity")
+        if polarity is not None:
+            motor.polarity = polarity
+        return motor
+
 
 def test_motor_registry_connect_read_and_execute_commands():
     definitions = {

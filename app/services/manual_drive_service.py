@@ -51,20 +51,24 @@ class ManualDriveService(ManualDrivePort):
             raise ValueError(
                 "Mecanum motor codes must identify four distinct motors."
             )
+        # Global motor polarity is applied exclusively at the EV3 hardware
+        # boundary. These Mecanum factors are a second, mode-specific layer;
+        # signed values are allowed because the front gear train reverses the
+        # logical wheel direction independently of installation polarity.
         self._mecanum_speed_factors = (
-            self._positive_factor(
+            self._nonzero_factor(
                 mecanum_config.get("front_left_speed_factor", 1.0),
                 "front_left_speed_factor"
             ),
-            self._positive_factor(
+            self._nonzero_factor(
                 mecanum_config.get("rear_left_speed_factor", 1.0),
                 "rear_left_speed_factor"
             ),
-            self._positive_factor(
+            self._nonzero_factor(
                 mecanum_config.get("front_right_speed_factor", 1.0),
                 "front_right_speed_factor"
             ),
-            self._positive_factor(
+            self._nonzero_factor(
                 mecanum_config.get("rear_right_speed_factor", 1.0),
                 "rear_right_speed_factor"
             )
@@ -89,13 +93,13 @@ class ManualDriveService(ManualDrivePort):
         return tuple(result)
 
     @staticmethod
-    def _positive_factor(value, name):
+    def _nonzero_factor(value, name):
         try:
             factor = float(value)
         except (TypeError, ValueError):
             raise ValueError("{} must be numeric.".format(name))
-        if factor <= 0.0:
-            raise ValueError("{} must be positive.".format(name))
+        if factor == 0.0:
+            raise ValueError("{} must not be zero.".format(name))
         return factor
 
     def acquire(self, session_id, motor_codes=None):
@@ -203,7 +207,7 @@ class ManualDriveService(ManualDrivePort):
     def apply_mecanum_setpoint(
             self, session_id, front_left_speed_sp, rear_left_speed_sp,
             front_right_speed_sp, rear_right_speed_sp, stop_action=None):
-        """Applies four independently calibrated wheel setpoints directly."""
+        """Applies Mecanum-only wheel factors above global motor polarity."""
         raw_speeds = (
             front_left_speed_sp,
             rear_left_speed_sp,

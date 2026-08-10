@@ -39,20 +39,8 @@ class Ev3MotorDriverRepository(object):
         if definition is None:
             self._errors[motor_code] = "Unknown motor code"
             return None
-        motor_class = self.hardware_backend.get_motor_class(
-            definition.get("motor_class")
-        )
-        if motor_class is None:
-            self._errors[motor_code] = (
-                self.hardware_backend.error_message
-                or "Configured motor class is not available"
-            )
-            return None
         try:
-            motor = motor_class(definition["address"])
-            polarity = definition.get("polarity")
-            if polarity is not None:
-                motor.polarity = polarity
+            motor = self.hardware_backend.create_motor(definition)
             self._motors[motor_code] = motor
             self._errors[motor_code] = None
             return motor

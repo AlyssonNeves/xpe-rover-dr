@@ -35,3 +35,21 @@ class Ev3MotorDriverFactory(object):
 
     def get_motor_class(self, motor_class_name):
         return self._motor_classes.get(motor_class_name)
+
+    def create_motor(self, motor_definition):
+        """Creates one native motor with the configured global polarity."""
+        definition = dict(motor_definition or {})
+        motor_class_name = definition.get("motor_class")
+        motor_class = self.get_motor_class(motor_class_name)
+        if motor_class is None:
+            raise RuntimeError(
+                self.error_message
+                or "Configured motor class is not available: {}".format(
+                    motor_class_name
+                )
+            )
+        motor = motor_class(definition.get("address"))
+        polarity = definition.get("polarity")
+        if polarity is not None and hasattr(motor, "polarity"):
+            motor.polarity = polarity
+        return motor

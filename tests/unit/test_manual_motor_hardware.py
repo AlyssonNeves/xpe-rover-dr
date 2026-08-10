@@ -70,3 +70,17 @@ def test_shared_repository_captures_driver_write_failure():
     success, error = repository.run_forever_motor("LLM", 100)
     assert success is False
     assert "driver failure" in error
+
+
+def test_motor_driver_factory_owns_global_polarity_application():
+    factory = Ev3MotorDriverFactory(
+        motor_classes={"LargeMotor": FakeMotor}
+    )
+    motor = factory.create_motor({
+        "address": "outA",
+        "motor_class": "LargeMotor",
+        "polarity": "inversed"
+    })
+
+    assert motor.address == "outA"
+    assert motor.polarity == "inversed"

@@ -285,9 +285,10 @@ anticipating the polarity/cinematic corrections or the later RPM compensation.
 `ManualDriveService.apply_mecanum_setpoint()` writes all four calibrated wheel
 setpoints synchronously through `MotorHardwarePort`. A failure on any wheel
 causes a rollback stop across the complete Mecanum traction set, preserving the
-fail-safe behavior established for differential control. The four configured
-motor codes must be distinct and calibration factors must be positive numeric
-values.
+fail-safe behavior established for differential control. At the S02.11
+baseline, the four configured motor codes had to be distinct and calibration
+factors were restricted to positive numeric values; S02.12 extends that
+validation to signed nonzero drivetrain factors.
 
 The physical mapping introduced in this increment is:
 
@@ -300,6 +301,27 @@ rear-right  = RMM (outC)
 
 Joystick Mecanum equations, direction/polarity corrections and operator-facing
 Mecanum mode selection remain intentionally deferred to later Sprint 2 commits.
+
+## Mecanum polarity and kinematics correction
+
+S02.12 separates three concerns that must not be mixed: logical Mecanum
+kinematics, Mecanum-specific drivetrain direction factors, and the global
+physical polarity of each EV3 motor. The corrected installation polarity is
+`inversed` for `LLM`, `LMM` and `RLM`, and `normal` for `RMM`; this rule is
+applied only by `Ev3MotorDriverFactory` when a native driver is created.
+
+The Mecanum layer now accepts signed wheel factors. At this stage the front
+wheels use `-1.0` and the rear wheels `+1.0`, representing the direction
+change introduced by the front drivetrain without yet applying the measured
+front/rear RPM compensation reserved for S02.23. A logical forward Mecanum
+command therefore remains `(+, +, +, +)` before the drivetrain factors are
+applied.
+
+The joystick service also defines the standard normalized logical Mecanum
+equations for forward/backward, strafe, diagonals and rotation. Linux `evdev`
+reports stick-up as negative Y, so the existing Y inversion establishes
+positive logical forward before those equations are evaluated. Runtime
+selection and continuous Robot-Centric dispatch remain deferred to S02.14.
 
 ## Graphical EV3 mode-selection screens
 

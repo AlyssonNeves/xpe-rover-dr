@@ -69,7 +69,7 @@
       "name": "Left Large Motor",
       "address": "outA",
       "motor_class": "LargeMotor",
-      "polarity": "normal",
+      "polarity": "inversed",
       "limits": {
         "max_relative_position_sp": 7200,
         "max_speed_ratio": 1.0
@@ -79,7 +79,7 @@
       "name": "Left Medium Motor",
       "address": "outB",
       "motor_class": "MediumMotor",
-      "polarity": "normal",
+      "polarity": "inversed",
       "limits": {
         "max_relative_position_sp": 7200,
         "max_speed_ratio": 1.0
@@ -130,9 +130,9 @@
     "rear_left_motor_code": "LMM",
     "front_right_motor_code": "RLM",
     "rear_right_motor_code": "RMM",
-    "front_left_speed_factor": 1.0,
+    "front_left_speed_factor": -1.0,
     "rear_left_speed_factor": 1.0,
-    "front_right_speed_factor": 1.0,
+    "front_right_speed_factor": -1.0,
     "rear_right_speed_factor": 1.0
   }
 }
