@@ -228,6 +228,9 @@ JOYSTICK_CONFIG = validate_joystick_configuration(JOYSTICK_CONFIG)
 
 DRIVE_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("drive", {}))
 MECANUM_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("mecanum", {}))
+FIELD_HEADING_CONFIG = copy.deepcopy(
+    ROVER_JSON_CONFIG.get("field_heading", {"max_age_seconds": 0.1})
+)
 DRIVE_LEFT_MOTOR_CODE = DRIVE_CONFIG.get("left_motor_code", "LLM")
 DRIVE_RIGHT_MOTOR_CODE = DRIVE_CONFIG.get("right_motor_code", "RLM")
 DRIVE_GYRO_SENSOR_CODE = DRIVE_CONFIG.get("gyro_sensor_code", "GYR")
@@ -312,6 +315,20 @@ if MECANUM_STRAFE_COMPENSATION <= 0.0:
     raise RuntimeError("Mecanum strafe_compensation must be positive.")
 
 
+try:
+    FIELD_HEADING_MAX_AGE_SECONDS = float(
+        FIELD_HEADING_CONFIG.get("max_age_seconds", 0.1)
+    )
+except (TypeError, ValueError):
+    raise RuntimeError("field_heading.max_age_seconds must be numeric.")
+if (not math.isfinite(FIELD_HEADING_MAX_AGE_SECONDS) or
+        FIELD_HEADING_MAX_AGE_SECONDS <= 0.0):
+    raise RuntimeError(
+        "field_heading.max_age_seconds must be finite and greater than zero."
+    )
+FIELD_HEADING_CONFIG["max_age_seconds"] = FIELD_HEADING_MAX_AGE_SECONDS
+
+
 def validate_security_configuration():
     """Validates credentials required by the selected deployment mode.
 
@@ -370,3 +387,8 @@ def get_drive_config():
 def get_mecanum_config():
     """Returns an isolated copy of the four-wheel Mecanum calibration."""
     return copy.deepcopy(MECANUM_CONFIG)
+
+
+def get_field_heading_config():
+    """Returns freshness settings for the cached FIELD heading pipeline."""
+    return copy.deepcopy(FIELD_HEADING_CONFIG)

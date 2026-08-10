@@ -51,12 +51,14 @@ def _is_local_manual(operation_mode_service):
     return operation_mode_service.get_mode().is_local_manual()
 
 
-def build_rover_application(operation_mode_service=None, joystick_port=None):
+def build_rover_application(operation_mode_service=None, joystick_port=None,
+                            heading_query_port=None):
     """Builds the execution graph selected by Command & Control."""
     if _is_local_manual(operation_mode_service):
         return build_local_manual_application(
             operation_mode_service=operation_mode_service,
-            joystick_port=joystick_port
+            joystick_port=joystick_port,
+            heading_query_port=heading_query_port
         )
     return build_standard_application(
         operation_mode_service=operation_mode_service
@@ -64,7 +66,8 @@ def build_rover_application(operation_mode_service=None, joystick_port=None):
 
 
 def build_local_manual_application(operation_mode_service=None,
-                                   joystick_port=None):
+                                   joystick_port=None,
+                                   heading_query_port=None):
     """Builds the minimal deterministic LOCAL + MANUAL runtime graph."""
     mode_service = operation_mode_service or OperationModeService()
     operation_mode = mode_service.get_mode()
@@ -73,10 +76,11 @@ def build_local_manual_application(operation_mode_service=None,
             "LOCAL + MANUAL runtime requires a LOCAL/MANUAL operation mode."
         )
     if (operation_mode.drive == Drives.MECANUM and
-            operation_mode.centric == Centrics.FIELD):
+            operation_mode.centric == Centrics.FIELD and
+            heading_query_port is None):
         raise RuntimeError(
-            "FIELD-centric Mecanum control requires a live heading source; "
-            "gyro integration is introduced in S02.20/S02.21."
+            "FIELD-centric Mecanum control requires a cached heading "
+            "source. Physical gyro integration is introduced in S02.21."
         )
     motor_state_store = MotorStateStore()
 
@@ -189,7 +193,8 @@ def build_local_manual_application(operation_mode_service=None,
             connection_retry_seconds=joystick_config.get(
                 "connection_retry_seconds", 3.0
             ),
-            connection_status_port=joystick_connection_status_port
+            connection_status_port=joystick_connection_status_port,
+            heading_query_port=heading_query_port
         )
         managed_services.extend([joystick_control_service, manual_drive_port])
     else:

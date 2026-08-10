@@ -48,6 +48,7 @@ class JoystickControlService(object):
     DRIVE_DIFFERENTIAL = "DIFFERENTIAL"
     DRIVE_MECANUM = "MECANUM"
     CENTRIC_CHASSIS = "CHASSIS"
+    CENTRIC_FIELD = "FIELD"
     AXIS_AUXILIARY_HORIZONTAL = 16
     AXIS_AUXILIARY_VERTICAL = 17
 
@@ -72,7 +73,8 @@ class JoystickControlService(object):
             logger=None,
             device_name="Wireless Controller",
             connection_retry_seconds=3.0,
-            connection_status_port=None):
+            connection_status_port=None,
+            heading_query_port=None):
         if manual_drive_port is None:
             raise ValueError("manual_drive_port is required.")
         self.joystick_port = joystick_port
@@ -96,9 +98,15 @@ class JoystickControlService(object):
             raise ValueError(
                 "Unsupported manual drive mode: {}".format(drive_mode)
             )
-        if centric != self.CENTRIC_CHASSIS:
+        if centric not in (self.CENTRIC_CHASSIS, self.CENTRIC_FIELD):
             raise ValueError(
                 "Unsupported Mecanum centric mode: {}".format(centric)
+            )
+        if (drive_mode == self.DRIVE_MECANUM and
+                centric == self.CENTRIC_FIELD and
+                heading_query_port is None):
+            raise ValueError(
+                "FIELD-centric Mecanum control requires HeadingQueryPort."
             )
         self.drive_mode = drive_mode
         if front not in Fronts.values():
@@ -107,6 +115,7 @@ class JoystickControlService(object):
             )
         self.front = front
         self.centric = centric
+        self.heading_query_port = heading_query_port
         self.mecanum_strafe_compensation = float(mecanum_strafe_compensation)
         if self.mecanum_strafe_compensation <= 0.0:
             raise ValueError("mecanum_strafe_compensation must be positive.")
@@ -129,6 +138,7 @@ class JoystickControlService(object):
         # observed at their neutral position, preventing stale stick state from
         # restarting motion after the controller comes back.
         self._neutral_required = False
+        self._field_heading_unavailable = False
         self._neutral_pending_axes = set()
         self._stop_event = threading.Event()
         self._thread = None
@@ -386,6 +396,16 @@ class JoystickControlService(object):
             (self.drive_mode != self.DRIVE_MECANUM or self._strafe == 0.0)
         )
         if not self._neutral_pending_axes and controls_are_neutral:
+            if (self.drive_mode == self.DRIVE_MECANUM and
+                    self.centric == self.CENTRIC_FIELD and
+                    self._field_heading_unavailable):
+                if self.heading_query_port.get_heading_deg() is None:
+                    return True
+                self._field_heading_unavailable = False
+                self.logger.status(
+                    "Fresh heading restored; neutral controls confirmed "
+                    "before FIELD motion resumes."
+                )
             self._neutral_required = False
             self.logger.status(
                 "Joystick controls neutral; manual motion is enabled again."
@@ -515,10 +535,13 @@ class JoystickControlService(object):
 
 
     def _apply_mecanum_drive(self):
-        """Dispatches one CHASSIS-centric Mecanum setpoint synchronously."""
-        x_value = self._strafe * self.mecanum_strafe_compensation
+        """Dispatches one CHASSIS- or FIELD-centric Mecanum setpoint."""
+        translation_vector = self._mecanum_translation_vector()
+        if translation_vector is None:
+            return
+        x_value, y_value = translation_vector
         wheel_ratios = self._mecanum_ratios(
-            x_value, self._translation, self._rotation
+            x_value, y_value, self._rotation
         )
         wheel_ratios = self._apply_mecanum_direction(wheel_ratios)
         setpoint = tuple(
@@ -528,7 +551,54 @@ class JoystickControlService(object):
         result = self.manual_drive_port.apply_mecanum_setpoint(
             self.session_id, *setpoint
         )
-        self._log_failure("Mecanum CHASSIS drive", result)
+        self._log_failure("Mecanum {} drive".format(self.centric), result)
+
+    def _mecanum_translation_vector(self):
+        """Returns the translation vector in the selected reference frame.
+
+        FIELD mode reads only ``HeadingQueryPort``. The query is expected to
+        expose a fresh cached sample and must never perform physical gyro I/O
+        on this latency-sensitive joystick path.
+        """
+        if self.centric == self.CENTRIC_CHASSIS:
+            return (
+                self._strafe * self.mecanum_strafe_compensation,
+                self._translation
+            )
+
+        heading_deg = self.heading_query_port.get_heading_deg()
+        if heading_deg is None:
+            self._handle_field_heading_unavailable()
+            return None
+
+        heading_rad = math.radians(float(heading_deg))
+        cosine = math.cos(heading_rad)
+        sine = math.sin(heading_rad)
+        rotated_x = self._strafe * cosine - self._translation * sine
+        rotated_y = self._strafe * sine + self._translation * cosine
+        return (
+            rotated_x * self.mecanum_strafe_compensation,
+            rotated_y
+        )
+
+    def _handle_field_heading_unavailable(self):
+        """Stops FIELD motion and arms neutral safety when heading is stale."""
+        first_failure = not self._field_heading_unavailable
+        self._field_heading_unavailable = True
+        if first_failure:
+            self.emergency_stop()
+            self.logger.error(
+                "Fresh heading unavailable; FIELD traction stopped."
+            )
+        self._require_field_neutral()
+
+    def _require_field_neutral(self):
+        self._neutral_required = True
+        self._neutral_pending_axes = {
+            self.AXIS_DIRECTION_HORIZONTAL,
+            self.AXIS_TRACTION,
+            self.AXIS_STEERING
+        }
 
     def _apply_differential_drive(self):
         left = self._translation + self._rotation

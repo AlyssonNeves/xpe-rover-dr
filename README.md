@@ -491,3 +491,17 @@ responsabilidades independentes do `ManualDriveService` e da fronteira EV3.
 - A retomada continua condicionada à barreira de neutralidade estabelecida no S02.07.
 - `Ev3OperationStatusAdapter` utiliza `Screen 03 - Bluetooth Error.pbm` durante falhas e restaura o General Status após a recuperação.
 - A seleção do nó `evdev` ainda é por nome; descoberta por capacidades fica reservada ao S02.24.
+
+## S02.20 - Pipeline dedicado para controle FIELD-centric
+
+O controle `MECANUM + FIELD` passa a utilizar um `HeadingQueryPort` somente
+leitura no caminho crítico do joystick. O serviço de controle não realiza I/O
+físico do giroscópio: ele consome apenas um heading já publicado em cache e
+considerado recente pela camada de consulta.
+
+A transformação converte o vetor de translação do referencial do campo para o
+referencial do chassi antes da cinemática Mecanum. Se o heading estiver ausente
+ou exceder a idade máxima configurada, a tração FIELD é parada de forma
+fail-safe e a retomada exige heading fresco e neutralidade dos três eixos de
+movimento. A integração física do giroscópio e o monitor produtor desse cache
+permanecem reservados ao S02.21.

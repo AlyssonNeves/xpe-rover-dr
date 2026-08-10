@@ -142,5 +142,8 @@
     "front_right_speed_factor": -1.0,
     "rear_right_speed_factor": 1.0,
     "strafe_compensation": 1.1
+  },
+  "field_heading": {
+    "max_age_seconds": 0.1
   }
 }

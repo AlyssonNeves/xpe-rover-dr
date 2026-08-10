@@ -141,3 +141,14 @@ gate mínimo de 60%.
 - A tela `Screen 03 - Bluetooth Error.pbm` apresenta o estado de falha até a recuperação.
 - Configuração explícita: `device_address`, `auto_connect`, `connection_retry_seconds`, `connection_timeout_seconds` e `discovery_poll_seconds`.
 - A suíte completa possui **226 testes aprovados**.
+
+## S02.20 - Pipeline dedicado para controle FIELD-centric
+
+- Novo `HeadingQueryPort` read-only para o caminho de baixa latência.
+- `HeadingStateStore` mantém o último heading publicado em cache sem acesso físico ao sensor.
+- `HeadingStateQueryAdapter` rejeita amostras ausentes ou mais antigas que `field_heading.max_age_seconds`.
+- `JoystickControlService` transforma X/Y do campo para o chassi antes da cinemática Mecanum.
+- Heading indisponível interrompe a tração FIELD e rearma a barreira de neutralidade.
+- `CHASSIS` permanece independente da consulta de heading.
+- O composition root aceita uma fonte de heading em cache injetada; a criação do produtor físico fica para S02.21.
+- A suíte completa possui **235 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.
