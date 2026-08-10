@@ -122,3 +122,12 @@ gate mínimo de 60%.
 - Configurações que eliminem um lado útil do eixo ou usem intensidade não positiva são rejeitadas.
 - O composition root injeta os parâmetros de shaping no `JoystickControlService`.
 - A suíte completa possui **209 testes aprovados**, com **73% de cobertura combinada de linhas e branches**.
+
+## S02.18 - Orientação NOSE/TAIL
+
+- `JoystickControlService` recebe explicitamente o `front` canônico selecionado no startup.
+- `NOSE` mantém os setpoints diferenciais e Mecanum no referencial original.
+- `TAIL` transforma Differential como `(-right, -left)`, invertendo translação e trocando os lados lógicos.
+- Em Mecanum, `TAIL` aplica `(-RR, -FR, -RL, -FL)`, equivalente a rotacionar o referencial translacional do operador em 180 graus sem inverter o sentido de rotação solicitado.
+- A transformação de orientação permanece separada de polaridade física, fatores Mecanum e futura compensação de RPM.
+- A suíte completa possui **214 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.

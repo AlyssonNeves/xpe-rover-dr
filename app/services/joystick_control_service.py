@@ -6,6 +6,7 @@
 import math
 import threading
 
+from app.operation_mode_service import Fronts
 
 
 class NullApplicationLogger(object):
@@ -50,6 +51,7 @@ class JoystickControlService(object):
             left_auxiliary_motor_code="LMM",
             right_auxiliary_motor_code="RMM",
             drive_mode=DRIVE_DIFFERENTIAL,
+            front=Fronts.NOSE,
             centric=CENTRIC_CHASSIS,
             mecanum_strafe_compensation=1.0,
             poll_seconds=0.02,
@@ -83,6 +85,11 @@ class JoystickControlService(object):
                 "Unsupported Mecanum centric mode: {}".format(centric)
             )
         self.drive_mode = drive_mode
+        if front not in Fronts.values():
+            raise ValueError(
+                "Unsupported Rover front: {}".format(front)
+            )
+        self.front = front
         self.centric = centric
         self.mecanum_strafe_compensation = float(mecanum_strafe_compensation)
         if self.mecanum_strafe_compensation <= 0.0:
@@ -428,8 +435,13 @@ class JoystickControlService(object):
     def _apply_mecanum_drive(self):
         """Dispatches one CHASSIS-centric Mecanum setpoint synchronously."""
         x_value = self._strafe * self.mecanum_strafe_compensation
-        setpoint = self._mecanum_setpoint(
+        wheel_ratios = self._mecanum_ratios(
             x_value, self._translation, self._rotation
+        )
+        wheel_ratios = self._apply_mecanum_direction(wheel_ratios)
+        setpoint = tuple(
+            int(round(self.max_speed_sp * ratio))
+            for ratio in wheel_ratios
         )
         result = self.manual_drive_port.apply_mecanum_setpoint(
             self.session_id, *setpoint
@@ -447,10 +459,37 @@ class JoystickControlService(object):
             (right / denominator) * self.max_speed_sp
         ))
 
+        left_speed, right_speed = self._apply_differential_direction(
+            left_speed, right_speed
+        )
         result = self.manual_drive_port.apply_drive_setpoint(
             self.session_id, left_speed, right_speed
         )
         self._log_failure("Differential drive", result)
+
+
+    def _apply_differential_direction(self, left_speed, right_speed):
+        """Applies the operator-facing NOSE/TAIL convention."""
+        if self.front == Fronts.TAIL:
+            return -int(right_speed), -int(left_speed)
+        return int(left_speed), int(right_speed)
+
+    def _apply_mecanum_direction(self, wheel_ratios):
+        """Rotates the operator translation frame for TAIL operation.
+
+        Motor polarity and drivetrain calibration remain outside this
+        transformation. Rotational direction is preserved while longitudinal
+        and lateral commands are interpreted from the selected Rover front.
+        """
+        front_left, rear_left, front_right, rear_right = wheel_ratios
+        if self.front == Fronts.NOSE:
+            return wheel_ratios
+        return (
+            -rear_right,
+            -front_right,
+            -rear_left,
+            -front_left
+        )
 
     def _apply_auxiliary(self, motor_code, raw_value):
         if motor_code is None:

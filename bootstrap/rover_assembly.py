@@ -168,6 +168,7 @@ def build_local_manual_application(operation_mode_service=None,
                 "right_auxiliary_motor_code", "RMM"
             ),
             drive_mode=operation_mode.drive,
+            front=operation_mode.front,
             centric=operation_mode.centric or Centrics.CHASSIS,
             mecanum_strafe_compensation=rover_config.get_mecanum_config().get(
                 "strafe_compensation", 1.0

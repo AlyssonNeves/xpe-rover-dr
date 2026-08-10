@@ -6,6 +6,7 @@
 import time
 
 from ports.joystick_port import JoystickPort
+from app.operation_mode_service import Fronts
 from app.services.joystick_control_service import JoystickControlService
 
 
@@ -81,7 +82,7 @@ class FakeManualDrivePort(object):
         return {"success": True}
 
 
-def build_service(manual_drive=None):
+def build_service(manual_drive=None, front=Fronts.NOSE):
     joystick = FakeJoystickPort()
     manual = manual_drive or FakeManualDrivePort()
     service = JoystickControlService(
@@ -91,6 +92,7 @@ def build_service(manual_drive=None):
         auxiliary_speed_sp=400,
         axis_center=127,
         axis_max=255,
+        front=front,
         poll_seconds=0.001
     )
     return service, joystick, manual
@@ -389,7 +391,7 @@ def test_joystick_rejects_non_positive_response_intensity():
         raise AssertionError("Invalid response intensity was accepted")
 
 
-def build_mecanum_service(strafe_compensation=1.0):
+def build_mecanum_service(strafe_compensation=1.0, front=Fronts.NOSE):
     joystick = FakeJoystickPort()
     manual = FakeManualDrivePort()
     service = JoystickControlService(
@@ -400,6 +402,7 @@ def build_mecanum_service(strafe_compensation=1.0):
         axis_center=127,
         axis_max=255,
         drive_mode=JoystickControlService.DRIVE_MECANUM,
+        front=front,
         centric=JoystickControlService.CENTRIC_CHASSIS,
         mecanum_strafe_compensation=strafe_compensation,
         poll_seconds=0.001
@@ -495,3 +498,53 @@ def test_robot_centric_configuration_rejects_invalid_values():
         assert "strafe_compensation" in str(error)
     else:
         raise AssertionError("Invalid strafe compensation was accepted")
+
+
+def test_tail_differential_inverts_translation_and_swaps_logical_sides():
+    service, _, manual = build_service(front=Fronts.TAIL)
+
+    service.process_event({"type": 3, "code": 1, "value": 0})
+    assert manual.drive_calls[-1][1:] == (-600, -600)
+
+    service.process_event({"type": 3, "code": 3, "value": 255})
+    # The logical left/right outputs are swapped and inverted. This preserves
+    # clockwise rotation while interpreting translation from the tail.
+    assert manual.drive_calls[-1][1:] == (0, -600)
+
+
+def test_tail_differential_preserves_requested_rotation_direction():
+    service, _, manual = build_service(front=Fronts.TAIL)
+
+    service.process_event({"type": 3, "code": 3, "value": 255})
+
+    assert manual.drive_calls[-1][1:] == (600, -600)
+
+
+def test_tail_mecanum_rotates_operator_translation_frame_180_degrees():
+    service, _, manual = build_mecanum_service(front=Fronts.TAIL)
+
+    service.process_event({"type": 3, "code": 1, "value": 0})
+    assert manual.mecanum_calls[-1][1:] == (-600, -600, -600, -600)
+
+    service.process_event({"type": 3, "code": 1, "value": 127})
+    service.process_event({"type": 3, "code": 0, "value": 255})
+    assert manual.mecanum_calls[-1][1:] == (-600, 600, 600, -600)
+
+
+def test_tail_mecanum_preserves_requested_rotation_direction():
+    service, _, manual = build_mecanum_service(front=Fronts.TAIL)
+
+    service.process_event({"type": 3, "code": 3, "value": 255})
+
+    assert manual.mecanum_calls[-1][1:] == (600, 600, -600, -600)
+
+
+def test_manual_control_rejects_unknown_front_convention():
+    try:
+        JoystickControlService(
+            FakeJoystickPort(), FakeManualDrivePort(), front="LEFT"
+        )
+    except ValueError as error:
+        assert "front" in str(error)
+    else:
+        raise AssertionError("Invalid Rover front was accepted")

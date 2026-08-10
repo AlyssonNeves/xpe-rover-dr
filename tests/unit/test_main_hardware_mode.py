@@ -1,4 +1,5 @@
 import main as main_module
+from app.operation_mode_service import Fronts
 from bootstrap import rover_assembly as assembly
 
 
@@ -150,6 +151,7 @@ def test_local_manual_joystick_is_wired_to_direct_manual_drive_path(monkeypatch)
     )
 
     mode_service = assembly.OperationModeService(
+        front=Fronts.TAIL,
         drive=assembly.Drives.MECANUM, centric=assembly.Centrics.CHASSIS
     )
     application = assembly.build_rover_application(
@@ -161,6 +163,7 @@ def test_local_manual_joystick_is_wired_to_direct_manual_drive_path(monkeypatch)
     assert captured["manual"]["mecanum_config"] == assembly.rover_config.get_mecanum_config()
     assert captured["joystick"]["manual_drive_port"] is manual
     assert captured["joystick"]["drive_mode"] == "MECANUM"
+    assert captured["joystick"]["front"] == "TAIL"
     assert captured["joystick"]["centric"] == "CHASSIS"
     assert captured["joystick"]["mecanum_strafe_compensation"] == 1.1
     assert captured["joystick"]["axis_deadzone"] == 7

@@ -462,3 +462,17 @@ sensibilidade em deslocamentos parciais do stick.
 O mesmo processamento é utilizado pelos eixos de avanço, rotação e strafe, sem
 alterar a cinemática diferencial ou Mecanum. A orientação `NOSE/TAIL` permanece
 reservada ao S02.18.
+
+## S02.18 - Orientação NOSE/TAIL
+
+O controle manual passa a interpretar os comandos de movimento a partir da
+frente selecionada pelo operador. `NOSE` preserva o referencial físico já
+utilizado; `TAIL` inverte a translação longitudinal e troca logicamente os
+lados do Rover, permitindo dirigir olhando a traseira como nova frente sem
+alterar a configuração elétrica ou mecânica dos motores.
+
+No modo diferencial, a transformação `TAIL` é aplicada aos setpoints finais
+como `(-right, -left)`. No Mecanum, o referencial translacional é rotacionado
+em 180 graus por `(-RR, -FR, -RL, -FL)`, preservando o sentido solicitado de
+rotação. Polaridade física, inversões do drivetrain e calibração permanecem
+responsabilidades independentes do `ManualDriveService` e da fronteira EV3.
