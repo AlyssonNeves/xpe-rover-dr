@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Local manual joystick control built on the existing Rover ports."""
+"""LOCAL + MANUAL joystick control with synchronous motor setpoints."""
 
 import threading
 
@@ -9,13 +9,7 @@ from services.app_logger import AppLogger
 
 
 class JoystickControlService(object):
-    """Translates generic joystick events into Rover manual motor commands.
-
-    This first implementation intentionally reuses the existing ``DrivePort``
-    and ``MotorPort``. The dedicated low-latency motor path is introduced by a
-    later evolution step; keeping that concern out of this service makes the
-    initial local-manual behavior independently testable.
-    """
+    """Translates normalized joystick events into direct manual-drive calls."""
 
     EVENT_KEY = 1
     EVENT_ABSOLUTE = 3
@@ -29,8 +23,7 @@ class JoystickControlService(object):
     def __init__(
             self,
             joystick_port,
-            drive_port,
-            motor_port=None,
+            manual_drive_port,
             max_speed_sp=600,
             auxiliary_speed_sp=400,
             axis_center=127,
@@ -38,10 +31,12 @@ class JoystickControlService(object):
             left_auxiliary_motor_code="LMM",
             right_auxiliary_motor_code="RMM",
             poll_seconds=0.02,
+            session_id="local-manual",
             logger=None):
+        if manual_drive_port is None:
+            raise ValueError("manual_drive_port is required.")
         self.joystick_port = joystick_port
-        self.drive_port = drive_port
-        self.motor_port = motor_port
+        self.manual_drive_port = manual_drive_port
         self.max_speed_sp = self._positive_int(max_speed_sp, "max_speed_sp")
         self.auxiliary_speed_sp = self._positive_int(
             auxiliary_speed_sp, "auxiliary_speed_sp"
@@ -55,12 +50,14 @@ class JoystickControlService(object):
         self.left_auxiliary_motor_code = left_auxiliary_motor_code
         self.right_auxiliary_motor_code = right_auxiliary_motor_code
         self.poll_seconds = max(0.001, float(poll_seconds))
+        self.session_id = session_id
         self.logger = logger or AppLogger
 
         self._translation = 0.0
         self._rotation = 0.0
         self._stop_event = threading.Event()
         self._thread = None
+        self._acquired = False
 
     @staticmethod
     def _positive_int(value, name):
@@ -82,7 +79,7 @@ class JoystickControlService(object):
         self._thread.start()
 
     def stop(self):
-        """Stops the worker and leaves every manually controlled motor safe."""
+        """Stops the worker and synchronously leaves all owned motors safe."""
         self._stop_event.set()
         try:
             self.joystick_port.close()
@@ -90,7 +87,17 @@ class JoystickControlService(object):
             self.logger.error(
                 "Unable to close joystick input: {}".format(error)
             )
+
         self.emergency_stop()
+        if self._acquired:
+            try:
+                self.manual_drive_port.release(self.session_id, stop=False)
+            except Exception as error:
+                self.logger.error(
+                    "Unable to release manual motor session: {}".format(error)
+                )
+            self._acquired = False
+
         if (self._thread is not None and
                 self._thread is not threading.current_thread()):
             self._thread.join(timeout=2.0)
@@ -102,6 +109,12 @@ class JoystickControlService(object):
     def _run(self):
         try:
             opened_name = self.joystick_port.open()
+            acquired = self.manual_drive_port.acquire(self.session_id)
+            if not acquired.get("success"):
+                raise RuntimeError(
+                    acquired.get("error") or "Unable to acquire manual motors."
+                )
+            self._acquired = True
             self.logger.status(
                 "Local manual joystick connected: {}.".format(opened_name)
             )
@@ -116,12 +129,7 @@ class JoystickControlService(object):
             self.emergency_stop()
 
     def process_event(self, event):
-        """Processes one normalized joystick event.
-
-        Events are dictionaries containing ``type``, ``code`` and ``value``.
-        This keeps application logic independent from Linux ``evdev``; the
-        concrete Linux adapter is introduced separately.
-        """
+        """Processes one normalized joystick event."""
         if not isinstance(event, dict):
             return
 
@@ -153,30 +161,18 @@ class JoystickControlService(object):
             )
 
     def emergency_stop(self):
-        """Immediately requests stop for traction and auxiliary motors."""
+        """Synchronously stops every motor owned by the manual path."""
         self._translation = 0.0
         self._rotation = 0.0
         try:
-            self.drive_port.stop()
+            result = self.manual_drive_port.emergency_stop()
+            self._log_failure("Emergency stop", result)
+            return result
         except Exception as error:
             self.logger.error(
-                "Unable to stop traction motors: {}".format(error)
+                "Unable to stop manual motors: {}".format(error)
             )
-
-        if self.motor_port is None:
-            return
-
-        for motor_code in (
-                self.left_auxiliary_motor_code,
-                self.right_auxiliary_motor_code):
-            try:
-                self.motor_port.stop_motor(motor_code)
-            except Exception as error:
-                self.logger.error(
-                    "Unable to stop auxiliary motor {}: {}".format(
-                        motor_code, error
-                    )
-                )
+            return {"success": False, "error": str(error)}
 
     def _normalize_axis(self, raw_value):
         value = float(raw_value)
@@ -199,22 +195,33 @@ class JoystickControlService(object):
             (right / denominator) * self.max_speed_sp
         ))
 
-        if left_speed == 0 and right_speed == 0:
-            self.drive_port.stop()
-            return
-
-        self.drive_port.drive_tank(left_speed, right_speed)
+        result = self.manual_drive_port.apply_drive_setpoint(
+            self.session_id, left_speed, right_speed
+        )
+        self._log_failure("Differential drive", result)
 
     def _apply_auxiliary(self, motor_code, raw_value):
-        if self.motor_port is None or motor_code is None:
+        if motor_code is None:
             return
 
         direction = int(raw_value)
-        if direction == 0:
-            self.motor_port.stop_motor(motor_code)
-            return
+        speed_sp = 0
+        if direction != 0:
+            speed_sp = self.auxiliary_speed_sp
+            if direction > 0:
+                speed_sp = -speed_sp
 
-        speed_sp = self.auxiliary_speed_sp
-        if direction > 0:
-            speed_sp = -speed_sp
-        self.motor_port.run_forever_motor(motor_code, speed_sp)
+        result = self.manual_drive_port.apply_auxiliary_setpoint(
+            self.session_id, motor_code, speed_sp
+        )
+        self._log_failure("Auxiliary motor {}".format(motor_code), result)
+
+    def _log_failure(self, operation, result):
+        if isinstance(result, dict) and not result.get("success", True):
+            self.logger.error(
+                "{} failed: {}".format(
+                    operation,
+                    result.get("error") or result.get("hardware_error")
+                    or "unknown error"
+                )
+            )

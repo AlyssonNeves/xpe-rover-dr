@@ -96,3 +96,56 @@ def test_build_application_adds_operation_status_in_hardware_mode(monkeypatch):
     assert captured_status == {
         "mode": mode_service, "name": "Wireless Controller"
     }
+
+
+def test_local_manual_joystick_is_wired_to_direct_manual_drive_path(monkeypatch):
+    monkeypatch.setattr(main_module.rover_config, "HARDWARE_ENABLED", True)
+    monkeypatch.setattr(
+        main_module.rover_config, "get_joystick_config",
+        lambda: {
+            "device_name": "Wireless Controller",
+            "max_speed_sp": 600,
+            "auxiliary_speed_sp": 400,
+            "axis_center": 127,
+            "axis_max": 255,
+            "left_auxiliary_motor_code": "LMM",
+            "right_auxiliary_motor_code": "RMM",
+            "poll_seconds": 0.02
+        }
+    )
+
+    hardware = object()
+    manual = object()
+    joystick_service = object()
+    captured = {}
+
+    def make_hardware(**kwargs):
+        captured["hardware"] = kwargs
+        return hardware
+
+    def make_manual(**kwargs):
+        captured["manual"] = kwargs
+        return manual
+
+    def make_joystick(**kwargs):
+        captured["joystick"] = kwargs
+        return joystick_service
+
+    monkeypatch.setattr(main_module, "Ev3MotorHardwareAdapter", make_hardware)
+    monkeypatch.setattr(main_module, "ManualDriveService", make_manual)
+    monkeypatch.setattr(main_module, "JoystickControlService", make_joystick)
+    monkeypatch.setattr(
+        main_module, "Ev3OperationStatusAdapter", lambda **kwargs: object()
+    )
+
+    mode_service = main_module.OperationModeService()
+    application = main_module.build_application(
+        operation_mode_service=mode_service,
+        joystick_port=object()
+    )
+
+    assert captured["manual"]["motor_hardware_port"] is hardware
+    assert captured["joystick"]["manual_drive_port"] is manual
+    assert "drive_port" not in captured["joystick"]
+    assert "motor_port" not in captured["joystick"]
+    assert joystick_service in application.managed_services

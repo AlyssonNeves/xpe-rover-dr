@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Tests for the first LOCAL + MANUAL joystick control increment."""
+"""Tests for the synchronous LOCAL + MANUAL joystick path."""
 
 import time
 
@@ -30,142 +30,162 @@ class FakeJoystickPort(JoystickPort):
         self.closed = True
 
 
-class FakeDrivePort(object):
-    def __init__(self):
-        self.calls = []
+class FakeManualDrivePort(object):
+    def __init__(self, acquire_success=True):
+        self.acquire_success = acquire_success
+        self.acquire_calls = []
+        self.drive_calls = []
+        self.auxiliary_calls = []
         self.stop_calls = 0
+        self.release_calls = []
 
-    def drive_tank(self, left_speed_sp, right_speed_sp, priority=None,
-                   stop_action=None, watchdog_ms=None):
-        del priority, stop_action, watchdog_ms
-        self.calls.append((left_speed_sp, right_speed_sp))
-        return {"accepted": True}
+    def acquire(self, session_id, motor_codes=None):
+        self.acquire_calls.append((session_id, motor_codes))
+        if self.acquire_success:
+            return {"success": True, "direct_hardware": True}
+        return {"success": False, "error": "motor unavailable"}
 
-    def stop(self, stop_action=None):
+    def apply_drive_setpoint(self, session_id, left, right, stop_action=None):
+        del stop_action
+        self.drive_calls.append((session_id, left, right))
+        return {"success": True, "direct_hardware": True}
+
+    def apply_auxiliary_setpoint(
+            self, session_id, motor_code, speed_sp, stop_action=None):
+        del stop_action
+        self.auxiliary_calls.append((session_id, motor_code, speed_sp))
+        return {"success": True, "direct_hardware": True}
+
+    def emergency_stop(self, stop_action=None):
         del stop_action
         self.stop_calls += 1
-        return {"accepted": True}
+        return {"success": True, "direct_hardware": True}
+
+    def release(self, session_id, stop=True):
+        self.release_calls.append((session_id, stop))
+        return {"success": True}
 
 
-class FakeMotorPort(object):
-    def __init__(self):
-        self.run_calls = []
-        self.stop_calls = []
-
-    def run_forever_motor(self, motor_code, speed_sp, priority=None,
-                          stop_action=None, watchdog_ms=None, timeout_ms=None):
-        del priority, stop_action, watchdog_ms, timeout_ms
-        self.run_calls.append((motor_code, speed_sp))
-        return {"accepted": True}
-
-    def stop_motor(self, motor_code, stop_action=None):
-        del stop_action
-        self.stop_calls.append(motor_code)
-        return {"accepted": True}
-
-
-def build_service(motor_port=None):
+def build_service(manual_drive=None):
     joystick = FakeJoystickPort()
-    drive = FakeDrivePort()
+    manual = manual_drive or FakeManualDrivePort()
     service = JoystickControlService(
         joystick_port=joystick,
-        drive_port=drive,
-        motor_port=motor_port,
+        manual_drive_port=manual,
         max_speed_sp=600,
         auxiliary_speed_sp=400,
         axis_center=127,
         axis_max=255,
         poll_seconds=0.001
     )
-    return service, joystick, drive
+    return service, joystick, manual
 
 
 def test_forward_and_backward_commands_follow_left_stick_y():
-    service, _, drive = build_service()
+    service, _, manual = build_service()
 
     service.process_event({"type": 3, "code": 1, "value": 0})
     service.process_event({"type": 3, "code": 1, "value": 255})
 
-    assert drive.calls[0] == (600, 600)
-    assert drive.calls[1] == (-600, -600)
+    assert manual.drive_calls[0][1:] == (600, 600)
+    assert manual.drive_calls[1][1:] == (-600, -600)
 
 
 def test_right_stick_x_performs_arcade_rotation():
-    service, _, drive = build_service()
+    service, _, manual = build_service()
 
     service.process_event({"type": 3, "code": 3, "value": 255})
 
-    assert drive.calls[-1] == (600, -600)
+    assert manual.drive_calls[-1][1:] == (600, -600)
 
 
 def test_combined_translation_and_rotation_is_normalized():
-    service, _, drive = build_service()
+    service, _, manual = build_service()
 
     service.process_event({"type": 3, "code": 1, "value": 0})
     service.process_event({"type": 3, "code": 3, "value": 255})
 
-    assert drive.calls[-1] == (600, 0)
+    assert manual.drive_calls[-1][1:] == (600, 0)
 
 
-def test_centered_traction_and_steering_stop_drive():
-    service, _, drive = build_service()
+def test_centered_traction_and_steering_send_zero_setpoint_directly():
+    service, _, manual = build_service()
 
     service.process_event({"type": 3, "code": 1, "value": 0})
     service.process_event({"type": 3, "code": 1, "value": 127})
     service.process_event({"type": 3, "code": 3, "value": 127})
 
-    assert drive.stop_calls >= 1
+    assert manual.drive_calls[-1][1:] == (0, 0)
 
 
-def test_dpad_controls_the_two_auxiliary_motors():
-    motors = FakeMotorPort()
-    service, _, _ = build_service(motors)
+def test_dpad_controls_auxiliary_motors_through_manual_drive_port():
+    service, _, manual = build_service()
 
     service.process_event({"type": 3, "code": 17, "value": -1})
     service.process_event({"type": 3, "code": 16, "value": 1})
     service.process_event({"type": 3, "code": 17, "value": 0})
 
-    assert ("LMM", 400) in motors.run_calls
-    assert ("RMM", -400) in motors.run_calls
-    assert "LMM" in motors.stop_calls
+    assert ("local-manual", "LMM", 400) in manual.auxiliary_calls
+    assert ("local-manual", "RMM", -400) in manual.auxiliary_calls
+    assert manual.auxiliary_calls[-1] == ("local-manual", "LMM", 0)
 
 
-def test_emergency_stop_button_stops_drive_and_auxiliary_motors():
-    motors = FakeMotorPort()
-    service, _, drive = build_service(motors)
+def test_emergency_stop_button_uses_single_synchronous_stop_boundary():
+    service, _, manual = build_service()
 
     service.process_event({"type": 1, "code": 304, "value": 1})
 
-    assert drive.stop_calls == 1
-    assert motors.stop_calls == ["LMM", "RMM"]
+    assert manual.stop_calls == 1
 
 
-def test_worker_opens_port_processes_events_and_closes_safely():
+def test_worker_acquires_manual_motors_before_processing_events():
     joystick = FakeJoystickPort([
         {"type": 3, "code": 1, "value": 0},
         {"type": 1, "code": 304, "value": 1}
     ])
-    drive = FakeDrivePort()
+    manual = FakeManualDrivePort()
     service = JoystickControlService(
-        joystick, drive, poll_seconds=0.001
+        joystick, manual, poll_seconds=0.001
     )
 
     service.start()
     deadline = time.time() + 0.2
-    while not drive.calls and time.time() < deadline:
+    while not manual.drive_calls and time.time() < deadline:
         time.sleep(0.002)
     service.stop()
 
     assert joystick.opened is True
     assert joystick.closed is True
-    assert drive.calls[0] == (600, 600)
-    assert drive.stop_calls >= 1
+    assert manual.acquire_calls == [("local-manual", None)]
+    assert manual.drive_calls[0][1:] == (600, 600)
+    assert manual.stop_calls >= 1
+    assert manual.release_calls == [("local-manual", False)]
+
+
+def test_worker_does_not_process_motion_when_motor_acquisition_fails():
+    joystick = FakeJoystickPort([
+        {"type": 3, "code": 1, "value": 0}
+    ])
+    manual = FakeManualDrivePort(acquire_success=False)
+    service = JoystickControlService(
+        joystick, manual, poll_seconds=0.001
+    )
+
+    service.start()
+    deadline = time.time() + 0.05
+    while not manual.acquire_calls and time.time() < deadline:
+        time.sleep(0.002)
+    service.stop()
+
+    assert manual.acquire_calls == [("local-manual", None)]
+    assert manual.drive_calls == []
+    assert manual.stop_calls >= 1
 
 
 def test_invalid_axis_configuration_is_rejected():
     try:
         JoystickControlService(
-            FakeJoystickPort(), FakeDrivePort(),
+            FakeJoystickPort(), FakeManualDrivePort(),
             axis_center=255, axis_max=255
         )
     except ValueError as error:

@@ -12,6 +12,7 @@ from adapters.out_controller_monitor import ControllerMonitorAdapter
 from adapters.out_drive_service import DriveServiceAdapter
 from adapters.out_ev3_command_control_selector import Ev3CommandControlSelectorAdapter
 from adapters.out_ev3_operation_status import Ev3OperationStatusAdapter
+from adapters.out_ev3_motor_hardware import Ev3MotorHardwareAdapter
 from adapters.out_ev3_operator_alert import Ev3OperatorAlertAdapter
 from adapters.out_motor_monitor import MotorMonitorAdapter
 from adapters.out_rover_state_query import RoverStateQueryAdapter
@@ -31,6 +32,7 @@ from services.ev3dev2_motor_gateway import (
     Ev3Dev2MotorGateway, Ev3Dev2MotorGatewayError
 )
 from services.joystick_control_service import JoystickControlService
+from services.manual_drive_service import ManualDriveService
 from services.motor_monitor import MotorMonitor
 from services.motor_state_store import MotorStateStore
 from services.rover_state_service import RoverStateService
@@ -84,10 +86,20 @@ def build_application(operation_mode_service=None, joystick_port=None):
             selected_mode.get("command") == Commands.LOCAL and
             selected_mode.get("control") == Controls.MANUAL):
         joystick_config = rover_config.get_joystick_config()
+        motor_hardware_port = Ev3MotorHardwareAdapter(
+            motor_definitions=rover_config.get_motor_definitions(),
+            motor_registry=motor_monitor.motor_registry,
+            default_stop_action=rover_config.MOTOR_DEFAULT_STOP_ACTION
+        )
+        manual_drive_port = ManualDriveService(
+            motor_hardware_port=motor_hardware_port,
+            drive_config=rover_config.get_drive_config(),
+            joystick_config=joystick_config,
+            default_stop_action=rover_config.MOTOR_DEFAULT_STOP_ACTION
+        )
         joystick_control_service = JoystickControlService(
             joystick_port=joystick_port,
-            drive_port=drive_port,
-            motor_port=motor_port,
+            manual_drive_port=manual_drive_port,
             max_speed_sp=joystick_config.get("max_speed_sp", 600),
             auxiliary_speed_sp=joystick_config.get(
                 "auxiliary_speed_sp", 400
