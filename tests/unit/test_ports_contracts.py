@@ -2,6 +2,7 @@ import inspect
 
 from ports.controller_port import ControllerPort
 from ports.drive_port import DrivePort
+from ports.joystick_port import JoystickPort
 from ports.motor_port import MotorPort
 from ports.operation_mode_selector_port import OperationModeSelectorPort
 from ports.rover_state_query_port import RoverStateQueryPort
@@ -9,5 +10,5 @@ from ports.sensor_port import SensorPort
 
 
 def test_ports_are_abstract_contracts():
-    for cls in (ControllerPort, DrivePort, MotorPort, OperationModeSelectorPort, RoverStateQueryPort, SensorPort):
+    for cls in (ControllerPort, DrivePort, JoystickPort, MotorPort, OperationModeSelectorPort, RoverStateQueryPort, SensorPort):
         assert inspect.isabstract(cls)
