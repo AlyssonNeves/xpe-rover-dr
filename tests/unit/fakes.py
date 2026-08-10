@@ -61,15 +61,17 @@ class FakeMotorPort(object):
         return self._accepted(motor_code, "stop", status="COMPLETED")
 
     def run_timed_motor(self, motor_code, speed_sp, time_sp, priority=None,
-                        stop_action=None, timeout_ms=None):
+                        stop_action=None, timeout_ms=None, profile=None):
         return self._accepted(motor_code, "run-timed")
 
     def run_forever_motor(self, motor_code, speed_sp, priority=None,
-                          stop_action=None, watchdog_ms=None, timeout_ms=None):
+                          stop_action=None, watchdog_ms=None, timeout_ms=None,
+                          profile=None):
         return self._accepted(motor_code, "run-forever")
 
     def run_to_rel_pos_motor(self, motor_code, speed_sp, position_sp,
-                             priority=None, stop_action=None, timeout_ms=None):
+                             priority=None, stop_action=None, timeout_ms=None,
+                             profile=None):
         return self._accepted(motor_code, "run-to-rel-pos")
 
     def reset_motor(self, motor_code, priority=None):
@@ -137,20 +139,20 @@ class FakeDrivePort(object):
         return {"x_mm": x_mm, "y_mm": y_mm, "heading_deg": heading_deg}
 
     def drive_tank(self, left_speed_sp, right_speed_sp, priority=None,
-                   stop_action=None, watchdog_ms=None):
+                   stop_action=None, watchdog_ms=None, profile=None):
         self.calls.append(("tank", left_speed_sp, right_speed_sp))
         return {"accepted": True, "batch_id": "D-1"}
 
     def move_distance(self, distance_mm, speed_sp, priority=None,
-                      stop_action=None, timeout_ms=None):
+                      stop_action=None, timeout_ms=None, profile=None):
         return {"accepted": True, "batch_id": "D-2", "distance_mm": distance_mm}
 
     def rotate_angle(self, angle_deg, speed_sp, priority=None,
-                     stop_action=None, timeout_ms=None):
+                     stop_action=None, timeout_ms=None, profile=None):
         return {"accepted": True, "batch_id": "D-3", "angle_deg": angle_deg}
 
     def curve_radius(self, radius_mm, angle_deg, speed_sp, priority=None,
-                     stop_action=None, timeout_ms=None):
+                     stop_action=None, timeout_ms=None, profile=None):
         return {"accepted": True, "batch_id": "D-4", "radius_mm": radius_mm}
 
     def stop(self, stop_action=None):

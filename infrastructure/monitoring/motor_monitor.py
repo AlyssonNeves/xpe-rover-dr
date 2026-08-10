@@ -15,6 +15,7 @@ from app.rover_config import (
 )
 from infrastructure.ev3.motor_driver_factory import Ev3MotorDriverFactory
 from infrastructure.monitoring.monitor_base import MonitorBase
+from infrastructure.motor.command_executor import MotorCommandExecutor
 from infrastructure.motor.driver_repository import Ev3MotorDriverRepository
 from infrastructure.motor.registries import (
     GuardedOperationRegistry, MotorCommandRegistry
@@ -50,6 +51,14 @@ class MotorMonitor(MonitorBase):
     """Publishes motor state and orchestrates commands through per-motor queues."""
 
     DEFAULT_PRIORITY = 0
+    DIRECT_PROFILE = "direct"
+    RAMP_UP_PROFILE = "ramp-up"
+    RAMP_DOWN_PROFILE = "ramp-down"
+    RAMP_UP_DOWN_PROFILE = "ramp-up-down"
+    SUPPORTED_PROFILES = (
+        DIRECT_PROFILE, RAMP_UP_PROFILE, RAMP_DOWN_PROFILE,
+        RAMP_UP_DOWN_PROFILE
+    )
 
     def __init__(
         self,
@@ -70,6 +79,17 @@ class MotorMonitor(MonitorBase):
         )
         self.motor_registry = Ev3MotorDriverRepository(
             self.motor_definitions, self.hardware_backend
+        )
+        self.command_executor = MotorCommandExecutor(
+            self.motor_registry,
+            MotorCommandActions,
+            MOTOR_DEFAULT_STOP_ACTION,
+            MOTOR_RAMP_UP_MS,
+            MOTOR_RAMP_DOWN_MS,
+            self.DIRECT_PROFILE,
+            self.RAMP_UP_PROFILE,
+            self.RAMP_DOWN_PROFILE,
+            self.RAMP_UP_DOWN_PROFILE
         )
         self.state_collector = MotorStateCollector(
             self.state_store,
@@ -180,6 +200,12 @@ class MotorMonitor(MonitorBase):
         if isinstance(priority, bool) or not isinstance(priority, int):
             return MotorMonitor.DEFAULT_PRIORITY
         return priority
+
+    def _normalize_profile(self, profile):
+        """Returns a supported movement profile, defaulting to direct."""
+        if profile in self.SUPPORTED_PROFILES:
+            return profile
+        return self.DIRECT_PROFILE
 
     def _queue_size(self, motor_code):
         commands = self._queued_commands_by_motor.get(motor_code, [])
@@ -371,15 +397,9 @@ class MotorMonitor(MonitorBase):
         timeout_ms = params.get("timeout_ms") or MOTOR_COMMAND_TIMEOUT_MS
         stall_timeout_ms = params.get("stall_timeout_ms") or MOTOR_STALL_TIMEOUT_MS
 
-        configured, error = self.motor_registry.configure_motion(
-            motor_code, stop_action=stop_action
-        )
-        if not configured:
-            return False, error, "failed"
-
         if action == MotorCommandActions.RUN_TIMED:
-            accepted, error = self.motor_registry.run_timed_motor(
-                motor_code, params["speed_sp"], params["time_sp"], stop_action
+            accepted, error = self.command_executor.execute(
+                motor_code, action, params
             )
             if not accepted:
                 return False, error, "failed"
@@ -393,8 +413,8 @@ class MotorMonitor(MonitorBase):
             return outcome == "completed", error, outcome
 
         if action == MotorCommandActions.RUN_FOREVER:
-            accepted, error = self.motor_registry.run_forever_motor(
-                motor_code, params["speed_sp"], stop_action
+            accepted, error = self.command_executor.execute(
+                motor_code, action, params
             )
             if not accepted:
                 return False, error, "failed"
@@ -430,8 +450,8 @@ class MotorMonitor(MonitorBase):
                 time.sleep(0.02)
 
         if action == MotorCommandActions.RUN_TO_REL_POS:
-            accepted, error = self.motor_registry.run_to_rel_pos_motor(
-                motor_code, params["speed_sp"], params["position_sp"], stop_action
+            accepted, error = self.command_executor.execute(
+                motor_code, action, params
             )
             if not accepted:
                 return False, error, "failed"
@@ -442,7 +462,9 @@ class MotorMonitor(MonitorBase):
             return outcome == "completed", error, outcome
 
         if action == MotorCommandActions.RESET:
-            accepted, error = self.motor_registry.reset_motor(motor_code)
+            accepted, error = self.command_executor.execute(
+                motor_code, action, params
+            )
             return accepted, error, "completed" if accepted else "failed"
 
         return False, "Unsupported queued motor action", "failed"
@@ -680,7 +702,7 @@ class MotorMonitor(MonitorBase):
 
     def run_timed_motor(
         self, motor_code, speed_sp, time_sp, priority=None, stop_action=None,
-        timeout_ms=None
+        timeout_ms=None, profile=None
     ):
         return self._enqueue_motor_command(
             motor_code, MotorCommandActions.RUN_TIMED,
@@ -688,14 +710,15 @@ class MotorMonitor(MonitorBase):
                 "speed_sp": speed_sp,
                 "time_sp": time_sp,
                 "stop_action": stop_action,
-                "timeout_ms": timeout_ms
+                "timeout_ms": timeout_ms,
+                "profile": self._normalize_profile(profile)
             },
             priority=priority
         )
 
     def run_forever_motor(
         self, motor_code, speed_sp, priority=None, stop_action=None,
-        watchdog_ms=None, timeout_ms=None
+        watchdog_ms=None, timeout_ms=None, profile=None
     ):
         return self._enqueue_motor_command(
             motor_code, MotorCommandActions.RUN_FOREVER,
@@ -703,14 +726,15 @@ class MotorMonitor(MonitorBase):
                 "speed_sp": speed_sp,
                 "stop_action": stop_action,
                 "watchdog_ms": watchdog_ms,
-                "timeout_ms": timeout_ms
+                "timeout_ms": timeout_ms,
+                "profile": self._normalize_profile(profile)
             },
             priority=priority
         )
 
     def run_to_rel_pos_motor(
         self, motor_code, speed_sp, position_sp, priority=None,
-        stop_action=None, timeout_ms=None
+        stop_action=None, timeout_ms=None, profile=None
     ):
         return self._enqueue_motor_command(
             motor_code, MotorCommandActions.RUN_TO_REL_POS,
@@ -718,7 +742,8 @@ class MotorMonitor(MonitorBase):
                 "speed_sp": speed_sp,
                 "position_sp": position_sp,
                 "stop_action": stop_action,
-                "timeout_ms": timeout_ms
+                "timeout_ms": timeout_ms,
+                "profile": self._normalize_profile(profile)
             },
             priority=priority
         )

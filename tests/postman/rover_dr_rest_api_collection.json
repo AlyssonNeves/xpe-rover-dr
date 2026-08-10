@@ -326,7 +326,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"speed_sp\": 200,\n  \"time_sp\": 500,\n  \"timeout_ms\": 3000,\n  \"stop_action\": \"brake\",\n  \"priority\": 50\n}"
+              "raw": "{\n  \"speed_sp\": 200,\n  \"time_sp\": 500,\n  \"timeout_ms\": 3000,\n  \"stop_action\": \"brake\",\n  \"priority\": 50,\n  \"profile\": \"direct\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/motors/LLM/run-timed",
@@ -398,7 +398,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"speed_sp\": 150,\n  \"watchdog_ms\": 2000,\n  \"timeout_ms\": 10000,\n  \"stop_action\": \"brake\",\n  \"priority\": 50\n}"
+              "raw": "{\n  \"speed_sp\": 150,\n  \"watchdog_ms\": 2000,\n  \"timeout_ms\": 10000,\n  \"stop_action\": \"brake\",\n  \"priority\": 50,\n  \"profile\": \"direct\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/motors/LLM/run-forever",
@@ -529,7 +529,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"speed_sp\": 200,\n  \"position_sp\": 180,\n  \"stop_action\": \"hold\",\n  \"priority\": 50\n}"
+              "raw": "{\n  \"speed_sp\": 200,\n  \"position_sp\": 180,\n  \"stop_action\": \"hold\",\n  \"priority\": 50,\n  \"profile\": \"direct\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/motors/LLM/run-to-rel-pos",
@@ -836,7 +836,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"priority\": 80,\n  \"commands\": [\n    {\n      \"code\": \"LLM\",\n      \"action\": \"run-timed\",\n      \"speed_sp\": 200,\n      \"time_sp\": 500,\n      \"stop_action\": \"brake\"\n    },\n    {\n      \"code\": \"RLM\",\n      \"action\": \"run-timed\",\n      \"speed_sp\": 200,\n      \"time_sp\": 500,\n      \"stop_action\": \"brake\"\n    }\n  ]\n}"
+              "raw": "{\n  \"priority\": 80,\n  \"commands\": [\n    {\n      \"code\": \"LLM\",\n      \"action\": \"run-timed\",\n      \"speed_sp\": 200,\n      \"time_sp\": 500,\n      \"stop_action\": \"brake\",\n      \"profile\": \"direct\"\n    },\n    {\n      \"code\": \"RLM\",\n      \"action\": \"run-timed\",\n      \"speed_sp\": 200,\n      \"time_sp\": 500,\n      \"stop_action\": \"brake\",\n      \"profile\": \"direct\"\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/motors/synchronized",
@@ -1118,7 +1118,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"left_speed_sp\": 300,\n  \"right_speed_sp\": 250,\n  \"priority\": 60,\n  \"watchdog_ms\": 2000,\n  \"stop_action\": \"brake\"\n}"
+              "raw": "{\n  \"left_speed_sp\": 300,\n  \"right_speed_sp\": 250,\n  \"priority\": 60,\n  \"watchdog_ms\": 2000,\n  \"stop_action\": \"brake\",\n  \"profile\": \"direct\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/drive/tank",
@@ -1297,7 +1297,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"distance_mm\": 250,\n  \"speed_sp\": 300,\n  \"stop_action\": \"brake\"\n}"
+              "raw": "{\n  \"distance_mm\": 250,\n  \"speed_sp\": 300,\n  \"stop_action\": \"brake\",\n  \"profile\": \"direct\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/drive/move-distance",
@@ -1368,7 +1368,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"angle_deg\": 90,\n  \"speed_sp\": 250,\n  \"stop_action\": \"brake\"\n}"
+              "raw": "{\n  \"angle_deg\": 90,\n  \"speed_sp\": 250,\n  \"stop_action\": \"brake\",\n  \"profile\": \"direct\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/drive/rotate-angle",
@@ -1439,7 +1439,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"radius_mm\": 250,\n  \"angle_deg\": 45,\n  \"speed_sp\": 300,\n  \"stop_action\": \"brake\"\n}"
+              "raw": "{\n  \"radius_mm\": 250,\n  \"angle_deg\": 45,\n  \"speed_sp\": 300,\n  \"stop_action\": \"brake\",\n  \"profile\": \"direct\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/drive/curve-radius",
@@ -1748,7 +1748,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"speed_sp\": \"fast\",\n  \"time_sp\": 500\n}"
+              "raw": "{\n  \"speed_sp\": \"fast\",\n  \"time_sp\": 500,\n  \"profile\": \"direct\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/motors/LLM/run-timed",
@@ -1800,7 +1800,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"speed_sp\": 150,\n  \"watchdog_ms\": 50\n}"
+              "raw": "{\n  \"speed_sp\": 150,\n  \"watchdog_ms\": 50,\n  \"profile\": \"direct\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/motors/LLM/run-forever",

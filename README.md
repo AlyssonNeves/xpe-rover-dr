@@ -412,3 +412,19 @@ antes do denominador comum de normalização. Como `LMM` e `RMM` passam a compor
 tração de quatro rodas neste modo, comandos auxiliares pelo D-pad são ignorados.
 A seleção dinâmica de `DIFFERENTIAL`/`MECANUM` e `CHASSIS`/`FIELD` permanece
 reservada ao fluxo canônico do S02.16 e ao pipeline FIELD-centric do S02.20.
+
+
+## S02.15 - Perfis de movimento
+
+Os comandos monitorados de motor e de navegação passam a aceitar quatro perfis
+de movimento: `direct`, `ramp-up`, `ramp-down` e `ramp-up-down`. O perfil
+`direct` é o padrão e desativa explicitamente `ramp_up_sp` e `ramp_down_sp`; os
+demais perfis mapeiam os tempos configurados em `motor_ramp_up_ms` e
+`motor_ramp_down_ms` somente para a fase correspondente.
+
+O mapeamento para propriedades nativas EV3 fica centralizado em
+`MotorCommandExecutor`, preservando filas, watchdogs e lifecycle existentes. O
+parâmetro `profile` é validado pela aplicação e propagado tanto para comandos
+individuais/sincronizados de motor quanto para `drive/tank`, deslocamentos,
+rotações e curvas. Os ajustes de resposta do joystick permanecem reservados ao
+S02.17.

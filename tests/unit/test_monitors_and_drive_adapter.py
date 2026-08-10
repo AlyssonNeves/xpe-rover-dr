@@ -26,13 +26,14 @@ class FakeDrive(object):
     def __init__(self): self.calls = []
     def get_status(self): return {"status": "ok"}
     def reset_odometry(self, x, y, h): self.calls.append(("reset", x, y, h)); return {"x_mm": x}
-    def drive_tank(self, l, r, priority=None, stop_action=None, watchdog_ms=None):
+    def drive_tank(self, l, r, priority=None, stop_action=None, watchdog_ms=None,
+                   profile=None):
         self.calls.append(("tank", l, r, priority, stop_action, watchdog_ms)); return {"accepted": True}
-    def move_distance(self, d, s, priority=None, stop_action=None, timeout_ms=None):
+    def move_distance(self, d, s, priority=None, stop_action=None, timeout_ms=None, profile=None):
         return {"accepted": True, "distance_mm": d}
-    def rotate_angle(self, a, s, priority=None, stop_action=None, timeout_ms=None):
+    def rotate_angle(self, a, s, priority=None, stop_action=None, timeout_ms=None, profile=None):
         return {"accepted": True, "angle_deg": a}
-    def curve_radius(self, r, a, s, priority=None, stop_action=None, timeout_ms=None):
+    def curve_radius(self, r, a, s, priority=None, stop_action=None, timeout_ms=None, profile=None):
         return {"accepted": True, "radius_mm": r}
     def stop(self, stop_action=None): return {"accepted": True, "stop_action": stop_action}
 

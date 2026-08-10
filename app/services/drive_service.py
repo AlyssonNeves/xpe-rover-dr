@@ -97,7 +97,7 @@ class DriveService(object):
 
     def drive_tank(
         self, left_speed_sp, right_speed_sp, priority=None,
-        stop_action=None, watchdog_ms=None
+        stop_action=None, watchdog_ms=None, profile=None
     ):
         """Submits a synchronized continuous command for both traction motors."""
         stop_action = stop_action or MOTOR_DEFAULT_STOP_ACTION
@@ -114,11 +114,11 @@ class DriveService(object):
         commands = [
             self._continuous_command(
                 self.left_motor_code, left_speed_sp, priority,
-                stop_action, watchdog_ms, self.left_speed_factor
+                stop_action, watchdog_ms, self.left_speed_factor, profile
             ),
             self._continuous_command(
                 self.right_motor_code, right_speed_sp, priority,
-                stop_action, watchdog_ms, self.right_speed_factor
+                stop_action, watchdog_ms, self.right_speed_factor, profile
             ),
         ]
         result = self.motor_port.run_synchronized_motors(commands)
@@ -128,12 +128,13 @@ class DriveService(object):
             "priority": priority,
             "stop_action": stop_action,
             "watchdog_ms": watchdog_ms,
+            "profile": profile or "direct",
         })
         return result
 
     def move_distance(
         self, distance_mm, speed_sp, priority=None, stop_action=None,
-        timeout_ms=None
+        timeout_ms=None, profile=None
     ):
         """Queues equal wheel displacements for straight-line motion."""
         wheel_degrees = self._millimeters_to_degrees(distance_mm)
@@ -145,10 +146,12 @@ class DriveService(object):
             priority,
             stop_action,
             timeout_ms,
+            profile,
         )
         self._remember_command("move-distance", result, {
             "distance_mm": float(distance_mm),
             "speed_sp": int(speed_sp),
+            "profile": profile or "direct",
         })
         return self._decorate_navigation_result(
             result, "move-distance", distance_mm=float(distance_mm)
@@ -156,7 +159,7 @@ class DriveService(object):
 
     def rotate_angle(
         self, angle_deg, speed_sp, priority=None, stop_action=None,
-        timeout_ms=None
+        timeout_ms=None, profile=None
     ):
         """Queues opposite wheel displacements for an in-place rotation."""
         arc_mm = math.pi * self.track_width_mm * float(angle_deg) / 360.0
@@ -170,10 +173,12 @@ class DriveService(object):
             priority,
             stop_action,
             timeout_ms,
+            profile,
         )
         self._remember_command("rotate-angle", result, {
             "angle_deg": float(angle_deg),
             "speed_sp": int(speed_sp),
+            "profile": profile or "direct",
         })
         return self._decorate_navigation_result(
             result, "rotate-angle", angle_deg=float(angle_deg)
@@ -181,7 +186,7 @@ class DriveService(object):
 
     def curve_radius(
         self, radius_mm, angle_deg, speed_sp, priority=None,
-        stop_action=None, timeout_ms=None
+        stop_action=None, timeout_ms=None, profile=None
     ):
         """Queues an arc by calculating independent left/right wheel travel."""
         radius_mm = float(radius_mm)
@@ -210,11 +215,13 @@ class DriveService(object):
             priority,
             stop_action,
             timeout_ms,
+            profile,
         )
         self._remember_command("curve-radius", result, {
             "radius_mm": radius_mm,
             "angle_deg": angle_deg,
             "speed_sp": int(speed_sp),
+            "profile": profile or "direct",
         })
         return self._decorate_navigation_result(
             result,
@@ -247,25 +254,25 @@ class DriveService(object):
 
     def _queue_relative_motion(
         self, left_degrees, right_degrees, left_speed, right_speed,
-        priority, stop_action, timeout_ms
+        priority, stop_action, timeout_ms, profile=None
     ):
         stop_action = stop_action or MOTOR_DEFAULT_STOP_ACTION
         priority = 0 if priority is None else priority
         commands = [
             self._relative_command(
                 self.left_motor_code, left_speed, left_degrees, priority,
-                stop_action, timeout_ms, self.left_speed_factor
+                stop_action, timeout_ms, self.left_speed_factor, profile
             ),
             self._relative_command(
                 self.right_motor_code, right_speed, right_degrees, priority,
-                stop_action, timeout_ms, self.right_speed_factor
+                stop_action, timeout_ms, self.right_speed_factor, profile
             ),
         ]
         return self.motor_port.run_synchronized_motors(commands)
 
     @staticmethod
     def _continuous_command(
-        code, speed, priority, stop_action, watchdog_ms, factor
+        code, speed, priority, stop_action, watchdog_ms, factor, profile=None
     ):
         return {
             "code": code,
@@ -275,12 +282,14 @@ class DriveService(object):
                 "speed_sp": int(round(speed * factor)),
                 "stop_action": stop_action,
                 "watchdog_ms": watchdog_ms,
+                "profile": profile or "direct",
             },
         }
 
     @staticmethod
     def _relative_command(
-        code, speed, degrees, priority, stop_action, timeout_ms, factor
+        code, speed, degrees, priority, stop_action, timeout_ms, factor,
+        profile=None
     ):
         return {
             "code": code,
@@ -291,6 +300,7 @@ class DriveService(object):
                 "position_sp": int(round(degrees)),
                 "stop_action": stop_action,
                 "timeout_ms": timeout_ms,
+                "profile": profile or "direct",
             },
         }
 

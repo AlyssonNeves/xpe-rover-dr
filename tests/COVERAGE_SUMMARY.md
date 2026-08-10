@@ -94,3 +94,12 @@ gate mínimo de 60%.
 - D-pad não comanda `LMM`/`RMM` enquanto os quatro motores pertencem à tração Mecanum.
 - A barreira pós-desconexão passa a exigir neutralidade de X, Y e RX em Mecanum.
 - A suíte completa possui **187 testes aprovados**, com **75% de cobertura combinada de linhas e branches**.
+
+
+## S02.15 - Perfis de movimento
+
+- Perfis suportados: `direct`, `ramp-up`, `ramp-down` e `ramp-up-down`.
+- `direct` limpa as rampas nativas; os demais perfis ativam `ramp_up_sp` e/ou `ramp_down_sp` conforme a configuração global.
+- `MotorCommandExecutor` centraliza o mapeamento de perfil e a emissão do comando ao repositório de drivers.
+- Comandos REST individuais, sincronizados e de navegação validam e propagam `profile`.
+- A suíte completa possui **194 testes aprovados**, com **75% de cobertura combinada de linhas e branches**.

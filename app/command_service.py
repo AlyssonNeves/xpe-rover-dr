@@ -21,6 +21,9 @@ class CommandService(object):
 
     RESOURCE_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_-]{0,15}$")
     VALID_STOP_ACTIONS = ("coast", "brake", "hold")
+    VALID_MOVEMENT_PROFILES = (
+        "direct", "ramp-up", "ramp-down", "ramp-up-down"
+    )
     MIN_SPEED_SP = -2000
     MAX_SPEED_SP = 2000
     MAX_TIME_SP_MS = 600000
@@ -171,6 +174,17 @@ class CommandService(object):
             )
         return None
 
+    def _validate_profile(self, value):
+        if value is None:
+            return None
+        if not isinstance(value, str) or value not in self.VALID_MOVEMENT_PROFILES:
+            return CommandResult.bad_request(
+                "Parameter profile must be one of: {}".format(
+                    ", ".join(self.VALID_MOVEMENT_PROFILES)
+                )
+            )
+        return None
+
     def _validate_priority(self, value):
         if value is None:
             return None
@@ -286,6 +300,9 @@ class CommandService(object):
         validation = self._validate_priority(params.get("priority"))
         if validation is not None:
             return None, validation
+        validation = self._validate_profile(params.get("profile"))
+        if validation is not None:
+            return None, validation
         for parameter_name in ("timeout_ms", "watchdog_ms"):
             validation = self._validate_safety_timeout(
                 params.get(parameter_name), parameter_name
@@ -335,9 +352,10 @@ class CommandService(object):
             code,
             params["speed_sp"],
             time_sp,
-            params.get("priority"),
-            params.get("stop_action"),
-            params.get("timeout_ms")
+            priority=params.get("priority"),
+            stop_action=params.get("stop_action"),
+            timeout_ms=params.get("timeout_ms"),
+            profile=params.get("profile")
         )
         return self._execution_result(data, code)
 
@@ -350,10 +368,11 @@ class CommandService(object):
         data = self.motor_port.run_forever_motor(
             code,
             params["speed_sp"],
-            params.get("priority"),
-            params.get("stop_action"),
-            params.get("watchdog_ms"),
-            params.get("timeout_ms")
+            priority=params.get("priority"),
+            stop_action=params.get("stop_action"),
+            watchdog_ms=params.get("watchdog_ms"),
+            timeout_ms=params.get("timeout_ms"),
+            profile=params.get("profile")
         )
         return self._execution_result(data, code)
 
@@ -378,9 +397,10 @@ class CommandService(object):
             code,
             params["speed_sp"],
             position_sp,
-            params.get("priority"),
-            params.get("stop_action"),
-            params.get("timeout_ms")
+            priority=params.get("priority"),
+            stop_action=params.get("stop_action"),
+            timeout_ms=params.get("timeout_ms"),
+            profile=params.get("profile")
         )
         return self._execution_result(data, code)
 
@@ -463,12 +483,16 @@ class CommandService(object):
             "speed_sp": raw_item.get("speed_sp"),
             "stop_action": raw_item.get("stop_action"),
             "timeout_ms": raw_item.get("timeout_ms"),
-            "watchdog_ms": raw_item.get("watchdog_ms")
+            "watchdog_ms": raw_item.get("watchdog_ms"),
+            "profile": raw_item.get("profile")
         }
         validation = self._validate_speed(params["speed_sp"])
         if validation is not None:
             return None, validation
         validation = self._validate_stop_action(params.get("stop_action"))
+        if validation is not None:
+            return None, validation
+        validation = self._validate_profile(params.get("profile"))
         if validation is not None:
             return None, validation
         for parameter_name in ("timeout_ms", "watchdog_ms"):
@@ -634,6 +658,9 @@ class CommandService(object):
             validation = self._validate_stop_action(params.get("stop_action"))
             if validation is not None:
                 return validation
+            validation = self._validate_profile(params.get("profile"))
+            if validation is not None:
+                return validation
             validation = self._validate_safety_timeout(
                 params.get("watchdog_ms"), "watchdog_ms"
             )
@@ -645,7 +672,8 @@ class CommandService(object):
                 params["right_speed_sp"],
                 priority=params.get("priority"),
                 stop_action=params.get("stop_action"),
-                watchdog_ms=params.get("watchdog_ms")
+                watchdog_ms=params.get("watchdog_ms"),
+                profile=params.get("profile")
             )
             if not data.get("accepted"):
                 return CommandResult.service_unavailable(
@@ -670,6 +698,9 @@ class CommandService(object):
         if validation is not None:
             return validation
         validation = self._validate_stop_action(params.get("stop_action"))
+        if validation is not None:
+            return validation
+        validation = self._validate_profile(params.get("profile"))
         if validation is not None:
             return validation
         validation = self._validate_safety_timeout(
@@ -697,7 +728,8 @@ class CommandService(object):
                     return error
                 data = self.drive_port.move_distance(
                     distance_mm, speed_sp, params.get("priority"),
-                    params.get("stop_action"), params.get("timeout_ms")
+                    params.get("stop_action"), params.get("timeout_ms"),
+                    params.get("profile")
                 )
             elif action == CommandActions.ROTATE_DRIVE_ANGLE:
                 angle_deg, error = number("angle_deg")
@@ -705,7 +737,8 @@ class CommandService(object):
                     return error
                 data = self.drive_port.rotate_angle(
                     angle_deg, speed_sp, params.get("priority"),
-                    params.get("stop_action"), params.get("timeout_ms")
+                    params.get("stop_action"), params.get("timeout_ms"),
+                    params.get("profile")
                 )
             else:
                 radius_mm, error = number("radius_mm")
@@ -716,7 +749,8 @@ class CommandService(object):
                     return error
                 data = self.drive_port.curve_radius(
                     radius_mm, angle_deg, speed_sp, params.get("priority"),
-                    params.get("stop_action"), params.get("timeout_ms")
+                    params.get("stop_action"), params.get("timeout_ms"),
+                    params.get("profile")
                 )
         except ValueError as error:
             return CommandResult.bad_request(str(error))

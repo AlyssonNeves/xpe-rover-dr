@@ -497,3 +497,22 @@ X-Rover-Hardware-Token: <hardware-token>
 
 or `Authorization: Bearer <hardware-token>`. Authentication is checked by the
 HTTP adapter before the gateway is invoked.
+
+
+## Movement profiles (S02.15)
+
+Motor motion and drive commands accept an optional `profile` string. Supported
+values are `direct`, `ramp-up`, `ramp-down`, and `ramp-up-down`; omission means
+`direct`. `direct` applies zero native ramp values. The ramp profiles use
+`motor_ramp_up_ms` and `motor_ramp_down_ms` from the Rover configuration.
+
+Example:
+
+```json
+{
+  "speed_sp": 300,
+  "time_sp": 1000,
+  "profile": "ramp-up-down",
+  "stop_action": "brake"
+}
+```

@@ -3,9 +3,7 @@
 
 """Shared low-level EV3 motor driver repository."""
 
-from app.rover_config import (
-    MOTOR_DEFAULT_STOP_ACTION, MOTOR_RAMP_DOWN_MS, MOTOR_RAMP_UP_MS
-)
+from app.rover_config import MOTOR_DEFAULT_STOP_ACTION
 
 
 class Ev3MotorDriverRepository(object):
@@ -103,13 +101,9 @@ class Ev3MotorDriverRepository(object):
         def operation(motor):
             self._apply_stop_action(motor, stop_action)
             if hasattr(motor, "ramp_up_sp"):
-                motor.ramp_up_sp = max(0, int(
-                    MOTOR_RAMP_UP_MS if ramp_up_sp is None else ramp_up_sp
-                ))
+                motor.ramp_up_sp = max(0, int(ramp_up_sp or 0))
             if hasattr(motor, "ramp_down_sp"):
-                motor.ramp_down_sp = max(0, int(
-                    MOTOR_RAMP_DOWN_MS if ramp_down_sp is None else ramp_down_sp
-                ))
+                motor.ramp_down_sp = max(0, int(ramp_down_sp or 0))
         return self.execute(motor_code, "configure-motion", operation)
 
     def stop_motor(self, motor_code, stop_action=None):

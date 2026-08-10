@@ -20,7 +20,7 @@ class DriveServiceAdapter(DrivePort):
 
     def drive_tank(
         self, left_speed_sp, right_speed_sp, priority=None,
-        stop_action=None, watchdog_ms=None
+        stop_action=None, watchdog_ms=None, profile=None
     ):
         return self.drive_service.drive_tank(
             left_speed_sp,
@@ -28,30 +28,32 @@ class DriveServiceAdapter(DrivePort):
             priority=priority,
             stop_action=stop_action,
             watchdog_ms=watchdog_ms,
+            profile=profile,
         )
 
     def move_distance(
         self, distance_mm, speed_sp, priority=None, stop_action=None,
-        timeout_ms=None
+        timeout_ms=None, profile=None
     ):
         return self.drive_service.move_distance(
-            distance_mm, speed_sp, priority, stop_action, timeout_ms
+            distance_mm, speed_sp, priority, stop_action, timeout_ms, profile
         )
 
     def rotate_angle(
         self, angle_deg, speed_sp, priority=None, stop_action=None,
-        timeout_ms=None
+        timeout_ms=None, profile=None
     ):
         return self.drive_service.rotate_angle(
-            angle_deg, speed_sp, priority, stop_action, timeout_ms
+            angle_deg, speed_sp, priority, stop_action, timeout_ms, profile
         )
 
     def curve_radius(
         self, radius_mm, angle_deg, speed_sp, priority=None,
-        stop_action=None, timeout_ms=None
+        stop_action=None, timeout_ms=None, profile=None
     ):
         return self.drive_service.curve_radius(
-            radius_mm, angle_deg, speed_sp, priority, stop_action, timeout_ms
+            radius_mm, angle_deg, speed_sp, priority, stop_action, timeout_ms,
+            profile
         )
 
     def stop(self, stop_action=None):

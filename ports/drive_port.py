@@ -22,7 +22,7 @@ class DrivePort(object, metaclass=ABCMeta):
     @abstractmethod
     def drive_tank(
         self, left_speed_sp, right_speed_sp, priority=None,
-        stop_action=None, watchdog_ms=None
+        stop_action=None, watchdog_ms=None, profile=None
     ):
         """Controls left and right traction motors independently."""
         raise NotImplementedError
@@ -30,7 +30,7 @@ class DrivePort(object, metaclass=ABCMeta):
     @abstractmethod
     def move_distance(
         self, distance_mm, speed_sp, priority=None, stop_action=None,
-        timeout_ms=None
+        timeout_ms=None, profile=None
     ):
         """Queues a straight-line displacement in millimetres."""
         raise NotImplementedError
@@ -38,7 +38,7 @@ class DrivePort(object, metaclass=ABCMeta):
     @abstractmethod
     def rotate_angle(
         self, angle_deg, speed_sp, priority=None, stop_action=None,
-        timeout_ms=None
+        timeout_ms=None, profile=None
     ):
         """Queues an in-place rover rotation in degrees."""
         raise NotImplementedError
@@ -46,7 +46,7 @@ class DrivePort(object, metaclass=ABCMeta):
     @abstractmethod
     def curve_radius(
         self, radius_mm, angle_deg, speed_sp, priority=None,
-        stop_action=None, timeout_ms=None
+        stop_action=None, timeout_ms=None, profile=None
     ):
         """Queues a circular arc defined by radius and angle."""
         raise NotImplementedError

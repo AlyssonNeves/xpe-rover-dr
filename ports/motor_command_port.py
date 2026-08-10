@@ -13,17 +13,19 @@ class MotorCommandPort(object, metaclass=ABCMeta):
 
     @abstractmethod
     def run_timed_motor(self, motor_code, speed_sp, time_sp, priority=None,
-                        stop_action=None, timeout_ms=None):
+                        stop_action=None, timeout_ms=None, profile=None):
         raise NotImplementedError
 
     @abstractmethod
     def run_forever_motor(self, motor_code, speed_sp, priority=None,
-                          stop_action=None, watchdog_ms=None, timeout_ms=None):
+                          stop_action=None, watchdog_ms=None, timeout_ms=None,
+                          profile=None):
         raise NotImplementedError
 
     @abstractmethod
     def run_to_rel_pos_motor(self, motor_code, speed_sp, position_sp,
-                             priority=None, stop_action=None, timeout_ms=None):
+                             priority=None, stop_action=None, timeout_ms=None,
+                             profile=None):
         raise NotImplementedError
 
     @abstractmethod
