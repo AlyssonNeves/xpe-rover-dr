@@ -328,6 +328,19 @@ This increment intentionally performs direct PBM loading from `assets/screens`.
 The complete screen catalogue, deployment cache and in-memory PBM reuse are kept
 for the later screen/cache consolidation increment.
 
+## Bluetooth disconnect fail-safe
+
+The `LOCAL + MANUAL` input path now treats evdev descriptor errors and read
+failures as a lost Bluetooth joystick connection. Rover-DR synchronously stops
+all motors owned by the manual path, invalidates the active manual session and
+discards the previous traction/steering state before the worker terminates.
+
+At this stage recovery is intentionally explicit rather than automatic. If the
+manual joystick service is started again after the controller reappears, motion
+remains blocked until both traction axes have been observed at their neutral
+position. Automatic `bluetoothctl` connection/reconnection is reserved for the
+later Bluetooth reconnection increment.
+
 ## EV3 battery monitoring and operational feedback
 
 When physical EV3 hardware is enabled, Rover-DR now starts an informational

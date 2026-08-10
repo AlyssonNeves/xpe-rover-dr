@@ -25,3 +25,11 @@ O marco S02.05 separa explicitamente os parâmetros **Command** e **Control**, a
 `Control = None` quando o comando é `REMOTE` e valida a navegação por linhas na tela
 gráfica do EV3. A suíte completa possui **100 testes aprovados** e cobertura global de
 **72%**, acima do gate mínimo de 60%.
+
+## S02.07
+
+O marco S02.07 acrescenta o fail-safe de desconexão do joystick Bluetooth: erros
+do descritor/evdev interrompem imediatamente o movimento, invalidam a sessão
+manual e exigem neutralidade dos eixos antes de uma retomada explícita. A suíte
+completa possui **121 testes aprovados** e cobertura global de **73%**, acima do
+gate mínimo de 60%.

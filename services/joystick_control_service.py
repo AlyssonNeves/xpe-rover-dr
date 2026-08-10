@@ -55,6 +55,12 @@ class JoystickControlService(object):
 
         self._translation = 0.0
         self._rotation = 0.0
+        # A Bluetooth/input failure invalidates the current manual session.
+        # A subsequent explicit restart is gated until both traction axes are
+        # observed at their neutral position, preventing stale stick state from
+        # restarting motion after the controller comes back.
+        self._neutral_required = False
+        self._neutral_pending_axes = set()
         self._stop_event = threading.Event()
         self._thread = None
         self._acquired = False
@@ -118,15 +124,30 @@ class JoystickControlService(object):
             self.logger.status(
                 "Local manual joystick connected: {}.".format(opened_name)
             )
+            if self._neutral_required:
+                self.logger.status(
+                    "Joystick safety gate active; return traction controls "
+                    "to neutral before resuming motion."
+                )
             while not self._stop_event.is_set():
                 event = self.joystick_port.read_event(self.poll_seconds)
                 if event is not None:
                     self.process_event(event)
         except Exception as error:
-            self.logger.error(
-                "Local manual joystick control stopped: {}".format(error)
-            )
-            self.emergency_stop()
+            if not self._stop_event.is_set():
+                self.logger.error(
+                    "Local manual joystick connection lost: {}".format(error)
+                )
+                self._invalidate_disconnected_session()
+        finally:
+            try:
+                self.joystick_port.close()
+            except Exception as error:
+                self.logger.error(
+                    "Unable to close joystick input after session: {}".format(
+                        error
+                    )
+                )
 
     def process_event(self, event):
         """Processes one normalized joystick event."""
@@ -147,18 +168,70 @@ class JoystickControlService(object):
 
         if code == self.AXIS_TRACTION:
             self._translation = -self._normalize_axis(value)
+            if self._neutral_gate_blocks(code, self._translation):
+                return
             self._apply_differential_drive()
         elif code == self.AXIS_STEERING:
             self._rotation = self._normalize_axis(value)
+            if self._neutral_gate_blocks(code, self._rotation):
+                return
             self._apply_differential_drive()
         elif code == self.AXIS_AUXILIARY_VERTICAL:
+            if self._neutral_required:
+                return
             self._apply_auxiliary(
                 self.left_auxiliary_motor_code, value
             )
         elif code == self.AXIS_AUXILIARY_HORIZONTAL:
+            if self._neutral_required:
+                return
             self._apply_auxiliary(
                 self.right_auxiliary_motor_code, value
             )
+
+
+    def _invalidate_disconnected_session(self):
+        """Stops motion and invalidates input state after connection loss."""
+        self._translation = 0.0
+        self._rotation = 0.0
+        self._neutral_required = True
+        self._neutral_pending_axes = {
+            self.AXIS_TRACTION, self.AXIS_STEERING
+        }
+
+        # Stop first: session invalidation must never delay the physical stop.
+        self.emergency_stop()
+        if self._acquired:
+            try:
+                result = self.manual_drive_port.release(
+                    self.session_id, stop=True
+                )
+                self._log_failure("Manual session release", result)
+            except Exception as error:
+                self.logger.error(
+                    "Unable to invalidate disconnected manual session: {}"
+                    .format(error)
+                )
+            finally:
+                self._acquired = False
+
+    def _neutral_gate_blocks(self, axis_code, normalized_value):
+        """Keeps post-disconnect motion blocked until controls are neutral."""
+        if not self._neutral_required:
+            return False
+
+        if normalized_value == 0.0:
+            self._neutral_pending_axes.discard(axis_code)
+
+        controls_are_neutral = (
+            self._translation == 0.0 and self._rotation == 0.0
+        )
+        if not self._neutral_pending_axes and controls_are_neutral:
+            self._neutral_required = False
+            self.logger.status(
+                "Joystick controls neutral; manual motion is enabled again."
+            )
+        return True
 
     def emergency_stop(self):
         """Synchronously stops every motor owned by the manual path."""

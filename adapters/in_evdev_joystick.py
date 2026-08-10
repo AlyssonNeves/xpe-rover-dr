@@ -53,13 +53,24 @@ class EvdevJoystickAdapter(JoystickPort):
             raise RuntimeError("Joystick device is not open.")
 
         timeout = self._normalize_timeout(timeout_seconds)
-        readable, _, _ = self.select_function(
-            [self.device.fd], [], [], timeout
-        )
+        try:
+            readable, _, exceptional = self.select_function(
+                [self.device.fd], [], [self.device.fd], timeout
+            )
+        except (IOError, OSError) as error:
+            raise self._connection_lost(error)
+
+        if exceptional:
+            raise self._connection_lost(
+                OSError("evdev descriptor reported an exceptional state")
+            )
         if not readable:
             return None
 
-        event = self.device.read_one()
+        try:
+            event = self.device.read_one()
+        except (IOError, OSError) as error:
+            raise self._connection_lost(error)
         if event is None:
             return None
         return {
@@ -74,6 +85,18 @@ class EvdevJoystickAdapter(JoystickPort):
         self.device = None
         if device is not None:
             device.close()
+
+
+    def _connection_lost(self, error):
+        """Releases the stale descriptor and returns a clear disconnect error."""
+        try:
+            self.close()
+        except (IOError, OSError):
+            # The descriptor may already have disappeared from the kernel.
+            self.device = None
+        return OSError(
+            "Bluetooth joystick connection lost: {0}".format(error)
+        )
 
     def _load_evdev_module(self):
         if self.evdev_module is not None:

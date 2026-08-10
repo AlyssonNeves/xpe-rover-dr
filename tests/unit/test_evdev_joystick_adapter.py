@@ -19,14 +19,17 @@ class FakeEvent(object):
 
 
 class FakeInputDevice(object):
-    def __init__(self, path, name, events=None, fd=10):
+    def __init__(self, path, name, events=None, fd=10, read_error=None):
         self.path = path
         self.name = name
         self.events = list(events or [])
         self.fd = fd
+        self.read_error = read_error
         self.closed = False
 
     def read_one(self):
+        if self.read_error is not None:
+            raise self.read_error
         if not self.events:
             return None
         return self.events.pop(0)
@@ -49,7 +52,8 @@ class FakeEvdevModule(object):
             path=source.path,
             name=source.name,
             events=list(source.events),
-            fd=source.fd
+            fd=source.fd,
+            read_error=source.read_error
         )
         self.created.append(device)
         return device
@@ -114,7 +118,7 @@ def test_read_event_waits_for_descriptor_and_normalizes_evdev_values():
     event = adapter.read_event(0.05)
 
     assert event == {"type": 3, "code": 1, "value": 255}
-    assert select_calls == [([14], [], [], 0.05)]
+    assert select_calls == [([14], [], [14], 0.05)]
 
 
 def test_read_event_preserves_key_event_type_code_and_value():
@@ -204,3 +208,75 @@ def test_missing_python_evdev_dependency_has_explicit_error(monkeypatch):
 def test_empty_device_name_is_rejected():
     with pytest.raises(ValueError):
         EvdevJoystickAdapter(device_name="   ", evdev_module=FakeEvdevModule({}))
+
+
+def test_exceptional_descriptor_is_reported_as_bluetooth_disconnect():
+    gamepad = FakeInputDevice(
+        "/dev/input/event4", "Wireless Controller", fd=14
+    )
+
+    def fake_select(readers, writers, errors, timeout):
+        del readers, writers, timeout
+        return [], [], errors
+
+    adapter = EvdevJoystickAdapter(
+        evdev_module=FakeEvdevModule({gamepad.path: gamepad}),
+        select_function=fake_select
+    )
+    adapter.open()
+    opened = adapter.device
+
+    with pytest.raises(OSError) as error:
+        adapter.read_event(0.01)
+
+    assert "Bluetooth joystick connection lost" in str(error.value)
+    assert opened.closed is True
+    assert adapter.device is None
+
+
+def test_kernel_read_error_closes_stale_device_and_reports_disconnect():
+    gamepad = FakeInputDevice(
+        "/dev/input/event4", "Wireless Controller", fd=14,
+        read_error=OSError("No such device")
+    )
+
+    def fake_select(readers, writers, errors, timeout):
+        del writers, errors, timeout
+        return readers, [], []
+
+    adapter = EvdevJoystickAdapter(
+        evdev_module=FakeEvdevModule({gamepad.path: gamepad}),
+        select_function=fake_select
+    )
+    adapter.open()
+    opened = adapter.device
+
+    with pytest.raises(OSError) as error:
+        adapter.read_event(0.01)
+
+    assert "No such device" in str(error.value)
+    assert "Bluetooth joystick connection lost" in str(error.value)
+    assert opened.closed is True
+    assert adapter.device is None
+
+
+def test_select_failure_is_normalized_as_connection_loss():
+    gamepad = FakeInputDevice(
+        "/dev/input/event4", "Wireless Controller", fd=14
+    )
+
+    def fake_select(readers, writers, errors, timeout):
+        del readers, writers, errors, timeout
+        raise OSError("bad file descriptor")
+
+    adapter = EvdevJoystickAdapter(
+        evdev_module=FakeEvdevModule({gamepad.path: gamepad}),
+        select_function=fake_select
+    )
+    adapter.open()
+
+    with pytest.raises(OSError) as error:
+        adapter.read_event(0.01)
+
+    assert "Bluetooth joystick connection lost" in str(error.value)
+    assert adapter.device is None

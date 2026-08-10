@@ -10,8 +10,9 @@ from services.joystick_control_service import JoystickControlService
 
 
 class FakeJoystickPort(JoystickPort):
-    def __init__(self, events=None):
+    def __init__(self, events=None, read_error=None):
         self.events = list(events or [])
+        self.read_error = read_error
         self.opened = False
         self.closed = False
 
@@ -23,6 +24,10 @@ class FakeJoystickPort(JoystickPort):
         del timeout_seconds
         if self.events:
             return self.events.pop(0)
+        if self.read_error is not None:
+            error = self.read_error
+            self.read_error = None
+            raise error
         time.sleep(0.001)
         return None
 
@@ -192,3 +197,93 @@ def test_invalid_axis_configuration_is_rejected():
         assert "axis_center" in str(error)
     else:
         raise AssertionError("Invalid axis configuration was accepted")
+
+
+def test_disconnect_stops_motors_invalidates_session_and_clears_axis_state():
+    joystick = FakeJoystickPort(
+        events=[{"type": 3, "code": 1, "value": 0}],
+        read_error=OSError("device disappeared")
+    )
+    manual = FakeManualDrivePort()
+    service = JoystickControlService(
+        joystick, manual, poll_seconds=0.001
+    )
+
+    service.start()
+    deadline = time.time() + 0.2
+    while service._thread.is_alive() and time.time() < deadline:
+        time.sleep(0.002)
+
+    assert service._thread.is_alive() is False
+    assert manual.drive_calls[0][1:] == (600, 600)
+    assert manual.stop_calls >= 1
+    assert manual.release_calls == [("local-manual", True)]
+    assert service._acquired is False
+    assert service._translation == 0.0
+    assert service._rotation == 0.0
+    assert service._neutral_required is True
+    assert service._neutral_pending_axes == {1, 3}
+
+
+def test_post_disconnect_restart_blocks_motion_until_both_axes_are_neutral():
+    joystick = FakeJoystickPort(read_error=OSError("Bluetooth lost"))
+    manual = FakeManualDrivePort()
+    service = JoystickControlService(
+        joystick, manual, poll_seconds=0.001
+    )
+
+    service.start()
+    deadline = time.time() + 0.2
+    while service._thread.is_alive() and time.time() < deadline:
+        time.sleep(0.002)
+    assert service._neutral_required is True
+
+    # Reappearance is explicit in S02.07; automatic reconnection belongs to
+    # S02.19. Non-neutral input must not restart the Rover.
+    joystick.closed = False
+    joystick.events = [
+        {"type": 3, "code": 1, "value": 0},
+        {"type": 3, "code": 3, "value": 127},
+        {"type": 3, "code": 1, "value": 127},
+        {"type": 3, "code": 1, "value": 0}
+    ]
+    service.start()
+    deadline = time.time() + 0.2
+    while len(manual.drive_calls) < 1 and time.time() < deadline:
+        time.sleep(0.002)
+    service.stop()
+
+    assert manual.acquire_calls == [
+        ("local-manual", None), ("local-manual", None)
+    ]
+    assert len(manual.drive_calls) == 1
+    assert manual.drive_calls[0][1:] == (600, 600)
+    assert service._neutral_required is False
+
+
+def test_auxiliary_motion_is_blocked_while_post_disconnect_gate_is_active():
+    service, _, manual = build_service()
+    service._neutral_required = True
+    service._neutral_pending_axes = {1, 3}
+
+    service.process_event({"type": 3, "code": 17, "value": -1})
+    service.process_event({"type": 3, "code": 16, "value": 1})
+
+    assert manual.auxiliary_calls == []
+
+
+def test_unexpected_input_failure_still_uses_fail_safe_stop_boundary():
+    joystick = FakeJoystickPort(read_error=RuntimeError("unexpected input error"))
+    manual = FakeManualDrivePort()
+    service = JoystickControlService(
+        joystick, manual, poll_seconds=0.001
+    )
+
+    service.start()
+    deadline = time.time() + 0.2
+    while service._thread.is_alive() and time.time() < deadline:
+        time.sleep(0.002)
+
+    assert manual.stop_calls >= 1
+    assert manual.release_calls == [("local-manual", True)]
+    assert service._neutral_required is True
