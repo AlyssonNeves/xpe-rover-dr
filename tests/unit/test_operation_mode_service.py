@@ -3,6 +3,7 @@
 
 """Tests for Rover operating-mode selection."""
 
+import os
 import unittest
 
 try:
@@ -98,6 +99,59 @@ class Ev3OperationModeSelectorAdapterTests(unittest.TestCase):
             )
         self.assertEqual(CommandModes.LOCAL, selected["command_mode"])
         self.assertEqual(OperationModes.MANUAL, selected["operation_mode"])
+
+    def test_uses_three_graphical_command_control_screens(self):
+        adapter = Ev3OperationModeSelectorAdapter()
+        self.assertEqual(3, len(adapter.BACKGROUND_FILENAMES))
+
+        for modes, filename in adapter.BACKGROUND_FILENAMES.items():
+            self.assertTrue(filename.startswith("Screen 02 - Command Control"))
+            path = adapter._asset_path(*modes)
+            self.assertTrue(os.path.isfile(path), path)
+            background = adapter._load_background(*modes)
+            self.assertEqual((178, 128), background.size)
+            self.assertEqual("1", background.mode)
+            background.close()
+
+    def test_remote_screen_does_not_depend_on_operation_value(self):
+        adapter = Ev3OperationModeSelectorAdapter()
+        self.assertEqual(
+            (CommandModes.REMOTE, None),
+            adapter._background_key(
+                CommandModes.REMOTE,
+                OperationModes.AUTOMATIC
+            )
+        )
+
+    def test_draw_pastes_selected_graphical_background(self):
+        from PIL import Image
+
+        class FakeDisplay(object):
+            def __init__(self):
+                self.image = Image.new("1", (178, 128), 1)
+                self.update_count = 0
+
+            def update(self):
+                self.update_count += 1
+
+        adapter = Ev3OperationModeSelectorAdapter()
+        background = Image.new("1", (178, 128), 0)
+        backgrounds = {
+            (CommandModes.LOCAL, OperationModes.MANUAL): background
+        }
+        display = FakeDisplay()
+
+        adapter._draw(
+            display,
+            backgrounds,
+            CommandModes.LOCAL,
+            OperationModes.MANUAL
+        )
+
+        self.assertEqual(0, display.image.getpixel((20, 20)))
+        self.assertEqual(1, display.update_count)
+        background.close()
+        display.image.close()
 
 
 if __name__ == "__main__":

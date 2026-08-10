@@ -1,7 +1,7 @@
 # Cobertura automatizada
 
 O projeto utiliza cobertura de linhas e branches por meio de `coverage.py`.
-Neste marco, o quality gate inicial exige cobertura global mínima de **60%**.
+O quality gate deste estágio mantém cobertura global mínima de **60%**.
 
 ```bash
 coverage erase
@@ -13,5 +13,8 @@ coverage xml
 A configuração oficial está em `.coveragerc`. O arquivo `coverage.xml` é um artefato
 de execução/CI e não deve ser versionado.
 
+## S02.03
 
-Neste Commit 20 (S02.01), **67 testes** foram aprovados e a cobertura global medida foi de **70%**, mantendo o gate mínimo de 60%.
+O marco S02.03 acrescenta a validação dos assets gráficos PBM e do carregamento das
+telas de seleção de modo do EV3. A suíte completa possui **84 testes aprovados** e cobertura global de **71%**,
+acima do gate mínimo de 60%.

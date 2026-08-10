@@ -21,6 +21,8 @@ pode ser executado sem hardware EV3 físico.
 - contratos abstratos das portas;
 - configuração global de hardware e seleção do modo de operação;
 - controle manual local por joystick sobre as portas existentes, incluindo tração diferencial, motores auxiliares e parada de emergência.
+- integração Linux `evdev` por adapter dedicado para descoberta e leitura do joystick;
+- telas gráficas PBM para a seleção inicial dos modos no display do EV3, com validação de formato e dimensões.
 
 ## Execução
 

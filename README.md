@@ -315,3 +315,15 @@ requests an immediate stop.
 This first increment deliberately depends only on the existing `DrivePort` and
 `MotorPort`. Linux device discovery and `evdev` integration are kept outside
 the application logic and are introduced in the next evolution step.
+
+## Graphical EV3 mode-selection screens
+
+The EV3 operating-mode selector now uses ready-made monochrome PBM artwork sized
+for the 178 x 128 brick display. Three visual states are packaged for the current
+Command/Control combinations: `LOCAL + MANUAL`, `LOCAL + AUTOMATIC` and `REMOTE`.
+The existing EV3 button interaction is preserved while the dynamically drawn
+selection screen is replaced by deterministic graphical assets.
+
+This increment intentionally performs direct PBM loading from `assets/screens`.
+The complete screen catalogue, deployment cache and in-memory PBM reuse are kept
+for the later screen/cache consolidation increment.
