@@ -17,13 +17,15 @@ class ManualDriveService(ManualDrivePort):
     manual session is acquired and retained by the hardware adapter/registry.
     """
 
-    def __init__(self, motor_hardware_port, drive_config, joystick_config,
-                 default_stop_action="brake",
+    def __init__(self, motor_hardware_port, drive_config, mecanum_config,
+                 joystick_config, default_stop_action="brake",
                  motor_state_publisher_port=None):
         if motor_hardware_port is None:
             raise ValueError("motor_hardware_port is required.")
         if not isinstance(drive_config, dict):
             raise ValueError("drive_config is required.")
+        if not isinstance(mecanum_config, dict) or not mecanum_config:
+            raise ValueError("mecanum_config is required.")
         if not isinstance(joystick_config, dict):
             raise ValueError("joystick_config is required.")
 
@@ -37,13 +39,43 @@ class ManualDriveService(ManualDrivePort):
         self._right_auxiliary_motor_code = joystick_config.get(
             "right_auxiliary_motor_code", "RMM"
         )
+        self._mecanum_motor_codes = (
+            mecanum_config.get("front_left_motor_code"),
+            mecanum_config.get("rear_left_motor_code"),
+            mecanum_config.get("front_right_motor_code"),
+            mecanum_config.get("rear_right_motor_code")
+        )
+        if None in self._mecanum_motor_codes:
+            raise ValueError("Mecanum motor codes are required.")
+        if len(set(self._mecanum_motor_codes)) != 4:
+            raise ValueError(
+                "Mecanum motor codes must identify four distinct motors."
+            )
+        self._mecanum_speed_factors = (
+            self._positive_factor(
+                mecanum_config.get("front_left_speed_factor", 1.0),
+                "front_left_speed_factor"
+            ),
+            self._positive_factor(
+                mecanum_config.get("rear_left_speed_factor", 1.0),
+                "rear_left_speed_factor"
+            ),
+            self._positive_factor(
+                mecanum_config.get("front_right_speed_factor", 1.0),
+                "front_right_speed_factor"
+            ),
+            self._positive_factor(
+                mecanum_config.get("rear_right_speed_factor", 1.0),
+                "rear_right_speed_factor"
+            )
+        )
         self._default_stop_action = default_stop_action or "brake"
         self._default_motor_codes = self._unique((
             self._left_motor_code,
             self._right_motor_code,
             self._left_auxiliary_motor_code,
             self._right_auxiliary_motor_code
-        ))
+        ) + self._mecanum_motor_codes)
         self._lock = threading.RLock()
         self._session_id = None
         self._controlled_motor_codes = self._default_motor_codes
@@ -55,6 +87,16 @@ class ManualDriveService(ManualDrivePort):
             if value is not None and value not in result:
                 result.append(value)
         return tuple(result)
+
+    @staticmethod
+    def _positive_factor(value, name):
+        try:
+            factor = float(value)
+        except (TypeError, ValueError):
+            raise ValueError("{} must be numeric.".format(name))
+        if factor <= 0.0:
+            raise ValueError("{} must be positive.".format(name))
+        return factor
 
     def acquire(self, session_id, motor_codes=None):
         if not session_id:
@@ -156,6 +198,52 @@ class ManualDriveService(ManualDrivePort):
                 "direct_hardware": True,
                 "watchdog_enabled": False,
                 "setpoint": (left_speed, right_speed)
+            }
+
+    def apply_mecanum_setpoint(
+            self, session_id, front_left_speed_sp, rear_left_speed_sp,
+            front_right_speed_sp, rear_right_speed_sp, stop_action=None):
+        """Applies four independently calibrated wheel setpoints directly."""
+        raw_speeds = (
+            front_left_speed_sp,
+            rear_left_speed_sp,
+            front_right_speed_sp,
+            rear_right_speed_sp
+        )
+        calibrated = tuple(
+            int(round(float(speed) * factor))
+            for speed, factor in zip(
+                raw_speeds, self._mecanum_speed_factors
+            )
+        )
+
+        with self._lock:
+            invalid = self._validate_session(session_id)
+            if invalid is not None:
+                return invalid
+
+            resolved_stop = stop_action or self._default_stop_action
+            if not any(calibrated):
+                return self._stop_codes(
+                    self._mecanum_motor_codes, resolved_stop
+                )
+
+            for motor_code, speed in zip(
+                    self._mecanum_motor_codes, calibrated):
+                result = self._hardware.run_forever(motor_code, speed)
+                if not result.get("success"):
+                    self._stop_codes(
+                        self._mecanum_motor_codes, resolved_stop
+                    )
+                    return self._failure(motor_code, result)
+                self._publish_state(motor_code, speed, True, True)
+
+            return {
+                "success": True,
+                "direct_hardware": True,
+                "watchdog_enabled": False,
+                "setpoint": calibrated,
+                "motor_codes": list(self._mecanum_motor_codes)
             }
 
     def apply_auxiliary_setpoint(

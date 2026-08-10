@@ -137,6 +137,7 @@ def test_local_manual_joystick_is_wired_to_direct_manual_drive_path(monkeypatch)
     )
 
     assert captured["manual"]["motor_hardware_port"] is hardware
+    assert captured["manual"]["mecanum_config"] == assembly.rover_config.get_mecanum_config()
     assert captured["joystick"]["manual_drive_port"] is manual
     assert "drive_port" not in captured["joystick"]
     assert "motor_port" not in captured["joystick"]

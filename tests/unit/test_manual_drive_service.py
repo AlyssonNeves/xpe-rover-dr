@@ -11,6 +11,16 @@ JOYSTICK = {
     "left_auxiliary_motor_code": "LMM",
     "right_auxiliary_motor_code": "RMM"
 }
+MECANUM = {
+    "front_left_motor_code": "LLM",
+    "rear_left_motor_code": "LMM",
+    "front_right_motor_code": "RLM",
+    "rear_right_motor_code": "RMM",
+    "front_left_speed_factor": 1.0,
+    "rear_left_speed_factor": 1.0,
+    "front_right_speed_factor": 1.0,
+    "rear_right_speed_factor": 1.0
+}
 
 
 class FakeHardware(object):
@@ -48,7 +58,7 @@ class FakeHardware(object):
 def build_service(hardware=None):
     hardware = hardware or FakeHardware()
     service = ManualDriveService(
-        hardware, DRIVE, JOYSTICK, default_stop_action="brake"
+        hardware, DRIVE, MECANUM, JOYSTICK, default_stop_action="brake"
     )
     return service, hardware
 
@@ -164,7 +174,7 @@ def test_direct_drive_publishes_state_through_dedicated_port():
     hardware = FakeHardware()
     publisher = RecordingStatePublisher()
     service = ManualDriveService(
-        hardware, DRIVE, JOYSTICK, default_stop_action="brake",
+        hardware, DRIVE, MECANUM, JOYSTICK, default_stop_action="brake",
         motor_state_publisher_port=publisher
     )
     assert service.acquire("session-1")["success"] is True
@@ -190,7 +200,7 @@ def test_emergency_stop_publishes_stopped_state_without_using_store_directly():
     hardware = FakeHardware()
     publisher = RecordingStatePublisher()
     service = ManualDriveService(
-        hardware, DRIVE, JOYSTICK, default_stop_action="brake",
+        hardware, DRIVE, MECANUM, JOYSTICK, default_stop_action="brake",
         motor_state_publisher_port=publisher
     )
     assert service.acquire("session-1")["success"] is True
@@ -204,3 +214,109 @@ def test_emergency_stop_publishes_stopped_state_without_using_store_directly():
     ]
     assert all(state["speed"] == 0 for _, state in publisher.published)
     assert all(state["state"] == [] for _, state in publisher.published)
+
+
+def test_mecanum_setpoint_drives_all_four_configured_motors():
+    service, hardware = acquire_service()
+    hardware.run_calls[:] = []
+
+    result = service.apply_mecanum_setpoint(
+        "session-1", 100, 200, -300, -400
+    )
+
+    assert result["success"] is True
+    assert result["setpoint"] == (100, 200, -300, -400)
+    assert result["motor_codes"] == ["LLM", "LMM", "RLM", "RMM"]
+    assert hardware.run_calls == [
+        ("LLM", 100), ("LMM", 200),
+        ("RLM", -300), ("RMM", -400)
+    ]
+
+
+def test_mecanum_independent_speed_factors_calibrate_each_wheel():
+    hardware = FakeHardware()
+    calibrated = dict(MECANUM)
+    calibrated.update({
+        "front_left_speed_factor": 0.9,
+        "rear_left_speed_factor": 1.0,
+        "front_right_speed_factor": 0.8,
+        "rear_right_speed_factor": 1.1
+    })
+    service = ManualDriveService(
+        hardware, DRIVE, calibrated, JOYSTICK,
+        default_stop_action="brake"
+    )
+    assert service.acquire("session-1")["success"] is True
+    hardware.run_calls[:] = []
+
+    result = service.apply_mecanum_setpoint(
+        "session-1", 500, 500, 500, 500
+    )
+
+    assert result["setpoint"] == (450, 500, 400, 550)
+    assert hardware.run_calls == [
+        ("LLM", 450), ("LMM", 500),
+        ("RLM", 400), ("RMM", 550)
+    ]
+
+
+def test_zero_mecanum_setpoint_stops_all_four_traction_motors():
+    service, hardware = acquire_service()
+    hardware.stop_calls[:] = []
+
+    result = service.apply_mecanum_setpoint(
+        "session-1", 0, 0, 0, 0
+    )
+
+    assert result["success"] is True
+    assert [item[0] for item in hardware.stop_calls] == [
+        "LLM", "LMM", "RLM", "RMM"
+    ]
+
+
+def test_mecanum_failure_rolls_back_all_four_traction_motors():
+    hardware = FakeHardware()
+    service, hardware = acquire_service(hardware)
+    hardware.stop_calls[:] = []
+    hardware.run_calls[:] = []
+    hardware.run_failures["RLM"] = "front-right motor failed"
+
+    result = service.apply_mecanum_setpoint(
+        "session-1", 300, 300, 300, 300
+    )
+
+    assert result["success"] is False
+    assert result["failed_motor_code"] == "RLM"
+    assert [item[0] for item in hardware.stop_calls] == [
+        "LLM", "LMM", "RLM", "RMM"
+    ]
+
+
+def test_mecanum_requires_four_distinct_motor_codes():
+    invalid = dict(MECANUM)
+    invalid["rear_right_motor_code"] = "RLM"
+
+    try:
+        ManualDriveService(
+            FakeHardware(), DRIVE, invalid, JOYSTICK,
+            default_stop_action="brake"
+        )
+    except ValueError as error:
+        assert "four distinct motors" in str(error)
+    else:
+        raise AssertionError("Invalid Mecanum mapping was accepted.")
+
+
+def test_mecanum_speed_factors_must_be_positive_numbers():
+    invalid = dict(MECANUM)
+    invalid["front_left_speed_factor"] = 0
+
+    try:
+        ManualDriveService(
+            FakeHardware(), DRIVE, invalid, JOYSTICK,
+            default_stop_action="brake"
+        )
+    except ValueError as error:
+        assert "front_left_speed_factor must be positive" in str(error)
+    else:
+        raise AssertionError("Invalid Mecanum speed factor was accepted.")

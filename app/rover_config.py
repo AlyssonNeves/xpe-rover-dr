@@ -137,6 +137,7 @@ MOTOR_DEFINITIONS = ROVER_JSON_CONFIG.get("motor_definitions", {})
 JOYSTICK_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("joystick", {}))
 
 DRIVE_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("drive", {}))
+MECANUM_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("mecanum", {}))
 DRIVE_LEFT_MOTOR_CODE = DRIVE_CONFIG.get("left_motor_code", "LLM")
 DRIVE_RIGHT_MOTOR_CODE = DRIVE_CONFIG.get("right_motor_code", "RLM")
 DRIVE_GYRO_SENSOR_CODE = DRIVE_CONFIG.get("gyro_sensor_code", "GYR")
@@ -165,6 +166,50 @@ if DRIVE_GYRO_SENSOR_CODE not in SENSOR_DEFINITIONS:
     )
 if DRIVE_WHEEL_DIAMETER_MM <= 0 or DRIVE_TRACK_WIDTH_MM <= 0:
     raise RuntimeError("Drive wheel diameter and track width must be positive.")
+
+MECANUM_MOTOR_CODE_KEYS = (
+    "front_left_motor_code",
+    "rear_left_motor_code",
+    "front_right_motor_code",
+    "rear_right_motor_code"
+)
+MECANUM_SPEED_FACTOR_KEYS = (
+    "front_left_speed_factor",
+    "rear_left_speed_factor",
+    "front_right_speed_factor",
+    "rear_right_speed_factor"
+)
+
+if not MECANUM_CONFIG:
+    raise RuntimeError("Mecanum configuration must be defined.")
+
+mecanum_motor_codes = []
+for key in MECANUM_MOTOR_CODE_KEYS:
+    motor_code = MECANUM_CONFIG.get(key)
+    if not motor_code:
+        raise RuntimeError(
+            "Mecanum configuration is missing '{}'.".format(key)
+        )
+    if motor_code not in MOTOR_DEFINITIONS:
+        raise RuntimeError(
+            "Configured Mecanum motor is not defined: {}".format(motor_code)
+        )
+    mecanum_motor_codes.append(motor_code)
+
+if len(set(mecanum_motor_codes)) != 4:
+    raise RuntimeError("Mecanum motor codes must identify four distinct motors.")
+
+for key in MECANUM_SPEED_FACTOR_KEYS:
+    try:
+        factor = float(MECANUM_CONFIG.get(key, 1.0))
+    except (TypeError, ValueError):
+        raise RuntimeError(
+            "Mecanum speed factor '{}' must be numeric.".format(key)
+        )
+    if factor <= 0.0:
+        raise RuntimeError(
+            "Mecanum speed factor '{}' must be positive.".format(key)
+        )
 
 
 def validate_security_configuration():
@@ -220,3 +265,8 @@ def get_joystick_config():
 def get_drive_config():
     """Returns an isolated copy of the differential-drive configuration."""
     return copy.deepcopy(DRIVE_CONFIG)
+
+
+def get_mecanum_config():
+    """Returns an isolated copy of the four-wheel Mecanum calibration."""
+    return copy.deepcopy(MECANUM_CONFIG)

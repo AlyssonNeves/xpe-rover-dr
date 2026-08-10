@@ -76,6 +76,13 @@ def test_configuration_copy_and_invalid_files():
     sensors["TMP"]["name"] = "changed"
     assert rover_config.get_sensor_definitions()["TMP"]["name"] != "changed"
     assert rover_config.get_drive_config()["left_motor_code"] == "LLM"
+    mecanum = rover_config.get_mecanum_config()
+    assert mecanum["front_left_motor_code"] == "LLM"
+    assert mecanum["rear_left_motor_code"] == "LMM"
+    assert mecanum["front_right_motor_code"] == "RLM"
+    assert mecanum["rear_right_motor_code"] == "RMM"
+    mecanum["front_left_speed_factor"] = 99.0
+    assert rover_config.get_mecanum_config()["front_left_speed_factor"] == 1.0
 
     fd, path = tempfile.mkstemp(suffix=".json")
     os.close(fd)

@@ -114,6 +114,7 @@ def build_local_manual_application(operation_mode_service=None,
     manual_drive_port = ManualDriveService(
         motor_hardware_port=motor_hardware_port,
         drive_config=rover_config.get_drive_config(),
+        mecanum_config=rover_config.get_mecanum_config(),
         joystick_config=joystick_config,
         default_stop_action=rover_config.MOTOR_DEFAULT_STOP_ACTION,
         motor_state_publisher_port=motor_state_publisher_port

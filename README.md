@@ -22,6 +22,7 @@ This release consolidates deployment configuration for EV3 and simulation enviro
 - Hexagonal Architecture with explicit application, port, adapter, infrastructure and bootstrap boundaries
 - Dedicated `LOCAL + MANUAL` runtime for low-latency joystick control
 - Direct synchronous motor control isolated from monitoring command queues
+- Four-wheel Mecanum motor mapping with independent per-wheel calibration factors
 - Linux joystick integration through `evdev`
 - Fail-safe stop and neutral-safety barrier after joystick disconnection
 - EV3 graphical mode selection and operational status feedback
@@ -271,6 +272,34 @@ requests an immediate stop.
 This first increment deliberately depends only on the existing `DrivePort` and
 `MotorPort`. Linux device discovery and `evdev` integration are kept outside
 the application logic and are introduced in the next evolution step.
+
+## Mecanum motor calibration
+
+S02.11 prepares the synchronous manual-drive layer for four-wheel Mecanum
+traction without changing the joystick kinematics yet. The configuration now
+defines explicit front-left, rear-left, front-right and rear-right motor codes,
+with one independent speed factor for each wheel. The default baseline factors
+are `1.0`, so this increment introduces the calibration boundary without
+anticipating the polarity/cinematic corrections or the later RPM compensation.
+
+`ManualDriveService.apply_mecanum_setpoint()` writes all four calibrated wheel
+setpoints synchronously through `MotorHardwarePort`. A failure on any wheel
+causes a rollback stop across the complete Mecanum traction set, preserving the
+fail-safe behavior established for differential control. The four configured
+motor codes must be distinct and calibration factors must be positive numeric
+values.
+
+The physical mapping introduced in this increment is:
+
+```text
+front-left  = LLM (outA)
+rear-left   = LMM (outB)
+front-right = RLM (outD)
+rear-right  = RMM (outC)
+```
+
+Joystick Mecanum equations, direction/polarity corrections and operator-facing
+Mecanum mode selection remain intentionally deferred to later Sprint 2 commits.
 
 ## Graphical EV3 mode-selection screens
 

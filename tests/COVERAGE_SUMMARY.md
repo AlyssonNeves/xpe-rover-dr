@@ -58,3 +58,11 @@ gate mínimo de 60%.
 - Gates automatizados verificam direção das dependências, ausência do pacote legado `services/` e compatibilidade sintática com Python 3.5.
 - A suíte completa possui **160 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.
 - A partir deste marco, o quality gate de cobertura global passa a ser **65%**.
+
+## S02.11 - Calibração dos motores Mecanum
+
+- Configuração explícita dos quatro motores de tração Mecanum: `LLM`, `LMM`, `RLM` e `RMM`.
+- Fatores independentes de calibração por roda, inicialmente neutros (`1.0`) para não antecipar as correções de polaridade e RPM.
+- `ManualDrivePort` passa a expor `apply_mecanum_setpoint()` para escrita síncrona dos quatro motores.
+- `ManualDriveService` valida quatro códigos distintos, aplica a calibração individual e realiza rollback dos quatro motores quando qualquer comando falha.
+- A suíte completa possui **166 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.

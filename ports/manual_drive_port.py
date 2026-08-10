@@ -22,6 +22,13 @@ class ManualDrivePort(object, metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
+    def apply_mecanum_setpoint(
+            self, session_id, front_left_speed_sp, rear_left_speed_sp,
+            front_right_speed_sp, rear_right_speed_sp, stop_action=None):
+        """Applies one calibrated four-wheel Mecanum setpoint synchronously."""
+        raise NotImplementedError
+
+    @abstractmethod
     def apply_auxiliary_setpoint(
             self, session_id, motor_code, speed_sp, stop_action=None):
         """Applies one auxiliary-motor setpoint synchronously."""
