@@ -41,6 +41,7 @@ class JoystickControlService(object):
     EVENT_ABSOLUTE = 3
 
     BUTTON_EMERGENCY_STOP = 304
+    BUTTON_FIELD_RECENTER = 307
     AXIS_DIRECTION_HORIZONTAL = 0
     AXIS_STEERING = 3
     AXIS_TRACTION = 1
@@ -74,7 +75,12 @@ class JoystickControlService(object):
             device_name="Wireless Controller",
             connection_retry_seconds=3.0,
             connection_status_port=None,
-            heading_query_port=None):
+            heading_query_port=None,
+            field_heading_reference_port=None,
+            emergency_stop_button_code=BUTTON_EMERGENCY_STOP,
+            field_recenter_button_code=BUTTON_FIELD_RECENTER,
+            field_recenter_enabled=False,
+            field_recenter_requires_neutral=True):
         if manual_drive_port is None:
             raise ValueError("manual_drive_port is required.")
         self.joystick_port = joystick_port
@@ -116,6 +122,22 @@ class JoystickControlService(object):
         self.front = front
         self.centric = centric
         self.heading_query_port = heading_query_port
+        self.field_heading_reference_port = field_heading_reference_port
+        self.emergency_stop_button_code = int(emergency_stop_button_code)
+        self.field_recenter_button_code = int(field_recenter_button_code)
+        if self.emergency_stop_button_code == self.field_recenter_button_code:
+            raise ValueError("Joystick safety button codes must be distinct.")
+        self.field_recenter_enabled = bool(field_recenter_enabled)
+        self.field_recenter_requires_neutral = bool(
+            field_recenter_requires_neutral
+        )
+        if (drive_mode == self.DRIVE_MECANUM and
+                centric == self.CENTRIC_FIELD and
+                self.field_recenter_enabled and
+                self.field_heading_reference_port is None):
+            raise ValueError(
+                "FIELD recenter requires FieldHeadingReferenceCommandPort."
+            )
         self.mecanum_strafe_compensation = float(mecanum_strafe_compensation)
         if self.mecanum_strafe_compensation <= 0.0:
             raise ValueError("mecanum_strafe_compensation must be positive.")
@@ -296,10 +318,13 @@ class JoystickControlService(object):
         code = event.get("code")
         value = event.get("value")
 
-        if (event_type == self.EVENT_KEY and
-                code == self.BUTTON_EMERGENCY_STOP and value):
-            self.emergency_stop()
-            return
+        if event_type == self.EVENT_KEY and value:
+            if code == self.emergency_stop_button_code:
+                self.emergency_stop()
+                return
+            if code == self.field_recenter_button_code:
+                self._handle_field_recenter()
+                return
 
         if event_type != self.EVENT_ABSOLUTE:
             return
@@ -330,6 +355,50 @@ class JoystickControlService(object):
             self._apply_auxiliary(
                 self.right_auxiliary_motor_code, value
             )
+
+
+    def _handle_field_recenter(self):
+        """Redefines the FIELD zero from fresh cached heading when safe."""
+        if not self._field_recenter_is_applicable():
+            return False
+
+        if (self.field_recenter_requires_neutral and
+                not self._field_recenter_controls_neutral()):
+            self.logger.error(
+                "FIELD zero not redefined: traction controls must be neutral."
+            )
+            return False
+
+        result = (
+            self.field_heading_reference_port.set_current_heading_as_zero()
+        )
+        if not result.get("success"):
+            self.logger.error(
+                "FIELD zero not redefined: fresh gyro heading unavailable."
+            )
+            return False
+
+        self.logger.status(
+            "FIELD zero redefined from canonical heading {0:.2f} deg.".format(
+                float(result["reference_heading_deg"])
+            )
+        )
+        return True
+
+    def _field_recenter_is_applicable(self):
+        return (
+            self.field_recenter_enabled and
+            self.drive_mode == self.DRIVE_MECANUM and
+            self.centric == self.CENTRIC_FIELD and
+            self.field_heading_reference_port is not None
+        )
+
+    def _field_recenter_controls_neutral(self):
+        return (
+            self._strafe == 0.0 and
+            self._translation == 0.0 and
+            self._rotation == 0.0
+        )
 
     def _process_mecanum_axis(self, code, value):
         """Updates CHASSIS-centric Mecanum state from the three drive axes."""

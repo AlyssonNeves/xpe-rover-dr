@@ -122,7 +122,11 @@
     "auto_connect": true,
     "connection_retry_seconds": 3.0,
     "connection_timeout_seconds": 10.0,
-    "discovery_poll_seconds": 0.25
+    "discovery_poll_seconds": 0.25,
+    "button_codes": {
+      "emergency_stop": 304,
+      "field_recenter": 307
+    }
   },
   "drive": {
     "left_motor_code": "LLM",
@@ -153,6 +157,8 @@
     "reset_on_start": true,
     "angle_sign": -1.0,
     "angle_offset_deg": 0.0,
-    "max_consecutive_failures": 3
+    "max_consecutive_failures": 3,
+    "runtime_recenter_enabled": true,
+    "recenter_requires_neutral": true
   }
 }

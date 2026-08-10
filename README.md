@@ -520,3 +520,17 @@ consumindo exclusivamente `HeadingQueryPort`, portanto nenhuma operação físic
 do giroscópio entra no caminho crítico do controle. O monitor é montado somente
 para `MECANUM + FIELD`; `DIFFERENTIAL` e `MECANUM + CHASSIS` permanecem sem esse
 I/O adicional. O recenter do zero operacional permanece reservado ao S02.22.
+
+## S02.22 - Recenter do heading FIELD
+
+O controle `LOCAL + MANUAL + MECANUM + FIELD` passa a permitir redefinir, em
+runtime, o zero operacional do heading pelo botão Triangle (`BTN_NORTH`, código
+307). O `FieldHeadingReferenceService` envolve a consulta canônica do gyro sem
+realizar I/O físico ou resetar o sensor: o cache e as consultas REST continuam
+expondo o heading canônico, enquanto apenas o pipeline FIELD utiliza o valor
+relativo à referência do operador.
+
+Por segurança, o recenter somente é aceito com heading fresco e com os três
+eixos de tração (`X`, `Y` e `RX`) neutros. A referência é mantida em memória e
+normalizada para `[-180, 180)`. O botão de parada de emergência permanece no
+código 304 e o recenter utiliza o código 307.

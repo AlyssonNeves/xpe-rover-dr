@@ -211,6 +211,20 @@ def validate_joystick_configuration(configuration):
             "joystick.device_address is required when auto_connect is enabled."
         )
 
+    button_codes = configuration.get("button_codes", {
+        "emergency_stop": 304,
+        "field_recenter": 307
+    })
+    if not isinstance(button_codes, dict):
+        raise RuntimeError("joystick.button_codes must be an object.")
+    try:
+        emergency_stop_code = int(button_codes.get("emergency_stop", 304))
+        field_recenter_code = int(button_codes.get("field_recenter", 307))
+    except (TypeError, ValueError):
+        raise RuntimeError("joystick.button_codes values must be integers.")
+    if emergency_stop_code == field_recenter_code:
+        raise RuntimeError("joystick.button_codes values must be distinct.")
+
     configuration["axis_center"] = center
     configuration["axis_deadzone"] = deadzone
     configuration["axis_max"] = maximum
@@ -221,6 +235,10 @@ def validate_joystick_configuration(configuration):
     configuration["connection_retry_seconds"] = retry_seconds
     configuration["connection_timeout_seconds"] = timeout_seconds
     configuration["discovery_poll_seconds"] = discovery_poll_seconds
+    configuration["button_codes"] = {
+        "emergency_stop": emergency_stop_code,
+        "field_recenter": field_recenter_code
+    }
     return configuration
 
 
@@ -238,6 +256,8 @@ FIELD_HEADING_CONFIG = copy.deepcopy(
         "reset_on_start": True,
         "angle_sign": -1.0,
         "angle_offset_deg": 0.0,
+        "runtime_recenter_enabled": True,
+        "recenter_requires_neutral": True,
         "max_consecutive_failures": 3
     })
 )
@@ -396,6 +416,12 @@ def validate_field_heading_configuration(configuration):
     )
     configuration["angle_sign"] = angle_sign
     configuration["angle_offset_deg"] = angle_offset_deg
+    configuration["runtime_recenter_enabled"] = parse_boolean(
+        configuration.get("runtime_recenter_enabled"), default=True
+    )
+    configuration["recenter_requires_neutral"] = parse_boolean(
+        configuration.get("recenter_requires_neutral"), default=True
+    )
     configuration["max_consecutive_failures"] = max_failures
     return configuration
 

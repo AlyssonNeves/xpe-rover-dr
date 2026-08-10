@@ -162,3 +162,12 @@ gate mínimo de 60%.
 - O monitor dedicado é montado somente em `LOCAL + MANUAL + MECANUM + FIELD`; CHASSIS e Differential continuam sem monitor de giroscópio.
 - Consultas REST do sensor `GYR` usam o mesmo heading em cache e nunca fazem I/O físico na requisição.
 - A suíte completa possui **247 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.
+
+## S02.22 - Recenter do heading FIELD
+
+- Novo `FieldHeadingReferenceCommandPort` e `FieldHeadingReferenceService` para redefinir o zero operacional sem resetar o giroscópio nem alterar o cache canônico.
+- Botão Triangle (`307`) redefine o heading FIELD somente com amostra fresca e controles de tração neutros; o botão de emergência permanece em `304`.
+- `HeadingStateQueryAdapter` continua como fonte canônica e o serviço de referência é usado apenas pelo caminho de controle FIELD.
+- O snapshot da referência preserva `canonical_heading_deg`, `reference_heading_deg` e o heading operacional relativo normalizado para `[-180, 180)`.
+- `runtime_recenter_enabled`, `recenter_requires_neutral` e os códigos dos botões passam a ser configuração explícita e validada.
+- A suíte completa possui **258 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.

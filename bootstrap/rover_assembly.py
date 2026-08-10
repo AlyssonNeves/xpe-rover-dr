@@ -31,6 +31,7 @@ from app.operation_mode_service import (
 )
 from app.rover_application import RoverApplication
 from app.services.drive_service import DriveService
+from app.services.field_heading_reference_service import FieldHeadingReferenceService
 from app.services.joystick_control_service import JoystickControlService
 from app.services.manual_drive_service import ManualDriveService
 from app.services.rover_state_service import RoverStateService
@@ -94,6 +95,7 @@ def build_local_manual_application(operation_mode_service=None,
     motor_state_store = MotorStateStore()
     sensor_definitions = rover_config.get_sensor_definitions()
     monitors = []
+    canonical_heading_query_port = heading_query_port
 
     if is_field_mode and heading_query_port is None:
         heading_config = rover_config.get_field_heading_config()
@@ -111,6 +113,7 @@ def build_local_manual_application(operation_mode_service=None,
             heading_store,
             max_age_seconds=heading_config.get("max_age_seconds", 0.1)
         )
+        canonical_heading_query_port = heading_query_port
         gyro_hardware = Ev3GyroSensorAdapter(
             address=gyro_definition.get("address", "in3"),
             mode=gyro_definition.get("mode", "GYRO-ANG"),
@@ -143,6 +146,7 @@ def build_local_manual_application(operation_mode_service=None,
             heading_query_port=heading_query_port
         )
     elif is_field_mode and heading_query_port is not None:
+        canonical_heading_query_port = heading_query_port
         gyro_sensor_code = rover_config.get_field_heading_config().get(
             "sensor_code", "GYR"
         )
@@ -153,6 +157,13 @@ def build_local_manual_application(operation_mode_service=None,
         )
     else:
         sensor_port = LocalManualSensorQueryAdapter(sensor_definitions)
+
+    field_heading_reference_port = None
+    if is_field_mode:
+        field_heading_reference_port = FieldHeadingReferenceService(
+            canonical_heading_query_port
+        )
+        heading_query_port = field_heading_reference_port
 
     motor_port = LocalManualMotorQueryAdapter(
         motor_state_store,
@@ -261,7 +272,22 @@ def build_local_manual_application(operation_mode_service=None,
                 "connection_retry_seconds", 3.0
             ),
             connection_status_port=joystick_connection_status_port,
-            heading_query_port=heading_query_port
+            heading_query_port=heading_query_port,
+            field_heading_reference_port=field_heading_reference_port,
+            emergency_stop_button_code=joystick_config.get(
+                "button_codes", {}
+            ).get("emergency_stop", 304),
+            field_recenter_button_code=joystick_config.get(
+                "button_codes", {}
+            ).get("field_recenter", 307),
+            field_recenter_enabled=rover_config.get_field_heading_config().get(
+                "runtime_recenter_enabled", True
+            ),
+            field_recenter_requires_neutral=(
+                rover_config.get_field_heading_config().get(
+                    "recenter_requires_neutral", True
+                )
+            )
         )
         managed_services.extend([joystick_control_service, manual_drive_port])
     else:

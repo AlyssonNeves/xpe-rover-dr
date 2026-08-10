@@ -13,6 +13,7 @@ from adapters.out_local_manual_queries import FieldManualSensorQueryAdapter
 from adapters.out_heading_state import HeadingStateQueryAdapter
 from app import rover_config
 from app.operation_mode_service import Centrics, Drives, OperationModeService
+from app.services.field_heading_reference_service import FieldHeadingReferenceService
 from app.services.joystick_control_service import JoystickControlService
 from bootstrap import rover_assembly
 from infrastructure.monitoring.gyro_heading_monitor import GyroHeadingMonitor
@@ -295,6 +296,10 @@ def test_field_hardware_graph_autowires_only_dedicated_gyro_monitor(monkeypatch)
     assert len(joystick_services) == 1
     assert isinstance(
         joystick_services[0].heading_query_port,
+        FieldHeadingReferenceService
+    )
+    assert isinstance(
+        joystick_services[0].heading_query_port._canonical_heading_query_port,
         HeadingStateQueryAdapter
     )
 
