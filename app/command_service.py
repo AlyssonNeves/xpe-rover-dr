@@ -36,13 +36,15 @@ class CommandService(object):
         motor_port,
         controller_port,
         rover_state_port=None,
-        drive_port=None
+        drive_port=None,
+        operation_mode_service=None
     ):
         self.sensor_port = sensor_port
         self.motor_port = motor_port
         self.controller_port = controller_port
         self.rover_state_port = rover_state_port
         self.drive_port = drive_port
+        self.operation_mode_service = operation_mode_service
         self._handlers = CommandHandlerRegistry((
             SensorCommandHandler(CommandTargets.SENSOR, self._execute_sensor),
             MotorCommandHandler(CommandTargets.MOTOR, self._execute_motor),
@@ -62,12 +64,46 @@ class CommandService(object):
         if validation is not None:
             return validation
 
+        authorization = self._authorize_local_manual(target, action)
+        if authorization is not None:
+            return authorization
+
         handler = self._handlers.get(target)
         if handler is None:
             return CommandResult.bad_request(
                 "Unsupported command target: {}".format(target)
             )
         return handler.handle(action, params or {})
+
+    def _authorize_local_manual(self, target, action):
+        if self.operation_mode_service is None:
+            return None
+        mode = self.operation_mode_service.get_mode()
+        if not (
+                mode.get("command") == "LOCAL" and
+                mode.get("control") == "MANUAL"):
+            return None
+
+        motor_writes = (
+            CommandActions.STOP_MOTOR,
+            CommandActions.RUN_TIMED_MOTOR,
+            CommandActions.RUN_FOREVER_MOTOR,
+            CommandActions.RUN_TO_REL_POS_MOTOR,
+            CommandActions.RESET_MOTOR,
+            CommandActions.CANCEL_MOTOR_COMMANDS,
+            CommandActions.RUN_SYNCHRONIZED_MOTORS
+        )
+        if target == CommandTargets.MOTOR and action in motor_writes:
+            return CommandResult.conflict(
+                "Motor writes are unavailable while LOCAL + MANUAL control "
+                "owns the motor hardware."
+            )
+        if target == CommandTargets.DRIVE:
+            return CommandResult.conflict(
+                "Drive commands are unavailable while LOCAL + MANUAL control "
+                "owns the motor hardware."
+            )
+        return None
 
     @staticmethod
     def _validate_envelope(target, action, params):

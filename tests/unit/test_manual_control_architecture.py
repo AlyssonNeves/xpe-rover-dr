@@ -81,3 +81,19 @@ def test_hardware_write_and_state_publication_are_separate_contracts():
     assert "publish_motor_state" not in hardware_methods
     assert "run_forever" not in publisher_methods
     assert "stop" not in publisher_methods
+
+
+def test_direct_motor_adapter_does_not_import_motor_monitor():
+    imports = _imports("adapters/out_ev3_motor_hardware.py")
+    assert "services.motor_monitor" not in imports
+
+
+def test_local_manual_runtime_builder_does_not_reference_monitor_registry():
+    source = (ROOT / "main.py").read_text()
+    start = source.index("def _build_local_manual_application")
+    end = source.index("def _build_standard_application")
+    local_builder = source[start:end]
+    assert "MotorMonitor(" not in local_builder
+    assert "SensorMonitor(" not in local_builder
+    assert "ControllerMonitor(" not in local_builder
+    assert "Ev3Dev2MotorGateway(" not in local_builder

@@ -362,3 +362,17 @@ O caminho `LOCAL + MANUAL` utiliza contratos explícitos para entrada do joystic
 controle síncrono, escrita física e publicação de estado. O serviço de controle
 manual não acessa `MotorMonitor`, `MotorStateStore` ou adaptadores concretos;
 estados produzidos pelo caminho direto são publicados por `MotorStatePublisherPort`.
+
+### S02.09 - Consolidação do runtime LOCAL + MANUAL
+
+O modo `LOCAL + MANUAL` passa a possuir um grafo de execução dedicado. Nesse
+runtime não são instanciados `SensorMonitor`, `MotorMonitor`, `ControllerMonitor`,
+`DriveService` nem `Ev3Dev2MotorGateway`; o joystick controla diretamente o
+`ManualDriveService`, que escreve de forma síncrona no hardware e publica os
+snapshots de motores para consultas REST somente leitura.
+
+Em hardware real, o composition root conecta automaticamente o
+`EvdevJoystickAdapter` ao serviço de controle manual. Sensores e informações do
+controlador permanecem consultáveis por adaptadores read-only sem threads de
+monitoração, e comandos REST de escrita em motores/drive retornam conflito enquanto
+o controle `LOCAL + MANUAL` possui o hardware.

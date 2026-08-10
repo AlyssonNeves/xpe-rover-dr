@@ -39,3 +39,11 @@ gate mínimo de 60%.
 - Contratos explícitos: `JoystickPort`, `ManualDrivePort`, `MotorHardwarePort` e `MotorStatePublisherPort`.
 - Publicação de estado do controle direto desacoplada do repositório por `MotorStateStorePublisherAdapter`.
 - Testes AST impedem dependências do núcleo manual em adaptadores, `MotorMonitor` e `MotorStateStore`.
+
+## S02.09 - Runtime LOCAL + MANUAL dedicado
+
+- Grafo `LOCAL + MANUAL` sem `SensorMonitor`, `MotorMonitor`, `ControllerMonitor`, filas ou `Ev3Dev2MotorGateway`.
+- `EvdevJoystickAdapter` montado automaticamente em hardware real.
+- Consultas REST preservadas por adaptadores read-only e snapshots publicados pelo controle manual.
+- Escritas REST de motor/drive bloqueadas enquanto o controle manual possui o hardware.
+- A suíte completa possui **147 testes aprovados**.

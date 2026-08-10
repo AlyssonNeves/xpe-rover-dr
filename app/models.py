@@ -74,6 +74,10 @@ class CommandResult(object):
         return cls(False, status_code=405, error=message)
 
     @classmethod
+    def conflict(cls, message):
+        return cls(False, status_code=409, error=message)
+
+    @classmethod
     def service_unavailable(cls, message):
         return cls(False, status_code=503, error=message)
 
