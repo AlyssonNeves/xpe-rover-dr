@@ -428,3 +428,19 @@ parâmetro `profile` é validado pela aplicação e propagado tanto para comando
 individuais/sincronizados de motor quanto para `drive/tank`, deslocamentos,
 rotações e curvas. Os ajustes de resposta do joystick permanecem reservados ao
 S02.17.
+
+## S02.16 - Fluxo canônico de seleção dos modos do Rover
+
+O estado operacional passa a ser representado por um único `RoverOperationMode`,
+contendo `Command`, `Control`, `Front`, `Drive` e `Centric`. As regras de
+aplicabilidade são centralizadas: `REMOTE` elimina todos os parâmetros locais,
+`LOCAL` exige `Control`, `Front` e `Drive`, `DIFFERENTIAL` torna `Centric` não
+aplicável e `MECANUM` aceita `CHASSIS` ou `FIELD`.
+
+No EV3, a seleção ocorre em duas etapas: `Command + Control` e, quando o comando
+é `LOCAL`, `Front + Drive + Centric`. O composition root passa a encaminhar o
+`Drive` e o `Centric` selecionados ao controle manual em vez de fixar
+`MECANUM + CHASSIS`. O modo `FIELD` já pertence ao modelo e à interface, mas é
+rejeitado no runtime manual até a integração de uma fonte de heading nos commits
+S02.20/S02.21. O snapshot consolidado REST passa a expor os cinco parâmetros em
+uma única estrutura canônica.

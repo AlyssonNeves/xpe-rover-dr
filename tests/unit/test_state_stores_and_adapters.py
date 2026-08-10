@@ -64,3 +64,19 @@ def test_controller_store_adapter_and_rover_state_aggregation():
     assert query.get_rover_state()["controller"]["status"] == "ok"
     store.clear()
     assert store.get_controller_status() == {}
+
+
+def test_rover_state_exposes_canonical_operation_snapshot():
+    from app.operation_mode_service import Centrics, Drives, Fronts, OperationModeService
+
+    mode_service = OperationModeService(
+        front=Fronts.TAIL, drive=Drives.MECANUM, centric=Centrics.CHASSIS
+    )
+    service = RoverStateService(
+        FakeSensorPort(), FakeMotorPort(), FakeControllerPort(),
+        operation_mode_service=mode_service
+    )
+    assert service.get_rover_state()["operation_mode"] == {
+        "command": "LOCAL", "control": "MANUAL", "front": "TAIL",
+        "drive": "MECANUM", "centric": "CHASSIS"
+    }

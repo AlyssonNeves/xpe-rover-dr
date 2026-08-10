@@ -29,5 +29,5 @@ class RoverStateService(object):
             "timestamp": datetime.now().strftime("%d/%m/%y %H:%M:%S.%f")[:-3]
         }
         if self.operation_mode_service is not None:
-            snapshot["operation_mode"] = self.operation_mode_service.get_mode()
+            snapshot["operation_mode"] = self.operation_mode_service.get_snapshot()
         return snapshot

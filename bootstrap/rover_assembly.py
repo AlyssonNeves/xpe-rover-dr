@@ -8,6 +8,7 @@ from adapters.in_rest_api_server import RestApiServer
 from adapters.out_controller_monitor import ControllerMonitorAdapter
 from adapters.out_drive_service import DriveServiceAdapter
 from adapters.out_ev3_command_control_selector import Ev3CommandControlSelectorAdapter
+from adapters.out_ev3_local_drive_setup_selector import Ev3LocalDriveSetupSelectorAdapter
 from adapters.out_ev3_motor_hardware import Ev3MotorHardwareAdapter
 from adapters.out_ev3_operation_status import Ev3OperationStatusAdapter
 from adapters.out_ev3_operator_alert import Ev3OperatorAlertAdapter
@@ -22,7 +23,9 @@ from adapters.out_rover_state_query import RoverStateQueryAdapter
 from adapters.out_sensor_monitor import SensorMonitorAdapter
 from app import rover_config
 from app.command_service import CommandService
-from app.operation_mode_service import Commands, Controls, OperationModeService
+from app.operation_mode_service import (
+    Centrics, Commands, Controls, Drives, OperationModeService
+)
 from app.rover_application import RoverApplication
 from app.services.drive_service import DriveService
 from app.services.joystick_control_service import JoystickControlService
@@ -43,15 +46,9 @@ from infrastructure.state.sensor_state_store import SensorStateStore
 
 
 def _is_local_manual(operation_mode_service):
-    selected = (
-        operation_mode_service.get_mode()
-        if operation_mode_service is not None
-        else {"command": Commands.LOCAL, "control": Controls.MANUAL}
-    )
-    return (
-        selected.get("command") == Commands.LOCAL and
-        selected.get("control") == Controls.MANUAL
-    )
+    if operation_mode_service is None:
+        return True
+    return operation_mode_service.get_mode().is_local_manual()
 
 
 def build_rover_application(operation_mode_service=None, joystick_port=None):
@@ -70,6 +67,17 @@ def build_local_manual_application(operation_mode_service=None,
                                    joystick_port=None):
     """Builds the minimal deterministic LOCAL + MANUAL runtime graph."""
     mode_service = operation_mode_service or OperationModeService()
+    operation_mode = mode_service.get_mode()
+    if not operation_mode.is_local_manual():
+        raise RuntimeError(
+            "LOCAL + MANUAL runtime requires a LOCAL/MANUAL operation mode."
+        )
+    if (operation_mode.drive == Drives.MECANUM and
+            operation_mode.centric == Centrics.FIELD):
+        raise RuntimeError(
+            "FIELD-centric Mecanum control requires a live heading source; "
+            "gyro integration is introduced in S02.20/S02.21."
+        )
     motor_state_store = MotorStateStore()
 
     sensor_port = LocalManualSensorQueryAdapter(
@@ -155,8 +163,8 @@ def build_local_manual_application(operation_mode_service=None,
             right_auxiliary_motor_code=joystick_config.get(
                 "right_auxiliary_motor_code", "RMM"
             ),
-            drive_mode="MECANUM",
-            centric="CHASSIS",
+            drive_mode=operation_mode.drive,
+            centric=operation_mode.centric or Centrics.CHASSIS,
             mecanum_strafe_compensation=rover_config.get_mecanum_config().get(
                 "strafe_compensation", 1.0
             ),
@@ -319,25 +327,53 @@ def validate_startup_configuration():
 
 
 def select_operation_mode():
-    """Selects Command & Control and returns its application service."""
+    """Selects the canonical Command/Control/Front/Drive/Centric mode."""
     if not rover_config.HARDWARE_ENABLED:
         service = OperationModeService()
+        selected = service.get_snapshot()
         AppLogger.status(
-            "Physical hardware disabled; using default LOCAL/MANUAL mode."
+            "Physical hardware disabled; using default "
+            "LOCAL/MANUAL/NOSE/DIFFERENTIAL mode."
         )
         return service
 
     service = OperationModeService(
-        command_control_selector_port=Ev3CommandControlSelectorAdapter()
+        command_control_selector_port=Ev3CommandControlSelectorAdapter(),
+        local_drive_selector_port=Ev3LocalDriveSetupSelectorAdapter()
     )
-    AppLogger.status("Waiting for the operator to select the Rover mode.")
+    AppLogger.status(
+        "Waiting for the operator to select Command and Control."
+    )
     selected = service.select_command_control()
     if selected is None:
         AppLogger.status("Rover startup cancelled by the operator.")
         return None
+
+    if selected["command"] == Commands.LOCAL:
+        AppLogger.status(
+            "Waiting for the operator to select Front, Drive and Centric."
+        )
+        selected = service.select_local_drive()
+        if selected is None:
+            AppLogger.status("Rover startup cancelled by the operator.")
+            return None
+
+    if (selected["drive"] == Drives.MECANUM and
+            selected["centric"] == Centrics.FIELD):
+        AppLogger.error(
+            "FIELD-centric Mecanum control is not available until a live "
+            "heading source is integrated."
+        )
+        return None
+
     AppLogger.status(
-        "Selected mode: {0}/{1}.".format(
-            selected["command"], selected["control"] or "N/A"
+        "Selected mode: command={0}, control={1}, front={2}, drive={3}, "
+        "centric={4}.".format(
+            selected["command"],
+            selected["control"] or "N/A",
+            selected["front"] or "N/A",
+            selected["drive"] or "N/A",
+            selected["centric"] or "N/A"
         )
     )
     return service

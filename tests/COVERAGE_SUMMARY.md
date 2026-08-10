@@ -103,3 +103,13 @@ gate mínimo de 60%.
 - `MotorCommandExecutor` centraliza o mapeamento de perfil e a emissão do comando ao repositório de drivers.
 - Comandos REST individuais, sincronizados e de navegação validam e propagam `profile`.
 - A suíte completa possui **194 testes aprovados**, com **75% de cobertura combinada de linhas e branches**.
+
+## S02.16 - Fluxo canônico de seleção dos modos do Rover
+
+- `RoverOperationMode` centraliza `command`, `control`, `front`, `drive` e `centric`.
+- `REMOTE` torna `control/front/drive/centric` não aplicáveis; `DIFFERENTIAL` torna `centric` não aplicável.
+- Novo `LocalDriveSetupSelectorPort` e adaptador EV3 para `Front/Drive/Centric`, reutilizando as seis telas PBM do S02.13.
+- O composition root executa a seleção local somente para `LOCAL` e passa `DIFFERENTIAL`/`MECANUM` e `CHASSIS` ao pipeline manual conforme a escolha do operador.
+- `MECANUM + FIELD` é reconhecido pelo modelo, mas permanece bloqueado até existir fonte de heading no S02.20/S02.21.
+- `/api/state` expõe o snapshot canônico completo do modo operacional.
+- A suíte completa possui **200 testes aprovados**, com **81% de cobertura combinada de linhas e branches**.

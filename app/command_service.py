@@ -82,9 +82,7 @@ class CommandService(object):
         if self.operation_mode_service is None:
             return None
         mode = self.operation_mode_service.get_mode()
-        if not (
-                mode.get("command") == "LOCAL" and
-                mode.get("control") == "MANUAL"):
+        if not mode.is_local_manual():
             return None
 
         motor_writes = (

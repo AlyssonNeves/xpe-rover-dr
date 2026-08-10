@@ -165,7 +165,7 @@ class Ev3OperationStatusAdapter(object):
         if self.operation_mode_service is None:
             return {}
         try:
-            return self.operation_mode_service.get_mode()
+            return self.operation_mode_service.get_snapshot()
         except (AttributeError, RuntimeError, TypeError, ValueError):
             return {}
 

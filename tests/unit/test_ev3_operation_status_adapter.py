@@ -81,7 +81,7 @@ class Ev3OperationStatusAdapterTests(unittest.TestCase):
 
     def test_read_values_combines_battery_network_joystick_and_modes(self):
         mode_service = mock.Mock()
-        mode_service.get_mode.return_value = {
+        mode_service.get_snapshot.return_value = {
             "command": "LOCAL",
             "control": "MANUAL"
         }
@@ -108,7 +108,7 @@ class Ev3OperationStatusAdapterTests(unittest.TestCase):
 
     def test_remote_mode_displays_control_as_not_applicable(self):
         mode_service = mock.Mock()
-        mode_service.get_mode.return_value = {
+        mode_service.get_snapshot.return_value = {
             "command": "REMOTE",
             "control": None
         }

@@ -16,26 +16,43 @@ class FakeApplication(object):
 def test_mode_selection_defaults_without_physical_hardware(monkeypatch):
     monkeypatch.setattr(assembly.rover_config, "HARDWARE_ENABLED", False)
     service = assembly.select_operation_mode()
-    assert service.get_mode() == {"command": "LOCAL", "control": "MANUAL"}
+    assert service.get_snapshot() == {
+        "command": "LOCAL", "control": "MANUAL", "front": "NOSE",
+        "drive": "DIFFERENTIAL", "centric": None
+    }
 
 
-def test_mode_selection_uses_ev3_selector_in_hardware_mode(monkeypatch):
+def test_mode_selection_uses_ev3_selectors_and_remote_skips_local_setup(monkeypatch):
     monkeypatch.setattr(assembly.rover_config, "HARDWARE_ENABLED", True)
-    selector = object()
+    command_selector = object()
+    local_selector = object()
     monkeypatch.setattr(
-        assembly, "Ev3CommandControlSelectorAdapter", lambda: selector
+        assembly, "Ev3CommandControlSelectorAdapter", lambda: command_selector
     )
-    selected = {"command": "REMOTE", "control": None}
+    monkeypatch.setattr(
+        assembly, "Ev3LocalDriveSetupSelectorAdapter", lambda: local_selector
+    )
+    selected = {
+        "command": "REMOTE", "control": None, "front": None,
+        "drive": None, "centric": None
+    }
 
     class FakeModeService(object):
-        def __init__(self, command_control_selector_port=None):
-            assert command_control_selector_port is selector
-        def select_command_control(self): return selected
-        def get_mode(self): return dict(selected)
+        def __init__(self, command_control_selector_port=None,
+                     local_drive_selector_port=None):
+            assert command_control_selector_port is command_selector
+            assert local_drive_selector_port is local_selector
+            self.local_called = False
+        def select_command_control(self): return dict(selected)
+        def select_local_drive(self):
+            self.local_called = True
+            raise AssertionError("REMOTE must skip local setup")
+        def get_snapshot(self): return dict(selected)
 
     monkeypatch.setattr(assembly, "OperationModeService", FakeModeService)
     service = assembly.select_operation_mode()
-    assert service.get_mode() == selected
+    assert service.get_snapshot() == selected
+    assert service.local_called is False
 
 
 def test_invalid_security_skips_ev3_alert_when_hardware_disabled(monkeypatch):
@@ -130,7 +147,9 @@ def test_local_manual_joystick_is_wired_to_direct_manual_drive_path(monkeypatch)
         assembly, "Ev3OperationStatusAdapter", lambda **kwargs: object()
     )
 
-    mode_service = assembly.OperationModeService()
+    mode_service = assembly.OperationModeService(
+        drive=assembly.Drives.MECANUM, centric=assembly.Centrics.CHASSIS
+    )
     application = assembly.build_rover_application(
         operation_mode_service=mode_service,
         joystick_port=object()
@@ -145,3 +164,47 @@ def test_local_manual_joystick_is_wired_to_direct_manual_drive_path(monkeypatch)
     assert "drive_port" not in captured["joystick"]
     assert "motor_port" not in captured["joystick"]
     assert joystick_service in application.managed_services
+
+
+def test_local_mode_selection_runs_front_drive_centric_selector(monkeypatch):
+    monkeypatch.setattr(assembly.rover_config, "HARDWARE_ENABLED", True)
+    command_selector = object()
+    local_selector = object()
+    monkeypatch.setattr(
+        assembly, "Ev3CommandControlSelectorAdapter", lambda: command_selector
+    )
+    monkeypatch.setattr(
+        assembly, "Ev3LocalDriveSetupSelectorAdapter", lambda: local_selector
+    )
+    service = assembly.OperationModeService(
+        command_control_selector_port=type(
+            "CommandSelector", (), {
+                "select_mode": lambda self, command, control: {
+                    "command": "LOCAL", "control": "MANUAL"
+                }
+            }
+        )(),
+        local_drive_selector_port=type(
+            "LocalSelector", (), {
+                "select_setup": lambda self, front, drive, centric: {
+                    "front": "TAIL", "drive": "MECANUM", "centric": "CHASSIS"
+                }
+            }
+        )()
+    )
+    monkeypatch.setattr(assembly, "OperationModeService", lambda **kwargs: service)
+    selected_service = assembly.select_operation_mode()
+    assert selected_service.get_snapshot() == {
+        "command": "LOCAL", "control": "MANUAL", "front": "TAIL",
+        "drive": "MECANUM", "centric": "CHASSIS"
+    }
+
+
+def test_field_selection_is_rejected_until_heading_pipeline_exists(monkeypatch):
+    monkeypatch.setattr(assembly.rover_config, "HARDWARE_ENABLED", True)
+    service = assembly.OperationModeService(
+        drive=assembly.Drives.MECANUM,
+        centric=assembly.Centrics.FIELD
+    )
+    with __import__("pytest").raises(RuntimeError, match="live heading source"):
+        assembly.build_local_manual_application(operation_mode_service=service)
