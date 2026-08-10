@@ -113,3 +113,12 @@ gate mínimo de 60%.
 - `MECANUM + FIELD` é reconhecido pelo modelo, mas permanece bloqueado até existir fonte de heading no S02.20/S02.21.
 - `/api/state` expõe o snapshot canônico completo do modo operacional.
 - A suíte completa possui **200 testes aprovados**, com **81% de cobertura combinada de linhas e branches**.
+
+## S02.17 - Deadzone e resposta exponencial do joystick
+
+- `axis_center`, `axis_deadzone`, `axis_max` e `axis_response_intensity` passam a compor a configuração explícita do controle manual.
+- Valores dentro da deadzone são neutros e o curso restante é renormalizado integralmente para `[-1, +1]`.
+- A resposta exponencial é aplicada após a remoção da deadzone e preserva sinal e escala máxima.
+- Configurações que eliminem um lado útil do eixo ou usem intensidade não positiva são rejeitadas.
+- O composition root injeta os parâmetros de shaping no `JoystickControlService`.
+- A suíte completa possui **209 testes aprovados**, com **73% de cobertura combinada de linhas e branches**.

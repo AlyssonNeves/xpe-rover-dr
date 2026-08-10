@@ -444,3 +444,21 @@ No EV3, a seleção ocorre em duas etapas: `Command + Control` e, quando o coman
 rejeitado no runtime manual até a integração de uma fonte de heading nos commits
 S02.20/S02.21. O snapshot consolidado REST passa a expor os cinco parâmetros em
 uma única estrutura canônica.
+
+## S02.17 - Tratamento de deadzone e resposta exponencial do joystick
+
+Os eixos analógicos utilizados pelo controle manual passam a ter geometria e
+resposta configuráveis por `axis_center`, `axis_deadzone`, `axis_max` e
+`axis_response_intensity`. A configuração deste marco utiliza centro `127`,
+deadzone `7`, máximo `255` e intensidade exponencial `1.0`.
+
+Valores dentro da deadzone são tratados como neutros. A região morta é removida
+matematicamente do restante do curso: o primeiro valor útil após a deadzone
+reinicia a faixa normalizada próximo de zero e os extremos físicos continuam
+mapeados para `-1.0` e `+1.0`. Somente depois dessa renormalização é aplicada a
+curva exponencial assinada, preservando direção e escala máxima enquanto reduz a
+sensibilidade em deslocamentos parciais do stick.
+
+O mesmo processamento é utilizado pelos eixos de avanço, rotação e strafe, sem
+alterar a cinemática diferencial ou Mecanum. A orientação `NOSE/TAIL` permanece
+reservada ao S02.18.

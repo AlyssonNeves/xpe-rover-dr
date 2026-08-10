@@ -3,6 +3,7 @@
 
 """LOCAL + MANUAL joystick control with synchronous motor setpoints."""
 
+import math
 import threading
 
 
@@ -43,7 +44,9 @@ class JoystickControlService(object):
             max_speed_sp=600,
             auxiliary_speed_sp=400,
             axis_center=127,
+            axis_deadzone=7,
             axis_max=255,
+            axis_response_intensity=1.0,
             left_auxiliary_motor_code="LMM",
             right_auxiliary_motor_code="RMM",
             drive_mode=DRIVE_DIFFERENTIAL,
@@ -60,12 +63,15 @@ class JoystickControlService(object):
         self.auxiliary_speed_sp = self._positive_int(
             auxiliary_speed_sp, "auxiliary_speed_sp"
         )
-        self.axis_center = int(axis_center)
-        self.axis_max = int(axis_max)
-        if self.axis_center <= 0 or self.axis_max <= self.axis_center:
-            raise ValueError(
-                "axis_center must be positive and lower than axis_max."
-            )
+        axis_values = self._validate_axis_configuration(
+            axis_center, axis_deadzone, axis_max
+        )
+        self.axis_center = axis_values[0]
+        self.axis_deadzone = axis_values[1]
+        self.axis_max = axis_values[2]
+        self.axis_response_intensity = self._validate_response_intensity(
+            axis_response_intensity
+        )
         self.left_auxiliary_motor_code = left_auxiliary_motor_code
         self.right_auxiliary_motor_code = right_auxiliary_motor_code
         if drive_mode not in (self.DRIVE_DIFFERENTIAL, self.DRIVE_MECANUM):
@@ -204,12 +210,12 @@ class JoystickControlService(object):
             return
 
         if code == self.AXIS_TRACTION:
-            self._translation = -self._normalize_axis(value)
+            self._translation = -self._shaped_stick_axis(value)
             if self._neutral_gate_blocks(code, self._translation):
                 return
             self._apply_differential_drive()
         elif code == self.AXIS_STEERING:
-            self._rotation = self._normalize_axis(value)
+            self._rotation = self._shaped_stick_axis(value)
             if self._neutral_gate_blocks(code, self._rotation):
                 return
             self._apply_differential_drive()
@@ -229,16 +235,16 @@ class JoystickControlService(object):
     def _process_mecanum_axis(self, code, value):
         """Updates CHASSIS-centric Mecanum state from the three drive axes."""
         if code == self.AXIS_DIRECTION_HORIZONTAL:
-            self._strafe = self._normalize_axis(value)
+            self._strafe = self._shaped_stick_axis(value)
             if self._neutral_gate_blocks(code, self._strafe):
                 return
         elif code == self.AXIS_TRACTION:
             # Linux evdev reports stick-up as negative Y.
-            self._translation = -self._normalize_axis(value)
+            self._translation = -self._shaped_stick_axis(value)
             if self._neutral_gate_blocks(code, self._translation):
                 return
         elif code == self.AXIS_STEERING:
-            self._rotation = self._normalize_axis(value)
+            self._rotation = self._shaped_stick_axis(value)
             if self._neutral_gate_blocks(code, self._rotation):
                 return
         else:
@@ -312,15 +318,75 @@ class JoystickControlService(object):
             )
             return {"success": False, "error": str(error)}
 
-    def _normalize_axis(self, raw_value):
-        value = float(raw_value)
-        if value >= self.axis_center:
-            span = float(self.axis_max - self.axis_center)
-            normalized = (value - self.axis_center) / span
+    def _shaped_stick_axis(self, raw_value):
+        """Applies deadzone removal and signed exponential response."""
+        normalized = self._normalized_stick_axis(raw_value)
+        if normalized == 0.0:
+            return 0.0
+        magnitude = self._exponential(
+            abs(normalized), self.axis_response_intensity
+        )
+        return magnitude if normalized > 0.0 else -magnitude
+
+    def _normalized_stick_axis(self, raw_value):
+        """Normalizes the useful axis travel after removing the deadzone."""
+        deviation = float(raw_value) - self.axis_center
+        magnitude = abs(deviation)
+        if magnitude <= self.axis_deadzone:
+            return 0.0
+
+        if deviation < 0.0:
+            available_range = float(self.axis_center)
+            sign = -1.0
         else:
-            span = float(self.axis_center)
-            normalized = (value - self.axis_center) / span
-        return max(-1.0, min(1.0, normalized))
+            available_range = float(self.axis_max - self.axis_center)
+            sign = 1.0
+
+        usable_range = max(1.0, available_range - self.axis_deadzone)
+        usable_magnitude = magnitude - self.axis_deadzone
+        normalized_magnitude = max(
+            0.0, min(1.0, usable_magnitude / usable_range)
+        )
+        return sign * normalized_magnitude
+
+    # Compatibility alias retained during the incremental Sprint evolution.
+    def _normalize_axis(self, raw_value):
+        return self._normalized_stick_axis(raw_value)
+
+    @staticmethod
+    def _validate_axis_configuration(axis_center, axis_deadzone, axis_max):
+        center = int(axis_center)
+        deadzone = int(axis_deadzone)
+        maximum = int(axis_max)
+        if center <= 0 or center >= maximum:
+            raise ValueError(
+                "axis_center must be greater than zero and less than "
+                "axis_max."
+            )
+        maximum_deadzone = min(center, maximum - center)
+        if deadzone < 0 or deadzone >= maximum_deadzone:
+            raise ValueError(
+                "axis_deadzone must be non-negative and smaller than the "
+                "usable range on both sides of axis_center."
+            )
+        return center, deadzone, maximum
+
+    @staticmethod
+    def _validate_response_intensity(axis_response_intensity):
+        intensity = float(axis_response_intensity)
+        if not math.isfinite(intensity) or intensity <= 0.0:
+            raise ValueError(
+                "axis_response_intensity must be finite and greater than "
+                "zero."
+            )
+        return intensity
+
+    @staticmethod
+    def _exponential(value, intensity):
+        value = max(0.0, min(1.0, float(value)))
+        return (math.exp(intensity * value) - 1.0) / (
+            math.exp(intensity) - 1.0
+        )
 
     @staticmethod
     def _mecanum_ratios(x_value, y_value, rotation=0.0):

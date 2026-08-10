@@ -324,6 +324,71 @@ def test_linux_evdev_y_axis_is_converted_to_positive_forward_convention():
     assert -service._normalize_axis(255) == -1.0
 
 
+def test_stick_deadzone_produces_zero_setpoint():
+    service, _, manual = build_service()
+
+    service.process_event({"type": 3, "code": 1, "value": 134})
+
+    assert manual.drive_calls[-1][1:] == (0, 0)
+
+
+def test_deadzone_is_removed_from_remaining_axis_travel():
+    service, _, _ = build_service()
+
+    assert service._normalized_stick_axis(134) == 0.0
+    assert abs(service._normalized_stick_axis(135) - (1.0 / 121.0)) < 1e-12
+    assert service._normalized_stick_axis(255) == 1.0
+    assert service._normalized_stick_axis(0) == -1.0
+
+
+def test_exponential_response_preserves_sign_and_full_scale():
+    service, _, _ = build_service()
+
+    positive = service._shaped_stick_axis(191)
+    negative = service._shaped_stick_axis(63)
+
+    assert 0.0 < positive < 1.0
+    assert -1.0 < negative < 0.0
+    assert service._shaped_stick_axis(255) == 1.0
+    assert service._shaped_stick_axis(0) == -1.0
+
+
+def test_higher_response_intensity_softens_partial_stick_response():
+    joystick = FakeJoystickPort()
+    manual = FakeManualDrivePort()
+    soft = JoystickControlService(
+        joystick, manual, axis_deadzone=7, axis_response_intensity=1.0
+    )
+    stronger_curve = JoystickControlService(
+        joystick, manual, axis_deadzone=7, axis_response_intensity=4.0
+    )
+
+    assert soft._shaped_stick_axis(191) > stronger_curve._shaped_stick_axis(191)
+
+
+def test_joystick_rejects_deadzone_that_consumes_axis_side():
+    try:
+        JoystickControlService(
+            FakeJoystickPort(), FakeManualDrivePort(), axis_deadzone=127
+        )
+    except ValueError as error:
+        assert "axis_deadzone" in str(error)
+    else:
+        raise AssertionError("Invalid axis deadzone was accepted")
+
+
+def test_joystick_rejects_non_positive_response_intensity():
+    try:
+        JoystickControlService(
+            FakeJoystickPort(), FakeManualDrivePort(),
+            axis_response_intensity=0.0
+        )
+    except ValueError as error:
+        assert "axis_response_intensity" in str(error)
+    else:
+        raise AssertionError("Invalid response intensity was accepted")
+
+
 def build_mecanum_service(strafe_compensation=1.0):
     joystick = FakeJoystickPort()
     manual = FakeManualDrivePort()

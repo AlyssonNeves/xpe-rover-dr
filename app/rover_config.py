@@ -5,6 +5,7 @@
 
 import copy
 import json
+import math
 import os
 
 
@@ -144,6 +145,49 @@ for motor_code, motor_definition in MOTOR_DEFINITIONS.items():
         )
 
 JOYSTICK_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("joystick", {}))
+
+
+def validate_joystick_configuration(configuration):
+    """Validates stick geometry and response shaping configuration."""
+    if not isinstance(configuration, dict):
+        raise RuntimeError("Joystick configuration must be an object.")
+
+    try:
+        center = int(configuration.get("axis_center", 127))
+        deadzone = int(configuration.get("axis_deadzone", 7))
+        maximum = int(configuration.get("axis_max", 255))
+        intensity = float(configuration.get("axis_response_intensity", 1.0))
+    except (TypeError, ValueError):
+        raise RuntimeError(
+            "Joystick axis_center, axis_deadzone, axis_max and "
+            "axis_response_intensity must be numeric."
+        )
+
+    if center <= 0 or center >= maximum:
+        raise RuntimeError(
+            "joystick.axis_center must be greater than zero and less than "
+            "axis_max."
+        )
+    maximum_deadzone = min(center, maximum - center)
+    if deadzone < 0 or deadzone >= maximum_deadzone:
+        raise RuntimeError(
+            "joystick.axis_deadzone must be non-negative and smaller than "
+            "the usable axis range on both sides of axis_center."
+        )
+    if not math.isfinite(intensity) or intensity <= 0.0:
+        raise RuntimeError(
+            "joystick.axis_response_intensity must be finite and greater "
+            "than zero."
+        )
+
+    configuration["axis_center"] = center
+    configuration["axis_deadzone"] = deadzone
+    configuration["axis_max"] = maximum
+    configuration["axis_response_intensity"] = intensity
+    return configuration
+
+
+JOYSTICK_CONFIG = validate_joystick_configuration(JOYSTICK_CONFIG)
 
 DRIVE_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("drive", {}))
 MECANUM_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("mecanum", {}))

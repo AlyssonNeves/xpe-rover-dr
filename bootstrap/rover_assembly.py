@@ -156,7 +156,11 @@ def build_local_manual_application(operation_mode_service=None,
                 "auxiliary_speed_sp", 400
             ),
             axis_center=joystick_config.get("axis_center", 127),
+            axis_deadzone=joystick_config.get("axis_deadzone", 7),
             axis_max=joystick_config.get("axis_max", 255),
+            axis_response_intensity=joystick_config.get(
+                "axis_response_intensity", 1.0
+            ),
             left_auxiliary_motor_code=joystick_config.get(
                 "left_auxiliary_motor_code", "LMM"
             ),

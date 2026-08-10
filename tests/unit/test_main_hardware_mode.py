@@ -116,7 +116,9 @@ def test_local_manual_joystick_is_wired_to_direct_manual_drive_path(monkeypatch)
             "max_speed_sp": 600,
             "auxiliary_speed_sp": 400,
             "axis_center": 127,
+            "axis_deadzone": 7,
             "axis_max": 255,
+            "axis_response_intensity": 1.0,
             "left_auxiliary_motor_code": "LMM",
             "right_auxiliary_motor_code": "RMM",
             "poll_seconds": 0.02
@@ -161,6 +163,8 @@ def test_local_manual_joystick_is_wired_to_direct_manual_drive_path(monkeypatch)
     assert captured["joystick"]["drive_mode"] == "MECANUM"
     assert captured["joystick"]["centric"] == "CHASSIS"
     assert captured["joystick"]["mecanum_strafe_compensation"] == 1.1
+    assert captured["joystick"]["axis_deadzone"] == 7
+    assert captured["joystick"]["axis_response_intensity"] == 1.0
     assert "drive_port" not in captured["joystick"]
     assert "motor_port" not in captured["joystick"]
     assert joystick_service in application.managed_services
