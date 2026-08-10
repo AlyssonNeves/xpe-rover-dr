@@ -596,3 +596,24 @@ fica restrito à preparação do runtime, instalação dos handlers de sinal,
 execução e finalização. A ordem de encerramento também é centralizada:
 servidor REST, componentes de runtime em ordem inversa, monitores, recursos
 gerenciados e joins dos monitores.
+
+## S02.26 - Pipeline unificado dos eventos do joystick
+
+O caminho `LOCAL + MANUAL` deixa de consumir eventos `evdev` individualmente e
+passa a processar lotes limitados por ciclo. `JoystickPort` expõe
+`read_event_batch(timeout_seconds, max_events)`, e o adaptador Linux aguarda o
+primeiro evento pelo descritor do dispositivo e drena apenas os eventos
+imediatamente disponíveis dentro de limites explícitos de quantidade e tempo.
+
+Cada ciclo aceita no máximo **64 eventos**, enquanto a drenagem do `evdev` é
+limitada a **8 lotes de kernel** ou **3 ms**, o que ocorrer primeiro. Eventos de
+eixo (`EV_ABS`) são coalescidos por código, mantendo apenas o valor mais recente;
+eventos discretos de botão (`EV_KEY`) preservam sua ordem. O restante de um lote
+que ultrapasse o limite de entrega permanece no buffer para o ciclo seguinte.
+
+`JoystickControlService.process_event_batch()` torna-se o único caminho público
+de processamento. O Emergency Stop possui prioridade sobre todo o lote, o
+recenter FIELD é tratado antes do despacho de tração e, após consolidar os eixos,
+é emitido no máximo um setpoint de tração por ciclo. Essa abordagem reduz backlog
+de movimentos obsoletos sem alterar as regras de neutral-safety, FIELD-centric,
+Bluetooth ou lifecycle já estabelecidas.

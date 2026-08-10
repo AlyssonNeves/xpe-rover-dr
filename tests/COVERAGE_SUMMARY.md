@@ -212,3 +212,17 @@ gate mínimo de 60%.
 - Cobertura combinada de linhas e branches: **74%**.
 - Gate de arquitetura: aprovado.
 - Compatibilidade sintática de produção: **Python 3.5** aprovada.
+
+## S02.26 - Pipeline unificado dos eventos do joystick
+
+- `JoystickPort.read_event_batch()` substitui a leitura evento a evento no caminho de produção.
+- Cada ciclo entrega no máximo **64 eventos**; a drenagem `evdev` é limitada a **8 lotes** ou **3 ms**.
+- Eventos `EV_ABS` são coalescidos por código, preservando somente a posição mais recente de cada eixo.
+- Eventos `EV_KEY` permanecem discretos e ordenados; excedentes permanecem no buffer para o próximo ciclo.
+- `JoystickControlService.process_event_batch()` consolida eixos e emite no máximo um setpoint de tração por lote.
+- Emergency Stop tem prioridade sobre movimento/recenter no mesmo lote; após o stop, a neutral-safety é rearmada.
+- O D-pad aplica somente o valor mais recente de cada eixo auxiliar no ciclo.
+- Suíte completa: **293 testes aprovados**.
+- Cobertura combinada de linhas e branches: **75%**.
+- Gate de arquitetura: aprovado.
+- Compatibilidade sintática de produção: **Python 3.5** aprovada.

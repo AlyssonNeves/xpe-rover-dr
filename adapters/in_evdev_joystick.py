@@ -8,6 +8,7 @@ import select
 import subprocess
 import threading
 import time
+from collections import deque
 
 from ports.joystick_port import JoystickPort
 
@@ -88,10 +89,16 @@ class EvdevJoystickAdapter(JoystickPort):
     the gamepad interface.
     """
 
+    MAX_DRAIN_BATCHES = 8
+    MAX_DRAIN_SECONDS = 0.003
     BLUETOOTH_PROCESS_POLL_SECONDS = 0.1
     DEFAULT_PASSIVE_RECONNECT_SECONDS = 4.0
     REQUIRED_TRACTION_AXIS_CODES = (0, 1, 3)
-    MAX_SNAPSHOT_DRAIN_BATCHES = 8
+    POLL_ERROR_MASK = (
+        getattr(select, "POLLERR", 0)
+        | getattr(select, "POLLHUP", 0)
+        | getattr(select, "POLLNVAL", 0)
+    )
 
     def __init__(self, device_name="Wireless Controller", device_address="",
                  auto_connect=True, connection_timeout_seconds=10.0,
@@ -119,6 +126,9 @@ class EvdevJoystickAdapter(JoystickPort):
         self.monotonic_clock = monotonic_clock or time.monotonic
         self._absolute_info_compatibility = None
         self.device = None
+        self._event_buffer = deque()
+        self._poller = None
+        self._use_poller = select_function is None and hasattr(select, "poll")
         self._connection_cancel_event = threading.Event()
         self._connection_process = None
         self._connection_lock = threading.RLock()
@@ -177,37 +187,35 @@ class EvdevJoystickAdapter(JoystickPort):
             )
         return self._activate_device(candidate)
 
-    def read_event(self, timeout_seconds=None):
-        """Returns the next evdev event normalized as a small dictionary."""
+    def read_event_batch(self, timeout_seconds, max_events):
+        """Returns one bounded, coalesced joystick event batch.
+
+        The first event may wait up to ``timeout_seconds``. Once input is
+        available, draining is bounded by both batch count and elapsed time so
+        a noisy controller cannot monopolize the low-latency control thread.
+        Absolute-axis values are coalesced by code while discrete key events
+        retain their original order.
+        """
         if self.device is None:
             raise RuntimeError("Joystick device is not open.")
 
-        timeout = self._normalize_timeout(timeout_seconds)
         try:
-            readable, _, exceptional = self.select_function(
-                [self.device.fd], [], [self.device.fd], timeout
-            )
-        except (IOError, OSError) as error:
-            raise self._connection_lost(error)
+            event_limit = max(1, int(max_events))
+        except (TypeError, ValueError):
+            raise ValueError("max_events must be a positive integer.")
+        timeout = self._normalize_batch_timeout(timeout_seconds)
+        wait_seconds = 0.0 if self._event_buffer else timeout
+        self._read_available_batches(wait_seconds)
 
-        if exceptional:
-            raise self._connection_lost(
-                OSError("evdev descriptor reported an exceptional state")
-            )
-        if not readable:
-            return None
-
-        try:
-            event = self.device.read_one()
-        except (IOError, OSError) as error:
-            raise self._connection_lost(error)
-        if event is None:
-            return None
-        return {
-            "type": int(event.type),
-            "code": int(event.code),
-            "value": int(event.value)
-        }
+        events = []
+        while self._event_buffer and len(events) < event_limit:
+            event = self._event_buffer.popleft()
+            events.append({
+                "type": int(event.type),
+                "code": int(event.code),
+                "value": int(event.value)
+            })
+        return events
 
     def refresh_absolute_state(self, axis_codes):
         """Returns a fresh complete raw-axis snapshot.
@@ -220,6 +228,7 @@ class EvdevJoystickAdapter(JoystickPort):
             raise RuntimeError("Joystick device is not open.")
 
         requested_codes = tuple(int(code) for code in (axis_codes or ()))
+        self._event_buffer.clear()
         self._discard_device_events()
         try:
             absolute_infos = self._read_absolute_infos(
@@ -323,6 +332,8 @@ class EvdevJoystickAdapter(JoystickPort):
 
     def _activate_device(self, candidate):
         self.device = candidate
+        self._event_buffer.clear()
+        self._configure_poller(candidate.fd)
         return candidate.name
 
     def _wait_for_named_device(self, deadline):
@@ -498,36 +509,128 @@ class EvdevJoystickAdapter(JoystickPort):
             self._terminate_process(process)
 
     def _discard_device_events(self):
-        """Drains queued input before taking a current-position snapshot."""
+        """Drains queued kernel input before taking a fresh-axis snapshot."""
         read_many = getattr(self.device, "read", None)
-        if callable(read_many):
-            for unused_index in range(self.MAX_SNAPSHOT_DRAIN_BATCHES):
-                try:
-                    events = read_many()
-                except (BlockingIOError, OSError) as error:
-                    if getattr(error, "errno", None) in (
-                            errno.EAGAIN, errno.EWOULDBLOCK):
-                        return
-                    raise self._connection_lost(error)
-                if not events:
+        if not callable(read_many):
+            return
+        for unused_index in range(self.MAX_DRAIN_BATCHES):
+            try:
+                events = read_many()
+            except (BlockingIOError, OSError) as error:
+                if getattr(error, "errno", None) in (
+                        errno.EAGAIN, errno.EWOULDBLOCK):
                     return
+                raise self._connection_lost(error)
+            if not events:
+                return
+
+    def _configure_poller(self, file_descriptor):
+        """Configures poll(2) for production while retaining test injection."""
+        self._poller = None
+        if not self._use_poller:
+            return
+        try:
+            poller = select.poll()
+            event_mask = getattr(select, "POLLIN", 1) | self.POLL_ERROR_MASK
+            poller.register(file_descriptor, event_mask)
+            self._poller = poller
+        except (AttributeError, OSError, ValueError):
+            self._poller = None
+
+    def _read_available_batches(self, timeout_seconds):
+        """Drains promptly available evdev batches within one time budget."""
+        if not self._wait_for_input(timeout_seconds):
             return
 
-        read_one = getattr(self.device, "read_one", None)
-        if not callable(read_one):
-            return
-        for unused_index in range(self.MAX_SNAPSHOT_DRAIN_BATCHES):
+        started_at = self.monotonic_clock()
+        batches = 0
+        while batches < self.MAX_DRAIN_BATCHES:
             try:
-                if read_one() is None:
+                events = self.device.read()
+            except (BlockingIOError, OSError) as error:
+                if getattr(error, "errno", None) in (
+                        errno.EAGAIN, errno.EWOULDBLOCK):
                     return
+                raise self._connection_lost(error)
+
+            if not events:
+                return
+            self._append_coalesced(events)
+            batches += 1
+            if self.monotonic_clock() - started_at >= self.MAX_DRAIN_SECONDS:
+                return
+            if not self._wait_for_input(0.0):
+                return
+
+    def _wait_for_input(self, timeout_seconds):
+        timeout = max(0.0, float(timeout_seconds))
+        if self._poller is None:
+            try:
+                readable, _, exceptional = self.select_function(
+                    [self.device.fd], [], [self.device.fd], timeout
+                )
             except (IOError, OSError) as error:
                 raise self._connection_lost(error)
+            if exceptional:
+                raise self._connection_lost(
+                    OSError("evdev descriptor reported an exceptional state")
+                )
+            return bool(readable)
+
+        try:
+            timeout_ms = max(0, int(round(timeout * 1000.0)))
+            poll_events = self._poller.poll(timeout_ms)
+        except (IOError, OSError) as error:
+            raise self._connection_lost(error)
+        if not poll_events:
+            return False
+
+        readable = False
+        for file_descriptor, event_mask in poll_events:
+            if file_descriptor != self.device.fd:
+                continue
+            if event_mask & self.POLL_ERROR_MASK:
+                raise self._connection_lost(
+                    OSError("evdev descriptor reported a disconnect state")
+                )
+            if event_mask & getattr(select, "POLLIN", 1):
+                readable = True
+        return readable
+
+    def _append_coalesced(self, events):
+        """Preserves keys while keeping only the newest value of each axis."""
+        for event in events or ():
+            event_type = int(event.type)
+            if event_type not in (1, 3):
+                continue
+            if event_type == 3:
+                self._event_buffer = deque(
+                    buffered
+                    for buffered in self._event_buffer
+                    if not (
+                        int(buffered.type) == event_type and
+                        int(buffered.code) == int(event.code)
+                    )
+                )
+            self._event_buffer.append(event)
 
     def _close_device(self):
         device = self.device
         self.device = None
         if device is not None:
-            device.close()
+            try:
+                if self._poller is not None:
+                    self._poller.unregister(device.fd)
+            except (AttributeError, KeyError, OSError, ValueError):
+                pass
+            try:
+                device.close()
+            finally:
+                self._poller = None
+                self._event_buffer.clear()
+        else:
+            self._poller = None
+            self._event_buffer.clear()
 
     def _connection_lost(self, error):
         """Releases the stale descriptor and returns a clear disconnect error."""
@@ -535,6 +638,8 @@ class EvdevJoystickAdapter(JoystickPort):
             self._close_device()
         except (IOError, OSError):
             self.device = None
+            self._poller = None
+            self._event_buffer.clear()
         return OSError(
             "Bluetooth joystick connection lost: {0}".format(error)
         )
@@ -552,10 +657,8 @@ class EvdevJoystickAdapter(JoystickPort):
         self._absolute_info_compatibility = None
 
     @staticmethod
-    def _normalize_timeout(timeout_seconds):
-        if timeout_seconds is None:
-            return None
+    def _normalize_batch_timeout(timeout_seconds):
         try:
             return max(0.0, float(timeout_seconds))
         except (TypeError, ValueError):
-            raise ValueError("timeout_seconds must be numeric or None.")
+            raise ValueError("timeout_seconds must be numeric.")

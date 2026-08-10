@@ -39,6 +39,7 @@ class JoystickControlService(object):
 
     EVENT_KEY = 1
     EVENT_ABSOLUTE = 3
+    MAX_EVENTS_PER_CYCLE = 64
 
     BUTTON_EMERGENCY_STOP = 304
     BUTTON_FIELD_RECENTER = 307
@@ -243,9 +244,11 @@ class JoystickControlService(object):
                 self._notify_connected(opened_name)
 
                 while not self._stop_event.is_set():
-                    event = self.joystick_port.read_event(self.poll_seconds)
-                    if event is not None:
-                        self.process_event(event)
+                    events = self.joystick_port.read_event_batch(
+                        self.poll_seconds, self.MAX_EVENTS_PER_CYCLE
+                    )
+                    if events:
+                        self.process_event_batch(events)
             except Exception as error:
                 if not self._stop_event.is_set():
                     self.logger.error(
@@ -374,53 +377,93 @@ class JoystickControlService(object):
                 "Unable to restore joystick connected status: {}".format(error)
             )
 
-    def process_event(self, event):
-        """Processes one normalized joystick event."""
-        if not isinstance(event, dict):
+    def process_event_batch(self, events):
+        """Processes one bounded joystick cycle through one public path.
+
+        Absolute-axis events are consolidated to their newest value before
+        motion is calculated. Key presses preserve safety priority, and at
+        most one traction setpoint is emitted for the complete batch.
+        """
+        latest_absolute = {}
+        pressed_keys = set()
+        for event in events or ():
+            if not isinstance(event, dict):
+                continue
+            event_type = event.get("type")
+            code = event.get("code")
+            if event_type == self.EVENT_ABSOLUTE:
+                latest_absolute[code] = event.get("value")
+            elif event_type == self.EVENT_KEY and event.get("value") == 1:
+                pressed_keys.add(code)
+
+        if self.emergency_stop_button_code in pressed_keys:
+            self.emergency_stop()
+            self._require_traction_neutral()
             return
 
-        event_type = event.get("type")
-        code = event.get("code")
-        value = event.get("value")
+        traction_changed = self._update_traction_axes(latest_absolute)
 
-        if event_type == self.EVENT_KEY and value:
-            if code == self.emergency_stop_button_code:
-                self.emergency_stop()
-                return
-            if code == self.field_recenter_button_code:
-                self._handle_field_recenter()
-                return
+        if self.field_recenter_button_code in pressed_keys:
+            self._handle_field_recenter()
 
-        if event_type != self.EVENT_ABSOLUTE:
-            return
+        if traction_changed and not self._neutral_required:
+            if self.drive_mode == self.DRIVE_MECANUM:
+                self._apply_mecanum_drive()
+            else:
+                self._apply_differential_drive()
 
+        if (self.drive_mode == self.DRIVE_DIFFERENTIAL and
+                not self._neutral_required):
+            self._apply_auxiliary_batch(latest_absolute)
+
+    def _update_traction_axes(self, latest_absolute):
+        """Updates current traction state without dispatching motor commands."""
+        changed = False
+        axis_order = [self.AXIS_TRACTION, self.AXIS_STEERING]
         if self.drive_mode == self.DRIVE_MECANUM:
-            self._process_mecanum_axis(code, value)
-            return
+            axis_order.insert(0, self.AXIS_DIRECTION_HORIZONTAL)
 
-        if code == self.AXIS_TRACTION:
-            self._translation = -self._shaped_stick_axis(value)
-            if self._neutral_gate_blocks(code, self._translation):
-                return
-            self._apply_differential_drive()
-        elif code == self.AXIS_STEERING:
-            self._rotation = self._shaped_stick_axis(value)
-            if self._neutral_gate_blocks(code, self._rotation):
-                return
-            self._apply_differential_drive()
-        elif code == self.AXIS_AUXILIARY_VERTICAL:
+        for code in axis_order:
+            if code not in latest_absolute:
+                continue
+            value = latest_absolute[code]
+            if code == self.AXIS_DIRECTION_HORIZONTAL:
+                self._strafe = self._shaped_stick_axis(value)
+                normalized = self._strafe
+            elif code == self.AXIS_TRACTION:
+                # Linux evdev reports stick-up as negative Y.
+                self._translation = -self._shaped_stick_axis(value)
+                normalized = self._translation
+            else:
+                self._rotation = self._shaped_stick_axis(value)
+                normalized = self._rotation
+
+            changed = True
             if self._neutral_required:
-                return
+                self._neutral_gate_blocks(code, normalized)
+        return changed
+
+    def _apply_auxiliary_batch(self, latest_absolute):
+        """Applies only the newest D-pad values from the current cycle."""
+        if self.AXIS_AUXILIARY_VERTICAL in latest_absolute:
             self._apply_auxiliary(
-                self.left_auxiliary_motor_code, value
+                self.left_auxiliary_motor_code,
+                latest_absolute[self.AXIS_AUXILIARY_VERTICAL]
             )
-        elif code == self.AXIS_AUXILIARY_HORIZONTAL:
-            if self._neutral_required:
-                return
+        if self.AXIS_AUXILIARY_HORIZONTAL in latest_absolute:
             self._apply_auxiliary(
-                self.right_auxiliary_motor_code, value
+                self.right_auxiliary_motor_code,
+                latest_absolute[self.AXIS_AUXILIARY_HORIZONTAL]
             )
 
+    def _require_traction_neutral(self):
+        """Arms neutral safety for every active traction axis."""
+        self._neutral_required = True
+        self._neutral_pending_axes = {
+            self.AXIS_TRACTION, self.AXIS_STEERING
+        }
+        if self.drive_mode == self.DRIVE_MECANUM:
+            self._neutral_pending_axes.add(self.AXIS_DIRECTION_HORIZONTAL)
 
     def _handle_field_recenter(self):
         """Redefines the FIELD zero from fresh cached heading when safe."""
@@ -465,40 +508,12 @@ class JoystickControlService(object):
             self._rotation == 0.0
         )
 
-    def _process_mecanum_axis(self, code, value):
-        """Updates CHASSIS-centric Mecanum state from the three drive axes."""
-        if code == self.AXIS_DIRECTION_HORIZONTAL:
-            self._strafe = self._shaped_stick_axis(value)
-            if self._neutral_gate_blocks(code, self._strafe):
-                return
-        elif code == self.AXIS_TRACTION:
-            # Linux evdev reports stick-up as negative Y.
-            self._translation = -self._shaped_stick_axis(value)
-            if self._neutral_gate_blocks(code, self._translation):
-                return
-        elif code == self.AXIS_STEERING:
-            self._rotation = self._shaped_stick_axis(value)
-            if self._neutral_gate_blocks(code, self._rotation):
-                return
-        else:
-            # In Mecanum mode LMM/RMM are traction motors, so D-pad auxiliary
-            # commands are intentionally unavailable.
-            return
-
-        self._apply_mecanum_drive()
-
-
     def _invalidate_disconnected_session(self):
         """Stops motion and invalidates input state after connection loss."""
         self._strafe = 0.0
         self._translation = 0.0
         self._rotation = 0.0
-        self._neutral_required = True
-        self._neutral_pending_axes = {
-            self.AXIS_TRACTION, self.AXIS_STEERING
-        }
-        if self.drive_mode == self.DRIVE_MECANUM:
-            self._neutral_pending_axes.add(self.AXIS_DIRECTION_HORIZONTAL)
+        self._require_traction_neutral()
 
         # Stop first: session invalidation must never delay the physical stop.
         self.emergency_stop()
@@ -727,12 +742,7 @@ class JoystickControlService(object):
         self._require_field_neutral()
 
     def _require_field_neutral(self):
-        self._neutral_required = True
-        self._neutral_pending_axes = {
-            self.AXIS_DIRECTION_HORIZONTAL,
-            self.AXIS_TRACTION,
-            self.AXIS_STEERING
-        }
+        self._require_traction_neutral()
 
     def _apply_differential_drive(self):
         left = self._translation + self._rotation

@@ -31,9 +31,9 @@ class FakeJoystickPort(object):
     def open(self):
         return "Wireless Controller"
 
-    def read_event(self, timeout_seconds=None):
-        del timeout_seconds
-        return None
+    def read_event_batch(self, timeout_seconds, max_events):
+        del timeout_seconds, max_events
+        return []
 
     def close(self):
         return None
@@ -149,7 +149,7 @@ def test_reference_snapshot_keeps_canonical_heading_separate():
 def test_triangle_redefines_field_zero_when_controls_are_neutral():
     service, canonical, reference, logger = build_service(72.0)
 
-    service.process_event({"type": 1, "code": 307, "value": 1})
+    service.process_event_batch([{"type": 1, "code": 307, "value": 1}])
 
     assert reference.get_heading_deg() == 0.0
     canonical.heading_deg = 92.0
@@ -159,9 +159,9 @@ def test_triangle_redefines_field_zero_when_controls_are_neutral():
 
 def test_triangle_is_rejected_while_traction_is_active():
     service, canonical, reference, logger = build_service(45.0)
-    service.process_event({"type": 3, "code": 1, "value": 0})
+    service.process_event_batch([{"type": 3, "code": 1, "value": 0}])
 
-    service.process_event({"type": 1, "code": 307, "value": 1})
+    service.process_event_batch([{"type": 1, "code": 307, "value": 1}])
 
     assert reference.get_heading_deg() == 45.0
     canonical.heading_deg = 55.0
@@ -171,7 +171,7 @@ def test_triangle_is_rejected_while_traction_is_active():
 
 def test_triangle_is_rejected_without_fresh_heading():
     service, _, _, logger = build_service(None)
-    service.process_event({"type": 1, "code": 307, "value": 1})
+    service.process_event_batch([{"type": 1, "code": 307, "value": 1}])
     assert any("heading unavailable" in item for item in logger.error_messages)
 
 

@@ -25,16 +25,21 @@ class FakeJoystickPort(JoystickPort):
         self.closed = False
         return "Test Controller"
 
-    def read_event(self, timeout_seconds=None):
+    def read_event_batch(self, timeout_seconds, max_events):
         del timeout_seconds
         if self.events:
-            return self.events.pop(0)
+            batch = self.events[:max_events]
+            self.events = self.events[max_events:]
+            return batch
         if self.read_error is not None:
             error = self.read_error
             self.read_error = None
             raise error
         time.sleep(0.001)
-        return None
+        return []
+
+    def refresh_absolute_state(self, axis_codes):
+        return dict((int(code), 127) for code in axis_codes)
 
     def close(self):
         self.closed = True
@@ -105,8 +110,8 @@ def build_service(manual_drive=None, front=Fronts.NOSE):
 def test_forward_and_backward_commands_follow_left_stick_y():
     service, _, manual = build_service()
 
-    service.process_event({"type": 3, "code": 1, "value": 0})
-    service.process_event({"type": 3, "code": 1, "value": 255})
+    service.process_event_batch([{"type": 3, "code": 1, "value": 0}])
+    service.process_event_batch([{"type": 3, "code": 1, "value": 255}])
 
     assert manual.drive_calls[0][1:] == (600, 600)
     assert manual.drive_calls[1][1:] == (-600, -600)
@@ -115,7 +120,7 @@ def test_forward_and_backward_commands_follow_left_stick_y():
 def test_right_stick_x_performs_arcade_rotation():
     service, _, manual = build_service()
 
-    service.process_event({"type": 3, "code": 3, "value": 255})
+    service.process_event_batch([{"type": 3, "code": 3, "value": 255}])
 
     assert manual.drive_calls[-1][1:] == (600, -600)
 
@@ -123,8 +128,8 @@ def test_right_stick_x_performs_arcade_rotation():
 def test_combined_translation_and_rotation_is_normalized():
     service, _, manual = build_service()
 
-    service.process_event({"type": 3, "code": 1, "value": 0})
-    service.process_event({"type": 3, "code": 3, "value": 255})
+    service.process_event_batch([{"type": 3, "code": 1, "value": 0}])
+    service.process_event_batch([{"type": 3, "code": 3, "value": 255}])
 
     assert manual.drive_calls[-1][1:] == (600, 0)
 
@@ -132,9 +137,9 @@ def test_combined_translation_and_rotation_is_normalized():
 def test_centered_traction_and_steering_send_zero_setpoint_directly():
     service, _, manual = build_service()
 
-    service.process_event({"type": 3, "code": 1, "value": 0})
-    service.process_event({"type": 3, "code": 1, "value": 127})
-    service.process_event({"type": 3, "code": 3, "value": 127})
+    service.process_event_batch([{"type": 3, "code": 1, "value": 0}])
+    service.process_event_batch([{"type": 3, "code": 1, "value": 127}])
+    service.process_event_batch([{"type": 3, "code": 3, "value": 127}])
 
     assert manual.drive_calls[-1][1:] == (0, 0)
 
@@ -142,9 +147,9 @@ def test_centered_traction_and_steering_send_zero_setpoint_directly():
 def test_dpad_controls_auxiliary_motors_through_manual_drive_port():
     service, _, manual = build_service()
 
-    service.process_event({"type": 3, "code": 17, "value": -1})
-    service.process_event({"type": 3, "code": 16, "value": 1})
-    service.process_event({"type": 3, "code": 17, "value": 0})
+    service.process_event_batch([{"type": 3, "code": 17, "value": -1}])
+    service.process_event_batch([{"type": 3, "code": 16, "value": 1}])
+    service.process_event_batch([{"type": 3, "code": 17, "value": 0}])
 
     assert ("local-manual", "LMM", 400) in manual.auxiliary_calls
     assert ("local-manual", "RMM", -400) in manual.auxiliary_calls
@@ -154,15 +159,14 @@ def test_dpad_controls_auxiliary_motors_through_manual_drive_port():
 def test_emergency_stop_button_uses_single_synchronous_stop_boundary():
     service, _, manual = build_service()
 
-    service.process_event({"type": 1, "code": 304, "value": 1})
+    service.process_event_batch([{"type": 1, "code": 304, "value": 1}])
 
     assert manual.stop_calls == 1
 
 
 def test_worker_acquires_manual_motors_before_processing_events():
     joystick = FakeJoystickPort([
-        {"type": 3, "code": 1, "value": 0},
-        {"type": 1, "code": 304, "value": 1}
+        {"type": 3, "code": 1, "value": 0}
     ])
     manual = FakeManualDrivePort()
     service = JoystickControlService(
@@ -283,8 +287,8 @@ def test_auxiliary_motion_is_blocked_while_post_disconnect_gate_is_active():
     service._neutral_required = True
     service._neutral_pending_axes = {1, 3}
 
-    service.process_event({"type": 3, "code": 17, "value": -1})
-    service.process_event({"type": 3, "code": 16, "value": 1})
+    service.process_event_batch([{"type": 3, "code": 17, "value": -1}])
+    service.process_event_batch([{"type": 3, "code": 16, "value": 1}])
 
     assert manual.auxiliary_calls == []
 
@@ -385,7 +389,7 @@ def test_linux_evdev_y_axis_is_converted_to_positive_forward_convention():
 def test_stick_deadzone_produces_zero_setpoint():
     service, _, manual = build_service()
 
-    service.process_event({"type": 3, "code": 1, "value": 134})
+    service.process_event_batch([{"type": 3, "code": 1, "value": 134}])
 
     assert manual.drive_calls[-1][1:] == (0, 0)
 
@@ -469,7 +473,7 @@ def build_mecanum_service(strafe_compensation=1.0, front=Fronts.NOSE):
 def test_robot_centric_forward_uses_all_four_mecanum_wheels():
     service, _, manual = build_mecanum_service()
 
-    service.process_event({"type": 3, "code": 1, "value": 0})
+    service.process_event_batch([{"type": 3, "code": 1, "value": 0}])
 
     assert manual.mecanum_calls[-1][1:] == (600, 600, 600, 600)
     assert manual.drive_calls == []
@@ -478,7 +482,7 @@ def test_robot_centric_forward_uses_all_four_mecanum_wheels():
 def test_robot_centric_right_strafe_uses_left_stick_x():
     service, _, manual = build_mecanum_service()
 
-    service.process_event({"type": 3, "code": 0, "value": 255})
+    service.process_event_batch([{"type": 3, "code": 0, "value": 255}])
 
     assert manual.mecanum_calls[-1][1:] == (600, -600, -600, 600)
 
@@ -486,7 +490,7 @@ def test_robot_centric_right_strafe_uses_left_stick_x():
 def test_robot_centric_right_stick_x_rotates_in_place():
     service, _, manual = build_mecanum_service()
 
-    service.process_event({"type": 3, "code": 3, "value": 255})
+    service.process_event_batch([{"type": 3, "code": 3, "value": 255}])
 
     assert manual.mecanum_calls[-1][1:] == (600, 600, -600, -600)
 
@@ -494,9 +498,9 @@ def test_robot_centric_right_stick_x_rotates_in_place():
 def test_robot_centric_translation_rotation_share_one_denominator():
     service, _, manual = build_mecanum_service()
 
-    service.process_event({"type": 3, "code": 0, "value": 255})
-    service.process_event({"type": 3, "code": 1, "value": 0})
-    service.process_event({"type": 3, "code": 3, "value": 255})
+    service.process_event_batch([{"type": 3, "code": 0, "value": 255}])
+    service.process_event_batch([{"type": 3, "code": 1, "value": 0}])
+    service.process_event_batch([{"type": 3, "code": 3, "value": 255}])
 
     assert manual.mecanum_calls[-1][1:] == (600, 200, -200, 200)
 
@@ -504,9 +508,9 @@ def test_robot_centric_translation_rotation_share_one_denominator():
 def test_strafe_compensation_is_applied_before_shared_normalization():
     service, _, manual = build_mecanum_service(strafe_compensation=1.1)
 
-    service.process_event({"type": 3, "code": 0, "value": 255})
-    service.process_event({"type": 3, "code": 1, "value": 0})
-    service.process_event({"type": 3, "code": 3, "value": 255})
+    service.process_event_batch([{"type": 3, "code": 0, "value": 255}])
+    service.process_event_batch([{"type": 3, "code": 1, "value": 0}])
+    service.process_event_batch([{"type": 3, "code": 3, "value": 255}])
 
     assert manual.mecanum_calls[-1][1:] == (600, 174, -213, 213)
 
@@ -514,8 +518,8 @@ def test_strafe_compensation_is_applied_before_shared_normalization():
 def test_dpad_is_ignored_when_medium_motors_are_mecanum_traction():
     service, _, manual = build_mecanum_service()
 
-    service.process_event({"type": 3, "code": 17, "value": -1})
-    service.process_event({"type": 3, "code": 16, "value": 1})
+    service.process_event_batch([{"type": 3, "code": 17, "value": -1}])
+    service.process_event_batch([{"type": 3, "code": 16, "value": 1}])
 
     assert manual.auxiliary_calls == []
     assert manual.mecanum_calls == []
@@ -527,10 +531,10 @@ def test_mecanum_disconnect_gate_requires_x_y_and_rx_neutral():
 
     assert service._neutral_pending_axes == {0, 1, 3}
 
-    service.process_event({"type": 3, "code": 0, "value": 127})
-    service.process_event({"type": 3, "code": 1, "value": 127})
+    service.process_event_batch([{"type": 3, "code": 0, "value": 127}])
+    service.process_event_batch([{"type": 3, "code": 1, "value": 127}])
     assert service._neutral_required is True
-    service.process_event({"type": 3, "code": 3, "value": 127})
+    service.process_event_batch([{"type": 3, "code": 3, "value": 127}])
     assert service._neutral_required is False
 
 
@@ -559,10 +563,10 @@ def test_robot_centric_configuration_rejects_invalid_values():
 def test_tail_differential_inverts_translation_and_swaps_logical_sides():
     service, _, manual = build_service(front=Fronts.TAIL)
 
-    service.process_event({"type": 3, "code": 1, "value": 0})
+    service.process_event_batch([{"type": 3, "code": 1, "value": 0}])
     assert manual.drive_calls[-1][1:] == (-600, -600)
 
-    service.process_event({"type": 3, "code": 3, "value": 255})
+    service.process_event_batch([{"type": 3, "code": 3, "value": 255}])
     # The logical left/right outputs are swapped and inverted. This preserves
     # clockwise rotation while interpreting translation from the tail.
     assert manual.drive_calls[-1][1:] == (0, -600)
@@ -571,7 +575,7 @@ def test_tail_differential_inverts_translation_and_swaps_logical_sides():
 def test_tail_differential_preserves_requested_rotation_direction():
     service, _, manual = build_service(front=Fronts.TAIL)
 
-    service.process_event({"type": 3, "code": 3, "value": 255})
+    service.process_event_batch([{"type": 3, "code": 3, "value": 255}])
 
     assert manual.drive_calls[-1][1:] == (600, -600)
 
@@ -579,18 +583,18 @@ def test_tail_differential_preserves_requested_rotation_direction():
 def test_tail_mecanum_rotates_operator_translation_frame_180_degrees():
     service, _, manual = build_mecanum_service(front=Fronts.TAIL)
 
-    service.process_event({"type": 3, "code": 1, "value": 0})
+    service.process_event_batch([{"type": 3, "code": 1, "value": 0}])
     assert manual.mecanum_calls[-1][1:] == (-600, -600, -600, -600)
 
-    service.process_event({"type": 3, "code": 1, "value": 127})
-    service.process_event({"type": 3, "code": 0, "value": 255})
+    service.process_event_batch([{"type": 3, "code": 1, "value": 127}])
+    service.process_event_batch([{"type": 3, "code": 0, "value": 255}])
     assert manual.mecanum_calls[-1][1:] == (-600, 600, 600, -600)
 
 
 def test_tail_mecanum_preserves_requested_rotation_direction():
     service, _, manual = build_mecanum_service(front=Fronts.TAIL)
 
-    service.process_event({"type": 3, "code": 3, "value": 255})
+    service.process_event_batch([{"type": 3, "code": 3, "value": 255}])
 
     assert manual.mecanum_calls[-1][1:] == (600, 600, -600, -600)
 
@@ -652,3 +656,56 @@ def test_connection_snapshot_blocks_non_neutral_mecanum_without_motor_command():
     assert service._strafe > 0.0
     assert manual.drive_calls == []
     assert manual.mecanum_calls == []
+
+
+def test_event_batch_emits_only_one_traction_setpoint_for_multiple_axes():
+    service, _, manual = build_service()
+
+    service.process_event_batch([
+        {"type": 3, "code": 1, "value": 0},
+        {"type": 3, "code": 3, "value": 255}
+    ])
+
+    assert len(manual.drive_calls) == 1
+    assert manual.drive_calls[0][1:] == (600, 0)
+
+
+def test_event_batch_uses_only_latest_value_for_repeated_axis():
+    service, _, manual = build_service()
+
+    service.process_event_batch([
+        {"type": 3, "code": 1, "value": 255},
+        {"type": 3, "code": 1, "value": 0}
+    ])
+
+    assert len(manual.drive_calls) == 1
+    assert manual.drive_calls[0][1:] == (600, 600)
+
+
+def test_emergency_stop_has_priority_over_motion_in_same_batch():
+    service, _, manual = build_service()
+
+    service.process_event_batch([
+        {"type": 3, "code": 1, "value": 0},
+        {"type": 3, "code": 3, "value": 255},
+        {"type": 1, "code": 304, "value": 1}
+    ])
+
+    assert manual.stop_calls == 1
+    assert manual.drive_calls == []
+    assert service._neutral_required is True
+
+
+def test_event_batch_applies_only_latest_auxiliary_value_per_axis():
+    service, _, manual = build_service()
+
+    service.process_event_batch([
+        {"type": 3, "code": 17, "value": -1},
+        {"type": 3, "code": 17, "value": 0},
+        {"type": 3, "code": 16, "value": 1}
+    ])
+
+    assert manual.auxiliary_calls == [
+        ("local-manual", "LMM", 0),
+        ("local-manual", "RMM", -400)
+    ]

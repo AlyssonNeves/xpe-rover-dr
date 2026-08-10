@@ -119,7 +119,7 @@ def test_open_reports_when_configured_device_is_not_exposed_by_evdev():
     assert "automatic Bluetooth connection is disabled" in str(error.value)
 
 
-def test_read_event_waits_for_descriptor_and_normalizes_evdev_values():
+def test_read_event_batch_waits_for_descriptor_and_normalizes_evdev_values():
     gamepad = FakeInputDevice(
         "/dev/input/event4",
         "Wireless Controller",
@@ -138,13 +138,14 @@ def test_read_event_waits_for_descriptor_and_normalizes_evdev_values():
     )
     adapter.open()
 
-    event = adapter.read_event(0.05)
+    events = adapter.read_event_batch(0.05, 64)
 
-    assert event == {"type": 3, "code": 1, "value": 255}
-    assert select_calls == [([14], [], [14], 0.05)]
+    assert events == [{"type": 3, "code": 1, "value": 255}]
+    assert select_calls[0] == ([14], [], [14], 0.05)
+    assert select_calls[1] == ([14], [], [14], 0.0)
 
 
-def test_read_event_preserves_key_event_type_code_and_value():
+def test_read_event_batch_preserves_key_event_type_code_and_value():
     gamepad = FakeInputDevice(
         "/dev/input/event4",
         "Wireless Controller",
@@ -162,12 +163,12 @@ def test_read_event_preserves_key_event_type_code_and_value():
     )
     adapter.open()
 
-    assert adapter.read_event(0.01) == {
+    assert adapter.read_event_batch(0.01, 64) == [{
         "type": 1, "code": 304, "value": 1
-    }
+    }]
 
 
-def test_read_event_returns_none_on_timeout():
+def test_read_event_batch_returns_empty_list_on_timeout():
     gamepad = FakeInputDevice(
         "/dev/input/event4", "Wireless Controller", fd=14
     )
@@ -182,7 +183,7 @@ def test_read_event_returns_none_on_timeout():
     )
     adapter.open()
 
-    assert adapter.read_event(0.01) is None
+    assert adapter.read_event_batch(0.01, 64) == []
 
 
 def test_close_releases_the_open_input_device_and_is_idempotent():
@@ -202,11 +203,11 @@ def test_close_releases_the_open_input_device_and_is_idempotent():
     assert adapter.device is None
 
 
-def test_read_event_requires_an_open_device():
+def test_read_event_batch_requires_an_open_device():
     adapter = EvdevJoystickAdapter(evdev_module=FakeEvdevModule({}))
 
     with pytest.raises(RuntimeError) as error:
-        adapter.read_event(0)
+        adapter.read_event_batch(0, 64)
 
     assert "not open" in str(error.value)
 
@@ -250,7 +251,7 @@ def test_exceptional_descriptor_is_reported_as_bluetooth_disconnect():
     opened = adapter.device
 
     with pytest.raises(OSError) as error:
-        adapter.read_event(0.01)
+        adapter.read_event_batch(0.01, 64)
 
     assert "Bluetooth joystick connection lost" in str(error.value)
     assert opened.closed is True
@@ -275,7 +276,7 @@ def test_kernel_read_error_closes_stale_device_and_reports_disconnect():
     opened = adapter.device
 
     with pytest.raises(OSError) as error:
-        adapter.read_event(0.01)
+        adapter.read_event_batch(0.01, 64)
 
     assert "No such device" in str(error.value)
     assert "Bluetooth joystick connection lost" in str(error.value)
@@ -299,10 +300,143 @@ def test_select_failure_is_normalized_as_connection_loss():
     adapter.open()
 
     with pytest.raises(OSError) as error:
-        adapter.read_event(0.01)
+        adapter.read_event_batch(0.01, 64)
 
     assert "Bluetooth joystick connection lost" in str(error.value)
     assert adapter.device is None
+
+
+class FakePoller(object):
+    def __init__(self, event_mask):
+        self.event_mask = event_mask
+        self.unregistered = []
+
+    def poll(self, timeout_ms):
+        del timeout_ms
+        return [(14, self.event_mask)] if self.event_mask else []
+
+    def unregister(self, file_descriptor):
+        self.unregistered.append(file_descriptor)
+
+
+def test_event_batch_coalesces_axes_but_preserves_discrete_keys():
+    adapter = EvdevJoystickAdapter(evdev_module=FakeEvdevModule({}))
+    adapter.device = FakeInputDevice(
+        "/dev/input/event4", "Wireless Controller", fd=14
+    )
+    adapter._poller = FakePoller(0)
+    adapter._append_coalesced([
+        FakeEvent(3, 1, 63),
+        FakeEvent(1, 307, 1),
+        FakeEvent(3, 1, 0),
+        FakeEvent(1, 307, 0)
+    ])
+
+    events = adapter.read_event_batch(0.0, 64)
+
+    assert events == [
+        {"type": 1, "code": 307, "value": 1},
+        {"type": 3, "code": 1, "value": 0},
+        {"type": 1, "code": 307, "value": 0}
+    ]
+
+
+def test_event_batch_respects_max_events_and_retains_remainder():
+    adapter = EvdevJoystickAdapter(evdev_module=FakeEvdevModule({}))
+    adapter.device = FakeInputDevice(
+        "/dev/input/event4", "Wireless Controller", fd=14
+    )
+    adapter._poller = FakePoller(0)
+    adapter._append_coalesced([
+        FakeEvent(1, 304, 1),
+        FakeEvent(1, 304, 0),
+        FakeEvent(3, 1, 0)
+    ])
+
+    first = adapter.read_event_batch(0.0, 2)
+    second = adapter.read_event_batch(0.0, 2)
+
+    assert first == [
+        {"type": 1, "code": 304, "value": 1},
+        {"type": 1, "code": 304, "value": 0}
+    ]
+    assert second == [{"type": 3, "code": 1, "value": 0}]
+
+
+def test_event_drain_is_bounded_by_batch_count_when_continuously_readable():
+    class StreamingDevice(FakeInputDevice):
+        def __init__(self):
+            super(StreamingDevice, self).__init__(
+                "/dev/input/event4", "Wireless Controller", fd=14
+            )
+            self.read_calls = 0
+
+        def read(self):
+            self.read_calls += 1
+            return [FakeEvent(3, 1, self.read_calls)]
+
+    device = StreamingDevice()
+    clock_values = iter([0.0] + [0.0] * 16)
+    adapter = EvdevJoystickAdapter(
+        evdev_module=FakeEvdevModule({}),
+        monotonic_clock=lambda: next(clock_values)
+    )
+    adapter.device = device
+    adapter._poller = FakePoller(1)
+    adapter.MAX_DRAIN_SECONDS = 10.0
+
+    events = adapter.read_event_batch(0.0, 64)
+
+    assert device.read_calls == adapter.MAX_DRAIN_BATCHES
+    assert events == [{
+        "type": 3,
+        "code": 1,
+        "value": adapter.MAX_DRAIN_BATCHES
+    }]
+
+
+def test_event_drain_stops_when_elapsed_budget_is_reached():
+    class StreamingDevice(FakeInputDevice):
+        def __init__(self):
+            super(StreamingDevice, self).__init__(
+                "/dev/input/event4", "Wireless Controller", fd=14
+            )
+            self.read_calls = 0
+
+        def read(self):
+            self.read_calls += 1
+            return [FakeEvent(3, 1, self.read_calls)]
+
+    device = StreamingDevice()
+    clock_values = iter([0.0, 0.001, 0.004])
+    adapter = EvdevJoystickAdapter(
+        evdev_module=FakeEvdevModule({}),
+        monotonic_clock=lambda: next(clock_values)
+    )
+    adapter.device = device
+    adapter._poller = FakePoller(1)
+
+    events = adapter.read_event_batch(0.0, 64)
+
+    assert device.read_calls == 2
+    assert events == [{"type": 3, "code": 1, "value": 2}]
+
+
+def test_poll_hangup_is_reported_as_bluetooth_disconnect():
+    import select
+
+    device = FakeInputDevice(
+        "/dev/input/event4", "Wireless Controller", fd=14
+    )
+    adapter = EvdevJoystickAdapter(evdev_module=FakeEvdevModule({}))
+    adapter.device = device
+    adapter._poller = FakePoller(select.POLLHUP)
+
+    with pytest.raises(OSError, match="Bluetooth joystick connection lost"):
+        adapter.read_event_batch(0.01, 64)
+
+    assert adapter.device is None
+    assert device.closed is True
 
 
 class RecordingInputStream(object):

@@ -14,9 +14,9 @@ class FakeJoystickPort(object):
     def open(self):
         return "Wireless Controller"
 
-    def read_event(self, timeout_seconds=None):
-        del timeout_seconds
-        return None
+    def read_event_batch(self, timeout_seconds, max_events):
+        del timeout_seconds, max_events
+        return []
 
     def close(self):
         return None
@@ -116,7 +116,7 @@ def build_field_service(heading_deg=0.0):
 
 
 def axis(service, code, value):
-    service.process_event({"type": 3, "code": code, "value": value})
+    service.process_event_batch([{"type": 3, "code": code, "value": value}])
 
 
 def test_field_mode_requires_explicit_heading_query_port():
