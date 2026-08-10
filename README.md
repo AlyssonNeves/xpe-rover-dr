@@ -327,3 +327,18 @@ selection screen is replaced by deterministic graphical assets.
 This increment intentionally performs direct PBM loading from `assets/screens`.
 The complete screen catalogue, deployment cache and in-memory PBM reuse are kept
 for the later screen/cache consolidation increment.
+
+## EV3 battery monitoring and operational feedback
+
+When physical EV3 hardware is enabled, Rover-DR now starts an informational
+status display using the packaged `Screen 05 - General Status.pbm` artwork. The
+screen is refreshed periodically with the EV3 battery percentage, current IP
+address, joystick connection state and the selected Command/Control values.
+Battery lookup explicitly addresses `legoev3-battery` so a Bluetooth controller
+power-supply entry cannot be mistaken for the brick battery.
+
+Processed EV3 brick-button presses also emit a short best-effort confirmation
+beep, and the general status screen announces `Rover D R Online` without making
+audio availability a startup requirement. Bluetooth recovery states, startup
+progress screens and the consolidated PBM cache remain reserved for later
+increments.

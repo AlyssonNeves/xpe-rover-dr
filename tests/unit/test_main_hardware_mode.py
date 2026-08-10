@@ -68,3 +68,33 @@ def test_main_passes_selected_mode_to_application_builder(monkeypatch):
     assert main_module.main() == 0
     assert captured["mode"] is mode_service
     assert app.started and app.waited and app.stopped
+
+
+def test_build_application_adds_operation_status_in_hardware_mode(monkeypatch):
+    monkeypatch.setattr(main_module.rover_config, "HARDWARE_ENABLED", True)
+    monkeypatch.setattr(
+        main_module.rover_config, "get_joystick_config",
+        lambda: {"device_name": "Wireless Controller"}
+    )
+
+    status_service = object()
+    captured_status = {}
+
+    def make_status(operation_mode_service=None, joystick_device_name=None):
+        captured_status["mode"] = operation_mode_service
+        captured_status["name"] = joystick_device_name
+        return status_service
+
+    monkeypatch.setattr(main_module, "Ev3OperationStatusAdapter", make_status)
+
+    # Physical gateway creation is unrelated to this test and is allowed to
+    # fall back to the existing guarded unavailable path.
+    mode_service = main_module.OperationModeService()
+    application = main_module.build_application(
+        operation_mode_service=mode_service
+    )
+
+    assert status_service in application.managed_services
+    assert captured_status == {
+        "mode": mode_service, "name": "Wireless Controller"
+    }

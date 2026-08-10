@@ -113,6 +113,13 @@ class Ev3OperationModeSelectorAdapterTests(unittest.TestCase):
             self.assertEqual("1", background.mode)
             background.close()
 
+
+    def test_button_feedback_is_best_effort(self):
+        feedback = mock.Mock()
+        adapter = Ev3OperationModeSelectorAdapter(button_feedback=feedback)
+        adapter._play_button_feedback()
+        feedback.play.assert_called_once_with()
+
     def test_remote_screen_does_not_depend_on_operation_value(self):
         adapter = Ev3OperationModeSelectorAdapter()
         self.assertEqual(

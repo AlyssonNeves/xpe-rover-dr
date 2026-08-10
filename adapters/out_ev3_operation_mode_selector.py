@@ -6,6 +6,7 @@
 import os
 import time
 
+from adapters.ev3_button_feedback import Ev3ButtonFeedback
 from adapters.ev3_screen_image import (
     load_monochrome_screen,
     screen_asset_path
@@ -29,6 +30,9 @@ class Ev3OperationModeSelectorAdapter(OperationModeSelectorPort):
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"
     )
+
+    def __init__(self, button_feedback=None):
+        self.button_feedback = button_feedback or Ev3ButtonFeedback
 
     BACKGROUND_FILENAMES = {
         (CommandModes.LOCAL, OperationModes.MANUAL):
@@ -54,6 +58,7 @@ class Ev3OperationModeSelectorAdapter(OperationModeSelectorPort):
 
             while True:
                 if self._is_pressed(buttons, "left"):
+                    self._play_button_feedback()
                     command_mode = self._toggle_command_mode(command_mode)
                     self._draw(
                         display,
@@ -64,6 +69,7 @@ class Ev3OperationModeSelectorAdapter(OperationModeSelectorPort):
                     self._wait_until_released(buttons)
 
                 elif self._is_pressed(buttons, "right"):
+                    self._play_button_feedback()
                     operation_mode = self._toggle_operation_mode(operation_mode)
                     self._draw(
                         display,
@@ -74,6 +80,7 @@ class Ev3OperationModeSelectorAdapter(OperationModeSelectorPort):
                     self._wait_until_released(buttons)
 
                 elif self._is_pressed(buttons, "enter"):
+                    self._play_button_feedback()
                     self._draw_confirmation(
                         display,
                         command_mode,
@@ -86,6 +93,7 @@ class Ev3OperationModeSelectorAdapter(OperationModeSelectorPort):
                     }
 
                 elif self._is_pressed(buttons, "backspace"):
+                    self._play_button_feedback()
                     self._wait_until_released(buttons)
                     return None
 
@@ -183,6 +191,13 @@ class Ev3OperationModeSelectorAdapter(OperationModeSelectorPort):
             return bool(getattr(buttons, name))
         except (OSError, RuntimeError, AttributeError):
             return False
+
+    def _play_button_feedback(self):
+        """Emits best-effort feedback for one processed brick-button press."""
+        try:
+            self.button_feedback.play()
+        except (AttributeError, RuntimeError, TypeError, ValueError):
+            pass
 
     @staticmethod
     def _toggle_command_mode(command_mode):

@@ -11,6 +11,7 @@ from adapters.in_rest_api_server import RestApiServer
 from adapters.out_controller_monitor import ControllerMonitorAdapter
 from adapters.out_drive_service import DriveServiceAdapter
 from adapters.out_ev3_operation_mode_selector import Ev3OperationModeSelectorAdapter
+from adapters.out_ev3_operation_status import Ev3OperationStatusAdapter
 from adapters.out_ev3_operator_alert import Ev3OperatorAlertAdapter
 from adapters.out_motor_monitor import MotorMonitorAdapter
 from adapters.out_rover_state_query import RoverStateQueryAdapter
@@ -134,6 +135,16 @@ def build_application(operation_mode_service=None, joystick_port=None):
         managed_services.append(ev3dev2_motor_gateway)
     if joystick_control_service is not None:
         managed_services.append(joystick_control_service)
+    if rover_config.HARDWARE_ENABLED:
+        joystick_config = rover_config.get_joystick_config()
+        managed_services.append(
+            Ev3OperationStatusAdapter(
+                operation_mode_service=operation_mode_service,
+                joystick_device_name=joystick_config.get(
+                    "device_name", "Wireless Controller"
+                )
+            )
+        )
     application = RoverApplication(
         monitors=monitors, rest_api=rest_api, managed_services=managed_services
     )

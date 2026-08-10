@@ -113,7 +113,8 @@
     "axis_max": 255,
     "left_auxiliary_motor_code": "LMM",
     "right_auxiliary_motor_code": "RMM",
-    "poll_seconds": 0.02
+    "poll_seconds": 0.02,
+    "device_name": "Wireless Controller"
   },
   "drive": {
     "left_motor_code": "LLM",
