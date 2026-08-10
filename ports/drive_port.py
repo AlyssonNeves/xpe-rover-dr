@@ -1,57 +1,46 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Output port for differential-drive navigation."""
+"""Output port for high-level Rover navigation operations."""
+
 
 from abc import ABCMeta, abstractmethod
 
 
 class DrivePort(object, metaclass=ABCMeta):
-    """Defines differential-drive control, odometry and basic navigation."""
+    """Defines the contract for differential-drive navigation."""
 
     @abstractmethod
     def get_status(self):
-        """Returns drive state, calibration, traction snapshots and odometry."""
+        """Return the current navigation service status."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_telemetry(self, limit=None):
+        """Return recent navigation telemetry, optionally limited in size."""
         raise NotImplementedError
 
     @abstractmethod
     def reset_odometry(self, x_mm=0.0, y_mm=0.0, heading_deg=0.0):
-        """Resets the estimated rover pose."""
+        """Reset the estimated Rover pose to the supplied coordinates."""
         raise NotImplementedError
 
     @abstractmethod
-    def drive_tank(
-        self, left_speed_sp, right_speed_sp, priority=None,
-        stop_action=None, watchdog_ms=None, profile=None
-    ):
-        """Controls left and right traction motors independently."""
+    def move_distance(self, distance_mm, speed_sp, **options):
+        """Move the Rover by a linear distance using the requested speed."""
         raise NotImplementedError
 
     @abstractmethod
-    def move_distance(
-        self, distance_mm, speed_sp, priority=None, stop_action=None,
-        timeout_ms=None, profile=None
-    ):
-        """Queues a straight-line displacement in millimetres."""
+    def rotate_angle(self, angle_deg, speed_sp, **options):
+        """Rotate the Rover through the requested angle at the given speed."""
         raise NotImplementedError
 
     @abstractmethod
-    def rotate_angle(
-        self, angle_deg, speed_sp, priority=None, stop_action=None,
-        timeout_ms=None, profile=None
-    ):
-        """Queues an in-place rover rotation in degrees."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def curve_radius(
-        self, radius_mm, angle_deg, speed_sp, priority=None,
-        stop_action=None, timeout_ms=None, profile=None
-    ):
-        """Queues a circular arc defined by radius and angle."""
+    def curve_radius(self, radius_mm, angle_deg, speed_sp, **options):
+        """Drive along an arc defined by radius, angle, and speed."""
         raise NotImplementedError
 
     @abstractmethod
     def stop(self, stop_action=None):
-        """Stops both traction motors immediately."""
+        """Stop differential-drive motion using the requested stop action."""
         raise NotImplementedError

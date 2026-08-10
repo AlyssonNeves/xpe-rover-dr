@@ -1,30 +1,62 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Output port for querying Rover-DR controller information."""
+"""
+Output port for querying controller information.
+
+Defines the contract that any controller adapter must follow,
+regardless of whether the data source is simulated, local,
+a real EV3, the operating system, the network,
+or another physical device.
+"""
+
 
 from abc import ABCMeta, abstractmethod
 
 
 class ControllerPort(object, metaclass=ABCMeta):
-    """Defines controller monitoring query operations."""
+    """Defines controller state query operations."""
 
     @abstractmethod
     def read_controller_status(self):
-        """Returns general controller status."""
+        """
+        Queries the general controller status.
+
+        Returns:
+            dict:
+                General controller status information.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def read_network_status(self):
-        """Returns controller network information."""
+        """
+        Queries controller network information.
+
+        Returns:
+            dict:
+                Network-related information.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def read_battery_status(self):
-        """Returns controller battery information."""
+        """
+        Queries controller battery information.
+
+        Returns:
+            dict:
+                Battery-related information.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def read_system_status(self):
-        """Returns controller system information."""
+        """
+        Queries controller system information.
+
+        Returns:
+            dict:
+                System-related information.
+        """
         raise NotImplementedError

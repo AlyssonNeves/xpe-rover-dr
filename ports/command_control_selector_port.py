@@ -3,10 +3,10 @@
 
 """Output port for selecting Rover Command and Control parameters."""
 
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 
 
-class CommandControlSelectorPort(ABC):
+class CommandControlSelectorPort(object, metaclass=ABCMeta):
     """Defines the operator-facing Command/Control selection contract."""
 
     @abstractmethod

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Adapter exposing cached heading state through a non-blocking port."""
+"""Adapter exposing monitored heading state through a non-blocking port."""
 
 import time
 
@@ -9,7 +9,7 @@ from ports.heading_query_port import HeadingQueryPort
 
 
 class HeadingStateQueryAdapter(HeadingQueryPort):
-    """Returns only fresh cached samples and never performs sensor I/O."""
+    """Returns only recent cached samples; it never reads sensor hardware."""
 
     def __init__(self, state_store, max_age_seconds=0.1, clock=None):
         self._state_store = state_store

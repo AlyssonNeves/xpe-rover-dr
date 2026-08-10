@@ -1,74 +1,139 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Initial controller monitoring service for Rover-DR."""
+"""
+Simulated controller information monitor.
 
-import platform
-import socket
+This implementation returns simulated data to support the
+development and testing without depending on physical controller telemetry.
+"""
 
-from app.rover_config import MONITOR_INTERVAL_SECONDS
 from infrastructure.state.controller_state_store import ControllerStateStore
 from infrastructure.monitoring.monitor_base import MonitorBase
 
 
 class ControllerMonitor(MonitorBase):
-    """Publishes controller, network, battery and system snapshots."""
+    """
+    Publishes simulated controller information.
 
-    def __init__(self, state_store=None, interval_seconds=None):
-        interval = (
-            MONITOR_INTERVAL_SECONDS
-            if interval_seconds is None
-            else interval_seconds
+    Provides simulated controller, network, battery,
+    and system information for development and testing.
+    """
+
+    def __init__(self, state_store=None, interval_seconds=1.0):
+        """
+        Initializes the simulated controller monitor.
+
+        Args:
+            state_store (ControllerStateStore, optional):
+                Controller state repository. If not provided,
+                a new instance will be created.
+            interval_seconds (float):
+                Monitoring cycle interval in seconds.
+        """
+        MonitorBase.__init__(
+            self,
+            name="ControllerMonitor",
+            interval_seconds=interval_seconds
         )
-        MonitorBase.__init__(self, "ControllerMonitor", interval)
+
         self.state_store = state_store or ControllerStateStore()
-        self._refresh()
 
-    def _refresh(self):
-        hostname = socket.gethostname()
+        # Publish the initial controller state.
+        self._publish_controller_state()
 
-        self.state_store.update_controller_status({
+    def _publish_controller_state(self):
+        """
+        Publishes the simulated controller state
+        to the state repository.
+        """
+        self.state_store.update_controller_status(
+            self._build_controller_status()
+        )
+
+        self.state_store.update_network_status(
+            self._build_network_status()
+        )
+
+        self.state_store.update_battery_status(
+            self._build_battery_status()
+        )
+
+        self.state_store.update_system_status(
+            self._build_system_status()
+        )
+
+    def _build_controller_status(self):
+        """
+        Builds the simulated controller status.
+
+        Returns:
+            dict:
+                Simulated controller information.
+        """
+        return {
             "controller": "Rover Controller",
             "status": "available",
             "connected": True,
-            "mode": "local"
-        })
-        self.state_store.update_network_status({
-            "hostname": hostname,
-            "ip_address": self._resolve_ip(hostname),
-            "connected": True
-        })
-        self.state_store.update_battery_status({
+            "mode": "simulated"
+        }
+
+    def _build_network_status(self):
+        """
+        Builds the simulated network status.
+
+        Returns:
+            dict:
+                Simulated network information.
+        """
+        return {
+            "hostname": "rover-controller",
+            "ip_address": "0.0.0.0",
+            "mac_address": "00:00:00:00:00:00",
+            "connected": False,
+            "mode": "simulated"
+        }
+
+    def _build_battery_status(self):
+        """
+        Builds the simulated battery status.
+
+        Returns:
+            dict:
+                Simulated battery information.
+        """
+        return {
             "voltage": None,
             "current": None,
             "percentage": None,
-            "status": "not_available"
-        })
-        self.state_store.update_system_status({
-            "platform": platform.system(),
-            "release": platform.release(),
-            "python_version": platform.python_version()
-        })
+            "status": "unknown",
+            "mode": "simulated"
+        }
 
-    @staticmethod
-    def _resolve_ip(hostname):
-        try:
-            return socket.gethostbyname(hostname)
-        except socket.error:
-            return "0.0.0.0"
+    def _build_system_status(self):
+        """
+        Builds the simulated system status.
+
+        Returns:
+            dict:
+                Simulated system information.
+        """
+        return {
+            "cpu_usage": None,
+            "memory_usage": None,
+            "disk_usage": None,
+            "uptime": None,
+            "mode": "simulated"
+        }
 
     def on_cycle(self):
-        """Refreshes controller information in the repository."""
-        self._refresh()
+        """
+        Executes a controller monitoring cycle.
 
-    def read_controller_status(self):
-        return self.state_store.get_controller_status()
+        Refreshes the simulated controller information
+        stored in the state repository.
 
-    def read_network_status(self):
-        return self.state_store.get_network_status()
-
-    def read_battery_status(self):
-        return self.state_store.get_battery_status()
-
-    def read_system_status(self):
-        return self.state_store.get_system_status()
+        Returns:
+            None
+        """
+        self._publish_controller_state()

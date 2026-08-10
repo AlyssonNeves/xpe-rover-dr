@@ -5,12 +5,14 @@
 
 import time
 
+from app.operation_mode_service import Commands, Controls
 from infrastructure.ev3.button_feedback import Ev3ButtonFeedback
+from infrastructure.ev3.framebuffer_display import create_ev3_display
 from infrastructure.ev3.screen_image import (
     cached_screen_path,
     load_monochrome_screen
 )
-from app.operation_mode_service import Commands, Controls
+from infrastructure.logging.app_logger import AppLogger
 from ports.command_control_selector_port import CommandControlSelectorPort
 
 
@@ -18,6 +20,10 @@ class Ev3CommandControlSelectorAdapter(CommandControlSelectorPort):
     """Displays Command/Control screens and reads EV3 brick buttons."""
 
     BUTTON_POLL_SECONDS = 0.05
+    OPERATOR_PROMPT_BEEP_COUNT = 3
+    OPERATOR_PROMPT_FREQUENCY_HZ = 1000
+    OPERATOR_PROMPT_TONE_MS = 70
+    OPERATOR_PROMPT_GAP_SECONDS = 0.04
 
     OPTION_COMMAND = 0
     OPTION_CONTROL = 1
@@ -38,17 +44,15 @@ class Ev3CommandControlSelectorAdapter(CommandControlSelectorPort):
         (Commands.REMOTE, None):
             "Screen 02 - Command Control - Remote.pbm"
     }
-
-    def __init__(self, button_feedback=None):
-        self.button_feedback = button_feedback or Ev3ButtonFeedback
+    BACKGROUND_FILENAME = BACKGROUND_FILENAMES[
+        (Commands.LOCAL, Controls.MANUAL)
+    ]
 
     def select_mode(self, command, control):
         """Moves among active rows until the operator confirms or cancels."""
         try:
             from ev3dev2.button import Button  # pylint: disable=import-error
-            from ev3dev2.display import Display  # pylint: disable=import-error
-
-            display = Display()
+            display = create_ev3_display()
             buttons = Button()
             command, control = self._normalize_modes(command, control)
             backgrounds = self._load_backgrounds()
@@ -60,6 +64,7 @@ class Ev3CommandControlSelectorAdapter(CommandControlSelectorPort):
                 backgrounds[self._background_key(command, control)],
                 option_index
             )
+            self._play_operator_prompt()
 
             while True:
                 button_name = self._pressed_button(buttons)
@@ -67,24 +72,15 @@ class Ev3CommandControlSelectorAdapter(CommandControlSelectorPort):
                     time.sleep(self.BUTTON_POLL_SECONDS)
                     continue
 
-                self._play_button_feedback()
-
-                if button_name == "up":
-                    option_index = self._previous_option(option_index, command)
-                elif button_name == "down":
-                    option_index = self._next_option(option_index, command)
-                elif self._changes_selected_value(
-                        button_name, option_index, command):
-                    command, control = self._change_selected_mode(
-                        option_index, command, control
-                    )
-                    option_index = self._normalize_option(option_index, command)
-
-                self._draw(
-                    display,
-                    backgrounds[self._background_key(command, control)],
-                    option_index
+                (option_index, command, control,
+                 action_performed) = self._handle_button(
+                    button_name, option_index, command, control,
+                    display, backgrounds
                 )
+
+                if action_performed:
+                    Ev3ButtonFeedback.play()
+
                 self._wait_until_released(buttons)
 
                 if (button_name == "enter" and
@@ -99,17 +95,84 @@ class Ev3CommandControlSelectorAdapter(CommandControlSelectorPort):
                 if button_name == "backspace":
                     return None
 
-        except (
-                ImportError, OSError, RuntimeError, AttributeError,
-                TypeError, ValueError):
+        except ImportError:
             command, control = self._normalize_modes(command, control)
             return {
                 "command": command,
                 "control": control if command == Commands.LOCAL else None
             }
+        except (
+                IOError, OSError, RuntimeError, AttributeError,
+                TypeError, ValueError) as error:
+            message = (
+                "Unable to display EV3 Command/Control screen: {0}"
+                .format(error)
+            )
+            AppLogger.error(message)
+            raise RuntimeError(message)
 
     @classmethod
-    def _asset_path(cls, command=Commands.LOCAL, control=Controls.MANUAL):
+    def _handle_button(cls, button_name, option_index, command, control,
+                       display, backgrounds):
+        action_performed = False
+        redraw = False
+
+        if button_name == "up":
+            option_index = cls._previous_option(option_index, command)
+            action_performed = True
+            redraw = True
+        elif button_name == "down":
+            option_index = cls._next_option(option_index, command)
+            action_performed = True
+            redraw = True
+        elif cls._changes_selected_value(button_name, option_index, command):
+            command, control = cls._change_selected_mode(
+                option_index, command, control
+            )
+            option_index = cls._normalize_option(option_index, command)
+            action_performed = True
+            redraw = True
+        elif (button_name == "enter" and
+              option_index == cls.OPTION_CONFIRM):
+            action_performed = True
+        elif button_name == "backspace":
+            action_performed = True
+
+        if redraw:
+            cls._draw(
+                display,
+                backgrounds[cls._background_key(command, control)],
+                option_index
+            )
+
+        return option_index, command, control, action_performed
+
+    @classmethod
+    def _play_operator_prompt(cls):
+        try:
+            from ev3dev2.sound import Sound  # pylint: disable=import-error
+
+            sound = Sound()
+            for beep_index in range(cls.OPERATOR_PROMPT_BEEP_COUNT):
+                sound.tone(
+                    cls.OPERATOR_PROMPT_FREQUENCY_HZ,
+                    cls.OPERATOR_PROMPT_TONE_MS,
+                    play_type=Sound.PLAY_WAIT_FOR_COMPLETE
+                )
+                if beep_index < cls.OPERATOR_PROMPT_BEEP_COUNT - 1:
+                    time.sleep(cls.OPERATOR_PROMPT_GAP_SECONDS)
+        except (
+                ImportError, IOError, OSError, RuntimeError,
+                AttributeError, TypeError) as error:
+            AppLogger.warning(
+                "Unable to emit Command/Control prompt beeps: {0}".format(
+                    error
+                )
+            )
+
+    @classmethod
+    def _asset_path(cls, command=Commands.LOCAL,
+                    control=Controls.MANUAL):
         return cached_screen_path(
             cls.BACKGROUND_FILENAMES[cls._background_key(command, control)]
         )
@@ -169,9 +232,11 @@ class Ev3CommandControlSelectorAdapter(CommandControlSelectorPort):
     @classmethod
     def _changes_selected_value(cls, button_name, option_index,
                                 command=Commands.LOCAL):
-        if button_name not in ("left", "right", "enter"):
-            return False
-        if option_index == cls.OPTION_CONFIRM:
+        value_button = (
+            button_name in ("left", "right") or
+            button_name == "enter"
+        )
+        if not value_button or option_index == cls.OPTION_CONFIRM:
             return False
         if option_index == cls.OPTION_CONTROL:
             return command == Commands.LOCAL
@@ -191,6 +256,8 @@ class Ev3CommandControlSelectorAdapter(CommandControlSelectorPort):
                 if control == Controls.MANUAL else Controls.MANUAL
             )
         return command, control
+
+    _toggle_selected_mode = _change_selected_mode
 
     @classmethod
     def _draw(cls, display, background, option_index):
@@ -242,10 +309,3 @@ class Ev3CommandControlSelectorAdapter(CommandControlSelectorPort):
             return bool(getattr(buttons, name))
         except (OSError, RuntimeError, AttributeError):
             return False
-
-    def _play_button_feedback(self):
-        """Emits best-effort feedback for one processed brick-button press."""
-        try:
-            self.button_feedback.play()
-        except (AttributeError, RuntimeError, TypeError, ValueError):
-            pass

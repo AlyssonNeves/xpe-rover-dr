@@ -1,133 +1,125 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Sensor monitoring service with optional EV3 gyroscope integration."""
+"""
+Configured Rover sensor state monitor.
 
-from app.rover_config import (
-    DRIVE_GYRO_SENSOR_CODE,
-    HARDWARE_ENABLED,
-    MONITOR_INTERVAL_SECONDS,
-    get_sensor_definitions,
-)
+This module provides a configuration-backed sensor state implementation
+for simulation, development, and integration testing.
+"""
+
+from app.rover_config import DEFAULT_CONFIGURATION
 from infrastructure.monitoring.monitor_base import MonitorBase
 from infrastructure.state.sensor_state_store import SensorStateStore
 
 
-class Ev3GyroHardwareBackend(object):
-    """Small hardware backend dedicated to the standard EV3 gyroscope."""
-
-    def __init__(self, enabled=True):
-        self.available = False
-        self.error = None
-        self._gyro_class = None
-        if not enabled:
-            self.error = "Physical EV3 hardware is disabled"
-            return
-        try:
-            from ev3dev2.sensor.lego import GyroSensor
-            self._gyro_class = GyroSensor
-            self.available = True
-        except Exception as error:  # pragma: no cover - depends on EV3 runtime
-            self.error = str(error)
-
-    def connect(self, definition):
-        if not self.available or self._gyro_class is None:
-            return None
-        try:
-            sensor = self._gyro_class(address=definition.get("address"))
-            mode = definition.get("mode")
-            if mode:
-                sensor.mode = mode
-            return sensor
-        except Exception as error:  # pragma: no cover - physical hardware path
-            self.error = str(error)
-            return None
-
-    @staticmethod
-    def read_angle(sensor):
-        if sensor is None:
-            return None
-        try:
-            if hasattr(sensor, "angle"):
-                return float(sensor.angle)
-            return float(sensor.value(0))
-        except Exception:  # pragma: no cover - physical hardware path
-            return None
-
-
 class SensorMonitor(MonitorBase):
-    """Publishes configured sensors and refreshes the EV3 gyro when available."""
+    """
+    Represents a configuration-backed sensor monitoring service.
 
-    def __init__(
-        self, state_store=None, interval_seconds=None, gyro_backend=None
-    ):
-        interval = (
-            MONITOR_INTERVAL_SECONDS
-            if interval_seconds is None
-            else interval_seconds
+    Loads sensor definitions from the application configuration
+    and maintains sensor state information in the sensor repository.
+    """
+
+    def __init__(self, state_store=None, interval_seconds=1.0,
+                 sensor_definitions=None):
+        """
+        Initializes the sensor monitor.
+
+        Args:
+            state_store (SensorStateStore, optional):
+                Sensor state repository. If not provided,
+                a new instance will be created.
+            interval_seconds (float):
+                Monitoring cycle interval in seconds.
+        """
+        MonitorBase.__init__(
+            self,
+            name="SensorMonitor",
+            interval_seconds=interval_seconds
         )
-        MonitorBase.__init__(self, "SensorMonitor", interval)
+
         self.state_store = state_store or SensorStateStore()
-        self.sensor_definitions = get_sensor_definitions()
-        self.gyro_backend = gyro_backend or Ev3GyroHardwareBackend(
-            enabled=HARDWARE_ENABLED
+        self.sensor_definitions = (
+            sensor_definitions or DEFAULT_CONFIGURATION.sensor_definitions
         )
-        self._gyro = None
-        self._load_configured_sensors()
-        self._connect_gyro()
 
-    def _load_configured_sensors(self):
-        for code, definition in self.sensor_definitions.items():
-            sensor = dict(definition)
-            sensor.update({
-                "code": code,
-                "value": None,
-                "connected": False,
-                "source": "configured"
-            })
-            self.state_store.update_sensor(code, sensor)
+        # Populate the state repository with the initial sensor registry
+        # defined in the application configuration.
+        self._load_initial_sensors()
 
-    def _connect_gyro(self):
-        definition = self.sensor_definitions.get(DRIVE_GYRO_SENSOR_CODE)
-        if definition is not None:
-            self._gyro = self.gyro_backend.connect(definition)
-        self._refresh_gyro_state()
+    def _load_initial_sensors(self):
+        """
+        Loads the configured sensor registry into the state store.
 
-    def _refresh_gyro_state(self):
-        sensor = self.state_store.get_sensor(DRIVE_GYRO_SENSOR_CODE)
-        if sensor is None:
-            return
-        value = self.gyro_backend.read_angle(self._gyro)
-        sensor["value"] = value
-        sensor["connected"] = self._gyro is not None and value is not None
-        sensor["source"] = (
-            "ev3dev2" if sensor["connected"] else (
-                "unavailable" if HARDWARE_ENABLED else "disabled"
-            )
-        )
-        if not sensor["connected"] and self.gyro_backend.error:
-            sensor["error"] = self.gyro_backend.error
-        else:
-            sensor.pop("error", None)
-        self.state_store.update_sensor(DRIVE_GYRO_SENSOR_CODE, sensor)
+        Sensor definitions are converted into the internal data structure
+        used by the monitoring subsystem and persisted in the repository.
+        """
+        for sensor_code, sensor_definition in self.sensor_definitions.items():
+            sensor_data = {
+                "code": sensor_code,
+                "name": sensor_definition.get("name"),
+                "address": sensor_definition.get("address"),
+                "mode": sensor_definition.get("mode"),
+                "unit": sensor_definition.get("unit"),
+                "supported_modes": list(sensor_definition.get(
+                    "supported_modes",
+                    []
+                )),
+                "value": sensor_definition.get("value", 0),
+                "connected": sensor_definition.get("connected", True)
+            }
+
+            self.state_store.update_sensor(sensor_code, sensor_data)
 
     def on_cycle(self):
-        """Refreshes the gyroscope; other sensor drivers remain deferred."""
-        self._refresh_gyro_state()
+        """
+        Executes a monitoring cycle.
 
-    def list_sensors(self):
-        return [
-            {
-                "code": item["code"],
-                "name": item["name"],
-                "address": item["address"],
-                "connected": item["connected"]
+        This simulated implementation does not interact with
+        physical hardware and preserves the current sensor state.
+
+        Returns:
+            None
+        """
+        return None
+
+    def change_sensor_mode(self, sensor_code, sensor_mode):
+        """
+        Changes the operating mode of a simulated sensor.
+
+        Args:
+            sensor_code (str):
+                Unique sensor identifier.
+            sensor_mode (str):
+                Target operating mode.
+
+        Returns:
+            dict | None:
+                Updated sensor information when the operation succeeds,
+                an error dictionary when the requested mode is not
+                supported, or None when the sensor does not exist.
+        """
+        sensor = self.state_store.get_sensor(sensor_code)
+
+        if sensor is None:
+            return None
+
+        supported_modes = sensor.get("supported_modes", [])
+
+        # Validate the requested mode against the sensor capabilities
+        # defined during initialization.
+        if sensor_mode not in supported_modes:
+            return {
+                "success": False,
+                "error": "Unsupported mode for the sensor.",
+                "sensor": sensor
             }
-            for item in self.state_store.get_all_sensors()
-        ]
 
-    def read_sensor(self, code):
-        return self.state_store.get_sensor(code)
+        # Persist the mode update through the state repository to keep a
+        # single source of truth for sensor state information.
+        sensor["mode"] = sensor_mode
 
-    def read_all_sensors(self):
-        return self.state_store.get_all_sensors()
+        self.state_store.update_sensor(sensor_code, sensor)
+
+        return sensor

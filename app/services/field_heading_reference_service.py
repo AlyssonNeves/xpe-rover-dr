@@ -15,9 +15,10 @@ class FieldHeadingReferenceService(
         HeadingQueryPort, FieldHeadingReferenceCommandPort):
     """Converts canonical gyro headings into an operator FIELD reference.
 
-    The wrapped query remains the source of fresh canonical samples. Redefining
-    zero changes only this in-memory reference: it never resets the physical
-    gyro and never mutates the monitored heading cache.
+    The wrapped query remains the single source of fresh canonical heading
+    samples. This service performs no sensor I/O and never modifies the
+    monitored cache. Redefining zero only updates an in-memory reference used
+    by FIELD-centric consumers.
     """
 
     def __init__(self, canonical_heading_query_port):
@@ -28,15 +29,20 @@ class FieldHeadingReferenceService(
         self._zero_reference_deg = 0.0
 
     def set_current_heading_as_zero(self):
+        """Atomically stores the current fresh canonical heading as zero."""
         canonical_heading_deg = (
             self._canonical_heading_query_port.get_heading_deg()
         )
         if canonical_heading_deg is None:
-            return {"success": False, "reason": "heading_unavailable"}
+            return {
+                "success": False,
+                "reason": "heading_unavailable"
+            }
 
         canonical_heading_deg = float(canonical_heading_deg)
         with self._reference_lock:
             self._zero_reference_deg = canonical_heading_deg
+
         return {
             "success": True,
             "reference_heading_deg": canonical_heading_deg,
@@ -44,11 +50,13 @@ class FieldHeadingReferenceService(
         }
 
     def get_heading_deg(self):
+        """Returns a fresh heading relative to the current FIELD zero."""
         canonical_heading_deg = (
             self._canonical_heading_query_port.get_heading_deg()
         )
         if canonical_heading_deg is None:
             return None
+
         with self._reference_lock:
             reference_heading_deg = self._zero_reference_deg
         return self._normalize_angle(
@@ -56,6 +64,7 @@ class FieldHeadingReferenceService(
         )
 
     def get_heading_snapshot(self):
+        """Returns the canonical snapshot augmented with FIELD metadata."""
         snapshot = dict(
             self._canonical_heading_query_port.get_heading_snapshot()
         )
@@ -76,4 +85,5 @@ class FieldHeadingReferenceService(
 
     @staticmethod
     def _normalize_angle(angle_deg):
+        """Normalizes one angle to the half-open interval [-180, 180)."""
         return ((float(angle_deg) + 180.0) % 360.0) - 180.0

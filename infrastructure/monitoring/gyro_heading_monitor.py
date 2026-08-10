@@ -9,7 +9,7 @@ from infrastructure.monitoring.monitor_base import MonitorBase
 
 
 class GyroHeadingMonitor(MonitorBase):
-    """Polls only the configured gyro and publishes its cached heading."""
+    """Polls only the configured gyro and publishes the latest heading."""
 
     def __init__(self, heading_sensor_port, state_store, sensor_code="GYR",
                  address="in3", mode="GYRO-ANG", interval_seconds=0.02,
@@ -29,7 +29,6 @@ class GyroHeadingMonitor(MonitorBase):
         )
         self._clock = clock or time.monotonic
         self._consecutive_failures = 0
-        self.critical = True
 
     def on_initialize(self):
         self._sensor.open()

@@ -4,6 +4,7 @@
 """Linux evdev input adapter for a local Bluetooth game controller."""
 
 import errno
+import re
 import select
 import subprocess
 import threading
@@ -13,14 +14,23 @@ from collections import deque
 from ports.joystick_port import JoystickPort
 
 
-class _EvdevAbsoluteInfoCompatibility(object):
-    """Reads current absolute-axis state across python-evdev API versions.
+class BufferedInputEvent(object):
+    """Small evdev-compatible event used to seed current absolute state."""
 
-    ``python-evdev==1.1.2`` does not expose ``InputDevice.absinfo()`` on all
-    supported ev3dev installations. Its private ``_input`` extension does
-    expose ``ioctl_capabilities(fd)``, which performs a fresh EVIOCGABS read.
-    Keeping that compatibility detail here lets discovery and safety snapshots
-    share one implementation.
+    def __init__(self, event_type, code, value):
+        self.type = event_type
+        self.code = code
+        self.value = value
+
+
+class _EvdevAbsoluteInfoCompatibility(object):
+    """Reads live absolute-axis state across python-evdev API versions.
+
+    python-evdev 1.1.2 does not expose ``InputDevice.absinfo()``. Its
+    private C extension does expose ``ioctl_capabilities(fd)``, which issues
+    fresh EVIOCGABS requests for every supported absolute axis. Keeping that
+    version-specific detail here prevents the adapter from duplicating
+    compatibility branches throughout discovery and neutral-state handling.
     """
 
     EV_ABS = 3
@@ -29,6 +39,7 @@ class _EvdevAbsoluteInfoCompatibility(object):
         self.evdev_module = evdev_module
 
     def read_many(self, device, codes):
+        """Returns current AbsInfo values keyed by requested axis code."""
         requested_codes = tuple(int(code) for code in codes)
         native_reader = getattr(device, "absinfo", None)
         if callable(native_reader):
@@ -49,7 +60,9 @@ class _EvdevAbsoluteInfoCompatibility(object):
 
     def _read_many_legacy(self, device, requested_codes):
         input_module = getattr(self.evdev_module, "_input", None)
-        ioctl_capabilities = getattr(input_module, "ioctl_capabilities", None)
+        ioctl_capabilities = getattr(
+            input_module, "ioctl_capabilities", None
+        )
         if not callable(ioctl_capabilities):
             raise AttributeError(
                 "python-evdev compatibility API "
@@ -80,35 +93,28 @@ class _EvdevAbsoluteInfoCompatibility(object):
 
 
 class EvdevJoystickAdapter(JoystickPort):
-    """Discovers, connects and reads one usable Bluetooth gamepad node.
-
-    A game controller may expose several ``/dev/input/event*`` devices with
-    the same display name. Rover accepts only a node that can read the three
-    traction axes required by manual control: ABS_X (0), ABS_Y (1) and
-    ABS_RX (3). This prevents PS4 touch/motion nodes from being mistaken for
-    the gamepad interface.
-    """
+    """Discovers, connects and reads a named Bluetooth evdev controller."""
 
     MAX_DRAIN_BATCHES = 8
     MAX_DRAIN_SECONDS = 0.003
     BLUETOOTH_PROCESS_POLL_SECONDS = 0.1
+    DEFAULT_DISCOVERY_POLL_SECONDS = 0.25
     DEFAULT_PASSIVE_RECONNECT_SECONDS = 4.0
     REQUIRED_TRACTION_AXIS_CODES = (0, 1, 3)
-    POLL_ERROR_MASK = (
-        getattr(select, "POLLERR", 0)
-        | getattr(select, "POLLHUP", 0)
-        | getattr(select, "POLLNVAL", 0)
-    )
+    # Linux poll(2) bit values are kept as portable fallbacks so the event-mask
+    # logic remains unit-testable on hosts, such as Windows, without select.poll.
+    POLLIN = getattr(select, "POLLIN", 0x001)
+    POLLERR = getattr(select, "POLLERR", 0x008)
+    POLLHUP = getattr(select, "POLLHUP", 0x010)
+    POLLNVAL = getattr(select, "POLLNVAL", 0x020)
+    POLL_ERROR_MASK = POLLERR | POLLHUP | POLLNVAL
 
-    def __init__(self, device_name="Wireless Controller", device_address="",
-                 auto_connect=True, connection_timeout_seconds=10.0,
+    def __init__(self, device_name="Wireless Controller", evdev_module=None,
+                 device_address="", auto_connect=True,
+                 connection_timeout_seconds=10.0,
                  passive_reconnect_seconds=DEFAULT_PASSIVE_RECONNECT_SECONDS,
-                 discovery_poll_seconds=0.25, evdev_module=None,
-                 select_function=None, popen_factory=None,
-                 monotonic_clock=None):
-        self.device_name = str(device_name or "").strip()
-        if not self.device_name:
-            raise ValueError("device_name must not be empty.")
+                 discovery_poll_seconds=DEFAULT_DISCOVERY_POLL_SECONDS):
+        self.device_name = device_name
         self.device_address = str(device_address or "").strip()
         self.auto_connect = bool(auto_connect)
         self.connection_timeout_seconds = max(
@@ -121,20 +127,16 @@ class EvdevJoystickAdapter(JoystickPort):
             0.01, float(discovery_poll_seconds)
         )
         self.evdev_module = evdev_module
-        self.select_function = select_function or select.select
-        self.popen_factory = popen_factory or subprocess.Popen
-        self.monotonic_clock = monotonic_clock or time.monotonic
         self._absolute_info_compatibility = None
         self.device = None
         self._event_buffer = deque()
         self._poller = None
-        self._use_poller = select_function is None and hasattr(select, "poll")
         self._connection_cancel_event = threading.Event()
         self._connection_process = None
         self._connection_lock = threading.RLock()
 
     def is_available(self):
-        """Returns whether a usable gamepad node is already exposed."""
+        """Checks whether the named joystick is already exposed by evdev."""
         self._load_evdev_module()
         candidate = self._find_named_device()
         if candidate is None:
@@ -143,7 +145,7 @@ class EvdevJoystickAdapter(JoystickPort):
         return True
 
     def open(self):
-        """Opens the gamepad, preferring passive reconnection before BlueZ."""
+        """Opens the joystick, asking BlueZ to connect it when necessary."""
         self._connection_cancel_event.clear()
         self._load_evdev_module()
         self._close_device()
@@ -159,11 +161,11 @@ class EvdevJoystickAdapter(JoystickPort):
             )
         if not self.device_address:
             raise RuntimeError(
-                "Joystick '{0}' was not found and no Bluetooth "
-                "device_address is configured.".format(self.device_name)
+                "Joystick '{0}' was not found and no Bluetooth device_address "
+                "is configured.".format(self.device_name)
             )
 
-        started_at = self.monotonic_clock()
+        started_at = time.monotonic()
         deadline = started_at + self.connection_timeout_seconds
         passive_deadline = min(
             deadline, started_at + self.passive_reconnect_seconds
@@ -178,8 +180,8 @@ class EvdevJoystickAdapter(JoystickPort):
             candidate = self._wait_for_named_device(deadline)
         if candidate is None:
             raise RuntimeError(
-                "Joystick '{0}' did not expose a usable Linux evdev node "
-                "after connecting Bluetooth device {1}. {2}".format(
+                "Joystick '{0}' did not appear in evdev after connecting "
+                "Bluetooth device {1}. {2}".format(
                     self.device_name,
                     self.device_address,
                     self._named_device_diagnostics()
@@ -187,82 +189,26 @@ class EvdevJoystickAdapter(JoystickPort):
             )
         return self._activate_device(candidate)
 
-    def read_event_batch(self, timeout_seconds, max_events):
-        """Returns one bounded, coalesced joystick event batch.
-
-        The first event may wait up to ``timeout_seconds``. Once input is
-        available, draining is bounded by both batch count and elapsed time so
-        a noisy controller cannot monopolize the low-latency control thread.
-        Absolute-axis values are coalesced by code while discrete key events
-        retain their original order.
-        """
-        if self.device is None:
-            raise RuntimeError("Joystick device is not open.")
-
+    def _load_evdev_module(self):
+        if self.evdev_module is not None:
+            return
         try:
-            event_limit = max(1, int(max_events))
-        except (TypeError, ValueError):
-            raise ValueError("max_events must be a positive integer.")
-        timeout = self._normalize_batch_timeout(timeout_seconds)
-        wait_seconds = 0.0 if self._event_buffer else timeout
-        self._read_available_batches(wait_seconds)
-
-        events = []
-        while self._event_buffer and len(events) < event_limit:
-            event = self._event_buffer.popleft()
-            events.append({
-                "type": int(event.type),
-                "code": int(event.code),
-                "value": int(event.value)
-            })
-        return events
-
-    def refresh_absolute_state(self, axis_codes):
-        """Returns a fresh complete raw-axis snapshot.
-
-        Queued movement history is discarded first. Every requested axis must
-        be readable; an incomplete snapshot fails explicitly instead of
-        leaving the post-connect neutral safety gate waiting indefinitely.
-        """
-        if self.device is None:
-            raise RuntimeError("Joystick device is not open.")
-
-        requested_codes = tuple(int(code) for code in (axis_codes or ()))
-        self._event_buffer.clear()
-        self._discard_device_events()
-        try:
-            absolute_infos = self._read_absolute_infos(
-                self.device, requested_codes
-            )
-        except OSError as error:
-            raise self._connection_lost(error)
-        except (AttributeError, TypeError, ValueError):
-            absolute_infos = {}
-
-        snapshot = {}
-        unreadable_codes = []
-        for code in requested_codes:
-            try:
-                snapshot[code] = int(absolute_infos[code].value)
-            except (KeyError, AttributeError, TypeError, ValueError):
-                unreadable_codes.append(code)
-
-        if unreadable_codes:
+            import evdev
+        except ImportError as error:
             raise RuntimeError(
-                "Unable to read current joystick axis code(s): {0}.".format(
-                    ", ".join(str(code) for code in unreadable_codes)
-                )
+                "python-evdev is not available: {0}".format(error)
             )
-        return snapshot
-
-    def close(self):
-        """Cancels connection work and closes the current input device."""
-        self._connection_cancel_event.set()
-        self._cancel_connection_process()
-        self._close_device()
+        self.evdev_module = evdev
+        self._absolute_info_compatibility = None
 
     def _find_named_device(self):
-        """Returns the matching node that exposes all required axes."""
+        """Returns the named evdev node that exposes all traction axes.
+
+        Some Bluetooth gamepads, including PS4 controllers, may expose more
+        than one ``/dev/input/event*`` node with the same display name. Touch,
+        motion or auxiliary HID nodes must never be selected as the drive
+        controller merely because their name also matches.
+        """
         for path in self.evdev_module.list_devices():
             try:
                 candidate = self.evdev_module.InputDevice(path)
@@ -275,6 +221,7 @@ class EvdevJoystickAdapter(JoystickPort):
         return None
 
     def _supports_required_traction_axes(self, candidate):
+        """Checks the exact absolute axes needed by Rover manual control."""
         try:
             absolute_infos = self._read_absolute_infos(
                 candidate, self.REQUIRED_TRACTION_AXIS_CODES
@@ -294,7 +241,7 @@ class EvdevJoystickAdapter(JoystickPort):
         return self._absolute_info_compatibility.read_many(device, codes)
 
     def _named_device_diagnostics(self):
-        """Describes matching nodes and the traction axes they expose."""
+        """Describes matching evdev nodes and their readable traction axes."""
         summaries = []
         for path in self.evdev_module.list_devices():
             try:
@@ -332,8 +279,8 @@ class EvdevJoystickAdapter(JoystickPort):
 
     def _activate_device(self, candidate):
         self.device = candidate
-        self._event_buffer.clear()
         self._configure_poller(candidate.fd)
+        self._prime_absolute_state(candidate)
         return candidate.name
 
     def _wait_for_named_device(self, deadline):
@@ -341,7 +288,7 @@ class EvdevJoystickAdapter(JoystickPort):
             candidate = self._find_named_device()
             if candidate is not None:
                 return candidate
-            remaining = deadline - self.monotonic_clock()
+            remaining = deadline - time.monotonic()
             if remaining <= 0.0:
                 return None
             self._connection_cancel_event.wait(
@@ -350,12 +297,14 @@ class EvdevJoystickAdapter(JoystickPort):
         raise RuntimeError("Bluetooth joystick connection attempt was cancelled.")
 
     def _execute_bluetooth_connect(self, deadline):
-        """Runs interactive bluetoothctl while evdev readiness stays primary."""
-        remaining = max(0.0, deadline - self.monotonic_clock())
-        if remaining <= 0.0:
-            raise RuntimeError("Bluetooth joystick connection timed out.")
+        """Connects BlueZ while treating evdev readiness as the authority.
+
+        Some BlueZ/bluetoothctl combinations keep the one-shot process alive
+        even after the HID device is connected. Rover must not wait for that
+        process to exit when the required gamepad node is already usable.
+        """
         try:
-            process = self.popen_factory(
+            process = subprocess.Popen(
                 ["bluetoothctl"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -375,8 +324,8 @@ class EvdevJoystickAdapter(JoystickPort):
             except RuntimeError:
                 self._terminate_process(process)
                 raise
-            candidate, output, timed_out = self._wait_for_bluetooth_or_evdev(
-                process, deadline
+            candidate, output, timed_out = (
+                self._wait_for_bluetooth_or_evdev(process, deadline)
             )
         finally:
             with self._connection_lock:
@@ -387,38 +336,39 @@ class EvdevJoystickAdapter(JoystickPort):
             return candidate
 
         detail = self._clean_process_output(output)
-        diagnosis = self._bluez_diagnosis(detail)
+        bluez_diagnosis = self._bluez_diagnosis(detail)
         if timed_out:
             raise RuntimeError(
                 "Bluetooth connection to {0} timed out after {1:.1f} "
-                "seconds. {2} bluetoothctl: {3}. {4}".format(
+                "seconds. {2} {3}".format(
                     self.device_address,
                     self.connection_timeout_seconds,
-                    diagnosis,
-                    detail or "no diagnostic output",
+                    bluez_diagnosis,
                     self._named_device_diagnostics()
                 )
             )
+
         if process.returncode != 0:
             raise RuntimeError(
-                "bluetoothctl could not connect {0}. {1} "
-                "bluetoothctl: {2}. {3}".format(
+                "bluetoothctl could not connect {0}. {1} {2}".format(
                     self.device_address,
-                    diagnosis,
-                    detail or "unknown error",
+                    bluez_diagnosis,
                     self._named_device_diagnostics()
                 )
             )
         return None
 
     def _send_bluetooth_connect_command(self, process):
+        """Sends connect through stdin for legacy interactive BlueZ."""
         input_stream = getattr(process, "stdin", None)
         if input_stream is None:
             raise RuntimeError(
                 "bluetoothctl did not provide an interactive input stream."
             )
         try:
-            input_stream.write("connect {0}\n".format(self.device_address))
+            input_stream.write(
+                "connect {0}\n".format(self.device_address)
+            )
             input_stream.flush()
         except (IOError, OSError, ValueError) as error:
             raise RuntimeError(
@@ -428,6 +378,7 @@ class EvdevJoystickAdapter(JoystickPort):
             )
 
     def _wait_for_bluetooth_or_evdev(self, process, deadline):
+        """Waits for either a usable gamepad node or bluetoothctl exit."""
         while True:
             if self._connection_cancel_event.is_set():
                 self._terminate_process(process)
@@ -445,7 +396,7 @@ class EvdevJoystickAdapter(JoystickPort):
                 candidate = self._find_named_device()
                 return candidate, output, False
 
-            remaining = deadline - self.monotonic_clock()
+            remaining = deadline - time.monotonic()
             if remaining <= 0.0:
                 output = self._terminate_process(process)
                 candidate = self._find_named_device()
@@ -461,10 +412,18 @@ class EvdevJoystickAdapter(JoystickPort):
 
     @staticmethod
     def _clean_process_output(output):
-        return " ".join(str(output or "").strip().split())
+        """Removes terminal control sequences from bluetoothctl output."""
+        text = str(output or "")
+        text = re.sub(
+            r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])",
+            "",
+            text
+        )
+        return " ".join(text.replace("\r", "\n").strip().split())
 
     @staticmethod
     def _bluez_diagnosis(clean_output):
+        """Returns a concise diagnosis for known legacy BlueZ failures."""
         output = str(clean_output or "")
         if ("Waiting to connect to bluetoothd" in output and
                 "[DEL" in output and "Controller" in output):
@@ -472,8 +431,12 @@ class EvdevJoystickAdapter(JoystickPort):
                 "BlueZ controller/service became unavailable during the "
                 "connection attempt."
             )
-        if "org.bluez.Error.Failed" in output:
-            return "BlueZ rejected the active connection request."
+        error_code = re.search(r"org\.bluez\.Error\.[A-Za-z]+", output)
+        if error_code is not None:
+            return (
+                "BlueZ rejected the active connection request ({0})."
+                .format(error_code.group(0))
+            )
         return "BlueZ did not expose a usable HID gamepad node."
 
     @staticmethod
@@ -481,7 +444,7 @@ class EvdevJoystickAdapter(JoystickPort):
         try:
             output, _ = process.communicate()
             return output or ""
-        except (IOError, OSError, TypeError, ValueError):
+        except (IOError, OSError):
             return ""
 
     @classmethod
@@ -490,98 +453,172 @@ class EvdevJoystickAdapter(JoystickPort):
             return cls._collect_process_output(process)
         try:
             process.terminate()
-            try:
-                output, _ = process.communicate(timeout=0.5)
-            except TypeError:
-                output, _ = process.communicate()
+            output, _ = process.communicate(timeout=0.5)
             return output or ""
-        except (IOError, OSError, subprocess.TimeoutExpired, ValueError):
+        except (OSError, subprocess.TimeoutExpired):
             try:
                 process.kill()
-            except (IOError, OSError, AttributeError):
-                pass
-            return cls._collect_process_output(process)
+                output, _ = process.communicate()
+                return output or ""
+            except OSError:
+                return ""
 
-    def _cancel_connection_process(self):
-        with self._connection_lock:
-            process = self._connection_process
-        if process is not None:
-            self._terminate_process(process)
+    def _prime_absolute_state(self, device):
+        """Queues current traction-axis values before live events are read.
+
+        evdev normally reports only changes after the device is opened. Seeding
+        the three traction axes lets the application verify a genuinely neutral
+        controller before enabling motion after startup or reconnection.
+        """
+        try:
+            absolute_infos = self._read_absolute_infos(
+                device, self.REQUIRED_TRACTION_AXIS_CODES
+            )
+        except (AttributeError, OSError, TypeError, ValueError):
+            absolute_infos = {}
+        for code in self.REQUIRED_TRACTION_AXIS_CODES:
+            try:
+                value = absolute_infos[code].value
+            except (KeyError, AttributeError, TypeError):
+                continue
+            self._event_buffer.append(BufferedInputEvent(3, code, value))
+
+    def refresh_absolute_state(self, axis_codes):
+        """Returns a complete current-axis snapshot with no queued history.
+
+        Startup movement is intentionally discarded. Every requested traction
+        axis must be readable; otherwise initialization fails explicitly
+        instead of remaining indefinitely in the neutral safety gate.
+        """
+        if self.device is None:
+            raise RuntimeError("Joystick is not open.")
+
+        requested_codes = tuple(axis_codes or ())
+        self._event_buffer.clear()
+        self._discard_device_events()
+        snapshot = {}
+        unreadable_codes = []
+        try:
+            absolute_infos = self._read_absolute_infos(
+                self.device, requested_codes
+            )
+        except OSError as error:
+            raise OSError(
+                "Bluetooth joystick connection lost while reading axes "
+                "{0}: {1}".format(
+                    ", ".join(str(code) for code in requested_codes),
+                    error
+                )
+            )
+        except (AttributeError, TypeError, ValueError):
+            absolute_infos = {}
+
+        for code in requested_codes:
+            try:
+                snapshot[code] = int(absolute_infos[code].value)
+            except (KeyError, AttributeError, TypeError, ValueError):
+                unreadable_codes.append(code)
+
+        if unreadable_codes:
+            raise RuntimeError(
+                "Unable to read current joystick axis code(s): {0}.".format(
+                    ", ".join(str(code) for code in unreadable_codes)
+                )
+            )
+
+        return snapshot
 
     def _discard_device_events(self):
-        """Drains queued kernel input before taking a fresh-axis snapshot."""
-        read_many = getattr(self.device, "read", None)
-        if not callable(read_many):
-            return
+        """Drains the non-blocking kernel queue before taking a fresh snapshot."""
         for unused_index in range(self.MAX_DRAIN_BATCHES):
-            try:
-                events = read_many()
-            except (BlockingIOError, OSError) as error:
-                if getattr(error, "errno", None) in (
-                        errno.EAGAIN, errno.EWOULDBLOCK):
-                    return
-                raise self._connection_lost(error)
-            if not events:
-                return
-
-    def _configure_poller(self, file_descriptor):
-        """Configures poll(2) for production while retaining test injection."""
-        self._poller = None
-        if not self._use_poller:
-            return
-        try:
-            poller = select.poll()
-            event_mask = getattr(select, "POLLIN", 1) | self.POLL_ERROR_MASK
-            poller.register(file_descriptor, event_mask)
-            self._poller = poller
-        except (AttributeError, OSError, ValueError):
-            self._poller = None
-
-    def _read_available_batches(self, timeout_seconds):
-        """Drains promptly available evdev batches within one time budget."""
-        if not self._wait_for_input(timeout_seconds):
-            return
-
-        started_at = self.monotonic_clock()
-        batches = 0
-        while batches < self.MAX_DRAIN_BATCHES:
             try:
                 events = self.device.read()
             except (BlockingIOError, OSError) as error:
                 if getattr(error, "errno", None) in (
                         errno.EAGAIN, errno.EWOULDBLOCK):
                     return
-                raise self._connection_lost(error)
-
+                raise OSError(
+                    "Bluetooth joystick connection lost: {0}".format(error)
+                )
             if not events:
                 return
+
+    def read_event_batch(self, timeout_seconds, max_events):
+        """Returns one bounded, coalesced joystick event batch.
+
+        The first event may wait up to ``timeout_seconds``. Once input becomes
+        readable, draining is constrained by ``MAX_DRAIN_BATCHES`` and
+        ``MAX_DRAIN_SECONDS`` so a noisy controller cannot monopolize the
+        control thread. Axis events are coalesced by code while discrete key
+        events are preserved in order.
+        """
+        if self.device is None:
+            raise RuntimeError("Joystick is not open.")
+
+        event_limit = max(1, int(max_events))
+        wait_seconds = 0.0 if self._event_buffer else max(
+            0.0, float(timeout_seconds)
+        )
+        self._read_available_batches(wait_seconds)
+
+        events = []
+        while self._event_buffer and len(events) < event_limit:
+            event = self._event_buffer.popleft()
+            events.append({
+                "type": event.type,
+                "code": event.code,
+                "value": event.value
+            })
+        return events
+
+    def _configure_poller(self, file_descriptor):
+        if not hasattr(select, "poll"):
+            self._poller = None
+            return
+        self._poller = select.poll()
+        event_mask = self.POLLIN | self.POLL_ERROR_MASK
+        self._poller.register(file_descriptor, event_mask)
+
+    def _read_available_batches(self, timeout_seconds):
+        """Drains promptly available evdev batches within one time budget."""
+        if not self._wait_for_input(timeout_seconds):
+            return
+
+        started_at = time.monotonic()
+        batches = 0
+        while batches < self.MAX_DRAIN_BATCHES:
+            try:
+                events = self.device.read()
+            except (BlockingIOError, OSError) as error:
+                if getattr(error, "errno", None) in (
+                    errno.EAGAIN, errno.EWOULDBLOCK
+                ):
+                    return
+                raise OSError(
+                    "Bluetooth joystick connection lost: {0}".format(error)
+                )
+
             self._append_coalesced(events)
             batches += 1
-            if self.monotonic_clock() - started_at >= self.MAX_DRAIN_SECONDS:
+            if time.monotonic() - started_at >= self.MAX_DRAIN_SECONDS:
                 return
             if not self._wait_for_input(0.0):
                 return
 
     def _wait_for_input(self, timeout_seconds):
-        timeout = max(0.0, float(timeout_seconds))
         if self._poller is None:
-            try:
-                readable, _, exceptional = self.select_function(
-                    [self.device.fd], [], [self.device.fd], timeout
-                )
-            except (IOError, OSError) as error:
-                raise self._connection_lost(error)
+            readable, _, exceptional = select.select(
+                [self.device.fd],
+                [],
+                [self.device.fd],
+                max(0.0, float(timeout_seconds))
+            )
             if exceptional:
-                raise self._connection_lost(
-                    OSError("evdev descriptor reported an exceptional state")
-                )
+                raise OSError("Bluetooth joystick connection lost.")
             return bool(readable)
 
-        try:
-            timeout_ms = max(0, int(round(timeout * 1000.0)))
-            poll_events = self._poller.poll(timeout_ms)
-        except (IOError, OSError) as error:
-            raise self._connection_lost(error)
+        timeout_ms = max(0, int(round(float(timeout_seconds) * 1000.0)))
+        poll_events = self._poller.poll(timeout_ms)
         if not poll_events:
             return False
 
@@ -590,75 +627,45 @@ class EvdevJoystickAdapter(JoystickPort):
             if file_descriptor != self.device.fd:
                 continue
             if event_mask & self.POLL_ERROR_MASK:
-                raise self._connection_lost(
-                    OSError("evdev descriptor reported a disconnect state")
-                )
-            if event_mask & getattr(select, "POLLIN", 1):
+                raise OSError("Bluetooth joystick connection lost.")
+            if event_mask & self.POLLIN:
                 readable = True
         return readable
 
     def _append_coalesced(self, events):
-        """Preserves keys while keeping only the newest value of each axis."""
-        for event in events or ():
-            event_type = int(event.type)
-            if event_type not in (1, 3):
+        """Keeps discrete keys and only the newest value of each axis."""
+        for event in events:
+            if event.type not in (1, 3):
                 continue
-            if event_type == 3:
+            if event.type == 3:
                 self._event_buffer = deque(
                     buffered
                     for buffered in self._event_buffer
                     if not (
-                        int(buffered.type) == event_type and
-                        int(buffered.code) == int(event.code)
+                        buffered.type == event.type
+                        and buffered.code == event.code
                     )
                 )
             self._event_buffer.append(event)
 
     def _close_device(self):
-        device = self.device
-        self.device = None
-        if device is not None:
+        if self.device is not None:
             try:
                 if self._poller is not None:
-                    self._poller.unregister(device.fd)
-            except (AttributeError, KeyError, OSError, ValueError):
+                    self._poller.unregister(self.device.fd)
+            except (KeyError, OSError, ValueError):
                 pass
             try:
-                device.close()
+                self.device.close()
             finally:
-                self._poller = None
-                self._event_buffer.clear()
-        else:
-            self._poller = None
-            self._event_buffer.clear()
+                self.device = None
+        self._poller = None
+        self._event_buffer.clear()
 
-    def _connection_lost(self, error):
-        """Releases the stale descriptor and returns a clear disconnect error."""
-        try:
-            self._close_device()
-        except (IOError, OSError):
-            self.device = None
-            self._poller = None
-            self._event_buffer.clear()
-        return OSError(
-            "Bluetooth joystick connection lost: {0}".format(error)
-        )
-
-    def _load_evdev_module(self):
-        if self.evdev_module is not None:
-            return
-        try:
-            import evdev
-        except ImportError as error:
-            raise RuntimeError(
-                "python-evdev is not available: {0}".format(error)
-            )
-        self.evdev_module = evdev
-        self._absolute_info_compatibility = None
-
-    @staticmethod
-    def _normalize_batch_timeout(timeout_seconds):
-        try:
-            return max(0.0, float(timeout_seconds))
-        except (TypeError, ValueError):
-            raise ValueError("timeout_seconds must be numeric.")
+    def close(self):
+        self._connection_cancel_event.set()
+        with self._connection_lock:
+            process = self._connection_process
+        if process is not None:
+            self._terminate_process(process)
+        self._close_device()

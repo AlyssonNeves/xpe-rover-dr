@@ -10,17 +10,17 @@ from ports.heading_sensor_port import HeadingSensorPort
 
 
 class Ev3GyroSensorAdapter(HeadingSensorPort):
-    """Owns EV3 input-port preparation and gyroscope access."""
+    """Owns EV3 port preparation and the physical gyroscope lifecycle."""
 
     def __init__(self, address="in3", mode="GYRO-ANG",
                  reset_on_start=True, angle_sign=1.0,
                  angle_offset_deg=0.0, port_mode=None,
-                 connection_timeout_seconds=10.0,
+                 connection_timeout_seconds=2.0,
                  connection_retry_seconds=0.1,
                  sensor_factory=None, port_factory=None,
                  clock=None, sleeper=None):
-        self.address = str(address or "in3").strip()
-        self.mode = str(mode or "GYRO-ANG").strip()
+        self.address = address
+        self.mode = mode or "GYRO-ANG"
         self.reset_on_start = bool(reset_on_start)
         self.angle_sign = float(angle_sign)
         self.angle_offset_deg = float(angle_offset_deg)
@@ -45,11 +45,6 @@ class Ev3GyroSensorAdapter(HeadingSensorPort):
             raise ValueError(
                 "connection_retry_seconds must be greater than zero."
             )
-        if self.connection_retry_seconds > self.connection_timeout_seconds:
-            raise ValueError(
-                "connection_retry_seconds must not exceed "
-                "connection_timeout_seconds."
-            )
         self._sensor_factory = sensor_factory
         self._port_factory = port_factory
         self._clock = clock or time.monotonic
@@ -58,7 +53,6 @@ class Ev3GyroSensorAdapter(HeadingSensorPort):
         self._port = None
 
     def open(self):
-        """Configures ``in3`` as UART and connects the EV3 gyro."""
         if self._sensor is not None:
             return self._sensor
 
@@ -85,14 +79,12 @@ class Ev3GyroSensorAdapter(HeadingSensorPort):
         return sensor
 
     def read_heading_deg(self):
-        """Reads canonical heading after applying mounting calibration once."""
         if self._sensor is None:
             raise RuntimeError("Gyro sensor is not open.")
         raw_heading_deg = float(self._sensor.angle)
         return (raw_heading_deg * self.angle_sign) + self.angle_offset_deg
 
     def close(self):
-        """Releases adapter-owned references."""
         self._sensor = None
         self._port = None
 
@@ -141,7 +133,7 @@ class Ev3GyroSensorAdapter(HeadingSensorPort):
                 self.port_mode or "unchanged",
                 last_error
             )
-        )
+        ) from last_error
 
     @staticmethod
     def _load_ev3_factories(address):
@@ -162,3 +154,4 @@ class Ev3GyroSensorAdapter(HeadingSensorPort):
             "in4": INPUT_4
         }
         return GyroSensor, LegoPort, address_map.get(normalized, normalized)
+

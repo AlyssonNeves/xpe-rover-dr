@@ -22,23 +22,29 @@ class StartupErrorNotifierTestCase(unittest.TestCase):
             "ROVER_SHUTDOWN_TOKEN, ROVER_HARDWARE_API_TOKEN."
         )
         lines = StartupErrorNotifier._screen_lines(message)
-        self.assertIn("SHUTDOWN_TOKEN", lines)
-        self.assertIn("HARDWARE_API_TOKEN", lines)
-        self.assertLessEqual(len(lines), StartupErrorNotifier.MAX_ROWS)
-        self.assertTrue(all(
-            len(line) <= StartupErrorNotifier.MAX_COLUMNS
-            for line in lines
-        ))
+        self.assertEqual(
+            [
+                "Missing tokens:",
+                "SHUTDOWN",
+                "HARDWARE API",
+                StartupErrorNotifier.FOOTER_TEXT
+            ],
+            lines
+        )
 
     def test_screen_lines_wrap_generic_messages(self):
         lines = StartupErrorNotifier._screen_lines(
             "A generic configuration error that must wrap safely"
         )
+        self.assertLessEqual(
+            len(lines) - 1,
+            StartupErrorNotifier.MAX_MAIN_ROWS
+        )
         self.assertTrue(all(
             len(line) <= StartupErrorNotifier.MAX_COLUMNS
-            for line in lines
+            for line in lines[:-1]
         ))
-        self.assertIn("See README.md", lines)
+        self.assertEqual(StartupErrorNotifier.FOOTER_TEXT, lines[-1])
 
     def test_show_delegates_formatted_lines_to_operator_alert_port(self):
         operator_alert_port = mock.Mock()

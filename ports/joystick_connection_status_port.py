@@ -7,7 +7,7 @@ from abc import ABCMeta, abstractmethod
 
 
 class JoystickConnectionStatusPort(object, metaclass=ABCMeta):
-    """Presents Bluetooth connection failures and successful recovery."""
+    """Presents joystick connection failures and successful recovery."""
 
     @abstractmethod
     def show_joystick_connection_error(self, message, retry_seconds):
@@ -16,5 +16,5 @@ class JoystickConnectionStatusPort(object, metaclass=ABCMeta):
 
     @abstractmethod
     def show_joystick_connected(self, device_name):
-        """Restores the normal operation-status display after connection."""
+        """Restores the normal display after the joystick is connected."""
         raise NotImplementedError

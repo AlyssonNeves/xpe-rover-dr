@@ -2,9 +2,9 @@
 branch = True
 source =
     app
-    bootstrap
     infrastructure
     adapters
+    bootstrap
     ports
     main
 

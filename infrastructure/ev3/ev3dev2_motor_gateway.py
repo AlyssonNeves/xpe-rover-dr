@@ -14,7 +14,6 @@ import threading
 import time
 import uuid
 
-from app import rover_config
 from infrastructure.logging.app_logger import AppLogger
 from ports.motor_gateway_port import MotorGatewayPort
 
@@ -41,10 +40,6 @@ class Ev3Dev2MotorGateway(MotorGatewayPort):
         "MoveSteering", "MoveJoystick", "MoveDifferential"
     ))
     MOTOR_CLASSES = frozenset(("LargeMotor", "MediumMotor"))
-    MOVEMENT_CLASSES = frozenset((
-        "MotorSet", "MoveTank", "MoveSteering", "MoveJoystick",
-        "MoveDifferential"
-    ))
     SPEED_CLASSES = frozenset((
         "SpeedInteger", "SpeedPercent", "SpeedRPS", "SpeedRPM",
         "SpeedDPS", "SpeedDPM"
@@ -109,10 +104,14 @@ class Ev3Dev2MotorGateway(MotorGatewayPort):
     ))
     CONFIGURATION_METHODS = frozenset(("reset", "set_args"))
 
-    def __init__(self, motor_port, drive_port=None, motor_module=None,
-                 max_objects=None, object_ttl_seconds=None):
-        if motor_port is None:
-            raise Ev3Dev2MotorGatewayError("A MotorPort safety boundary is required.")
+    def __init__(self, motor_query_port, guarded_operation_port,
+                 motor_module=None, max_objects=32,
+                 object_ttl_seconds=1800, max_watchdog_ms=60000,
+                 wait_max_timeout_ms=60000):
+        if motor_query_port is None or guarded_operation_port is None:
+            raise Ev3Dev2MotorGatewayError(
+                "Motor query and guarded-operation ports are required."
+            )
         if motor_module is None:
             try:
                 import ev3dev2.motor as motor_module
@@ -121,12 +120,12 @@ class Ev3Dev2MotorGateway(MotorGatewayPort):
                     "ev3dev2.motor is not available: {}".format(error)
                 )
         self.module = motor_module
-        self.motor_port = motor_port
-        self.drive_port = drive_port
-        self.max_objects = max_objects or rover_config.MOTOR_GATEWAY_MAX_OBJECTS
-        self.object_ttl_seconds = (
-            object_ttl_seconds or rover_config.MOTOR_GATEWAY_OBJECT_TTL_SECONDS
-        )
+        self.motor_query_port = motor_query_port
+        self.guarded_operation_port = guarded_operation_port
+        self.max_objects = int(max_objects)
+        self.object_ttl_seconds = int(object_ttl_seconds)
+        self.max_watchdog_ms = int(max_watchdog_ms)
+        self.wait_max_timeout_ms = int(wait_max_timeout_ms)
         self._objects = {}
         self._metadata = {}
         self._operations = {}
@@ -271,13 +270,13 @@ class Ev3Dev2MotorGateway(MotorGatewayPort):
         if kind in (OperationKinds.IMMEDIATE_CONFIGURATION, OperationKinds.BOUNDED_BLOCKING):
             def call():
                 return method(*resolved_args, **resolved_kwargs)
-            result = self.motor_port.execute_guarded_operation(
+            result = self.guarded_operation_port.execute_guarded_operation(
                 metadata["motor_codes"], "{}.{}".format(metadata["class"], method_name), call
             )
             return self._invoke_result(object_id, method_name, kind, result, None)
 
         operation_id = uuid.uuid4().hex
-        self.motor_port.begin_guarded_operation(
+        self.guarded_operation_port.begin_guarded_operation(
             metadata["motor_codes"], "{}.{}".format(metadata["class"], method_name), operation_id
         )
         now = time.time()
@@ -334,7 +333,7 @@ class Ev3Dev2MotorGateway(MotorGatewayPort):
             setattr(obj, property_name, resolved_value)
             return getattr(obj, property_name)
 
-        result = self.motor_port.execute_guarded_operation(
+        result = self.guarded_operation_port.execute_guarded_operation(
             metadata["motor_codes"], "{}.{}=".format(metadata["class"], property_name), write
         )
         self._touch(object_id)
@@ -406,7 +405,7 @@ class Ev3Dev2MotorGateway(MotorGatewayPort):
     def _motors_idle(self, motor_codes):
         for code in motor_codes:
             try:
-                state = self.motor_port.read_motor(code) or {}
+                state = self.motor_query_port.read_motor(code) or {}
                 states = state.get("state") or state.get("states") or []
                 if isinstance(states, str):
                     states = states.split()
@@ -428,7 +427,7 @@ class Ev3Dev2MotorGateway(MotorGatewayPort):
         if operation is None:
             return None
         try:
-            self.motor_port.end_guarded_operation(
+            self.guarded_operation_port.end_guarded_operation(
                 operation_id, status=status, error=error, stop=stop
             )
         finally:
@@ -455,39 +454,14 @@ class Ev3Dev2MotorGateway(MotorGatewayPort):
             self._finish_object_operations(object_id, status, stop=True)
 
     def _resolve_motor_binding(self, class_name, args, kwargs, instance):
-        configured = self.motor_port.list_motors()
-        address_to_code = {}
-        for item in configured:
-            address = item.get("address")
-            code = item.get("code")
-            if address and code:
-                address_to_code[address] = code
-        addresses = []
-        if class_name in self.MOTOR_CLASSES:
-            address = kwargs.get("address") if "address" in kwargs else (
-                args[0] if args else getattr(instance, "address", None)
-            )
-            addresses = [address]
-        elif class_name == "MotorSet":
-            specs = kwargs.get("motor_specs") if "motor_specs" in kwargs else (
-                args[0] if args else getattr(instance, "motor_specs", None)
-            )
-            if not isinstance(specs, dict) or not specs:
-                raise Ev3Dev2MotorGatewayError("MotorSet.motor_specs must be a non-empty dictionary.")
-            addresses = list(specs.keys())
-        else:
-            candidates = list(args[:2]) + [kwargs.get("left_motor_port"), kwargs.get("right_motor_port")]
-            addresses = [value for value in candidates if isinstance(value, str)]
-            if len(addresses) != 2:
-                ports = getattr(instance, "ports", None)
-                if isinstance(ports, (list, tuple)):
-                    addresses = list(ports)
-        if not addresses or any(address not in address_to_code for address in addresses):
-            unknown = [address for address in addresses if address not in address_to_code]
-            raise Ev3Dev2MotorGatewayError(
-                "Object contains unknown or unconfigured motor ports: {}".format(unknown or addresses)
-            )
-        actual_addresses = self._extract_actual_addresses(class_name, instance, addresses)
+        address_to_code = self._configured_motor_addresses()
+        addresses = self._requested_motor_addresses(
+            class_name, args, kwargs, instance
+        )
+        self._validate_configured_addresses(addresses, address_to_code)
+        actual_addresses = self._extract_actual_addresses(
+            class_name, instance, addresses
+        )
         if sorted(actual_addresses) != sorted(addresses):
             raise Ev3Dev2MotorGatewayError(
                 "The object's real port set does not exactly match the validated port set."
@@ -498,6 +472,63 @@ class Ev3Dev2MotorGateway(MotorGatewayPort):
             if code not in codes:
                 codes.append(code)
         return codes, addresses
+
+    def _configured_motor_addresses(self):
+        result = {}
+        for item in self.motor_query_port.list_motors():
+            address = item.get("address")
+            code = item.get("code")
+            if address and code:
+                result[address] = code
+        return result
+
+    def _requested_motor_addresses(self, class_name, args, kwargs, instance):
+        if class_name in self.MOTOR_CLASSES:
+            return [self._single_motor_address(args, kwargs, instance)]
+        if class_name == "MotorSet":
+            return self._motor_set_addresses(args, kwargs, instance)
+        candidates = list(args[:2]) + [
+            kwargs.get("left_motor_port"),
+            kwargs.get("right_motor_port")
+        ]
+        addresses = [value for value in candidates if isinstance(value, str)]
+        if len(addresses) == 2:
+            return addresses
+        ports = getattr(instance, "ports", None)
+        return list(ports) if isinstance(ports, (list, tuple)) else addresses
+
+    @staticmethod
+    def _single_motor_address(args, kwargs, instance):
+        if "address" in kwargs:
+            return kwargs.get("address")
+        if args:
+            return args[0]
+        return getattr(instance, "address", None)
+
+    @staticmethod
+    def _motor_set_addresses(args, kwargs, instance):
+        if "motor_specs" in kwargs:
+            specs = kwargs.get("motor_specs")
+        elif args:
+            specs = args[0]
+        else:
+            specs = getattr(instance, "motor_specs", None)
+        if not isinstance(specs, dict) or not specs:
+            raise Ev3Dev2MotorGatewayError(
+                "MotorSet.motor_specs must be a non-empty dictionary."
+            )
+        return list(specs.keys())
+
+    @staticmethod
+    def _validate_configured_addresses(addresses, address_to_code):
+        unknown = [address for address in addresses if address not in address_to_code]
+        if addresses and not unknown:
+            return
+        raise Ev3Dev2MotorGatewayError(
+            "Object contains unknown or unconfigured motor ports: {}".format(
+                unknown or addresses
+            )
+        )
 
     def _extract_actual_addresses(self, class_name, instance, fallback):
         if class_name in self.MOTOR_CLASSES:
@@ -547,7 +578,7 @@ class Ev3Dev2MotorGateway(MotorGatewayPort):
             raise Ev3Dev2MotorGatewayError("wait* methods require rover_timeout_ms.")
         if timeout_ms is not None:
             timeout_ms = int(timeout_ms)
-            if timeout_ms <= 0 or timeout_ms > rover_config.MOTOR_GATEWAY_WAIT_MAX_TIMEOUT_MS:
+            if timeout_ms <= 0 or timeout_ms > self.wait_max_timeout_ms:
                 raise Ev3Dev2MotorGatewayError("Invalid rover_timeout_ms.")
         if kind == OperationKinds.BOUNDED_NON_BLOCKING and timeout_ms is None:
             raise Ev3Dev2MotorGatewayError("Non-blocking operations require rover_timeout_ms.")
@@ -559,7 +590,7 @@ class Ev3Dev2MotorGateway(MotorGatewayPort):
             if watchdog_ms is None:
                 raise Ev3Dev2MotorGatewayError("Continuous operations require rover_watchdog_ms.")
             watchdog_ms = int(watchdog_ms)
-            if watchdog_ms <= 0 or watchdog_ms > rover_config.MOTOR_GATEWAY_MAX_WATCHDOG_MS:
+            if watchdog_ms <= 0 or watchdog_ms > self.max_watchdog_ms:
                 raise Ev3Dev2MotorGatewayError("Invalid rover_watchdog_ms.")
         elif watchdog_ms is not None:
             raise Ev3Dev2MotorGatewayError("rover_watchdog_ms is valid only for continuous operations.")
@@ -568,7 +599,7 @@ class Ev3Dev2MotorGateway(MotorGatewayPort):
     def _apply_dynamic_limits(self, metadata, method_name, args, kwargs):
         max_speeds = []
         for code in metadata["motor_codes"]:
-            motor = self.motor_port.read_motor(code) or {}
+            motor = self.motor_query_port.read_motor(code) or {}
             value = motor.get("max_speed")
             if value is not None:
                 max_speeds.append(abs(float(value)))

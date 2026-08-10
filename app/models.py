@@ -1,36 +1,43 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Application command models used by the Rover-DR REST API."""
+"""Protocol-independent application models for Rover DR."""
 
 
 class CommandTargets(object):
+    """Logical targets supported by the application layer."""
+
     SENSOR = "sensor"
     MOTOR = "motor"
     CONTROLLER = "controller"
-    ROVER = "rover"
+    STATE = "state"
     DRIVE = "drive"
-
-    @classmethod
-    def values(cls):
-        return (cls.SENSOR, cls.MOTOR, cls.CONTROLLER, cls.ROVER, cls.DRIVE)
 
 
 class CommandActions(object):
+    """Logical actions supported by the application layer."""
+
     LIST_SENSORS = "list_sensors"
     READ_SENSOR = "read_sensor"
     READ_ALL_SENSORS = "read_all_sensors"
+    LIST_SENSOR_MODES = "list_sensor_modes"
+    CHANGE_SENSOR_MODE = "change_sensor_mode"
 
     LIST_MOTORS = "list_motors"
     READ_MOTOR = "read_motor"
     READ_ALL_MOTORS = "read_all_motors"
     STOP_MOTOR = "stop_motor"
+    STOP_ALL_MOTORS = "stop_all_motors"
     RUN_TIMED_MOTOR = "run_timed_motor"
     RUN_FOREVER_MOTOR = "run_forever_motor"
+    RUN_DIRECT_MOTOR = "run_direct_motor"
     RUN_TO_REL_POS_MOTOR = "run_to_rel_pos_motor"
-    RESET_MOTOR = "reset_motor"
-    GET_MOTOR_COMMAND = "get_motor_command"
+    RUN_TO_ABS_POS_MOTOR = "run_to_abs_pos_motor"
+    READ_MOTOR_COMMAND = "read_motor_command"
     LIST_MOTOR_COMMANDS = "list_motor_commands"
+    DRIVE_TANK = "drive_tank"
+    STOP_DRIVE = "stop_drive"
+    RESET_MOTOR = "reset_motor"
     CANCEL_MOTOR_COMMANDS = "cancel_motor_commands"
     RUN_SYNCHRONIZED_MOTORS = "run_synchronized_motors"
 
@@ -42,51 +49,42 @@ class CommandActions(object):
     READ_ROVER_STATE = "read_rover_state"
 
     READ_DRIVE_STATUS = "read_drive_status"
-    DRIVE_TANK = "drive_tank"
-    STOP_DRIVE = "stop_drive"
+    READ_DRIVE_TELEMETRY = "read_drive_telemetry"
     RESET_DRIVE_ODOMETRY = "reset_drive_odometry"
     MOVE_DRIVE_DISTANCE = "move_drive_distance"
     ROTATE_DRIVE_ANGLE = "rotate_drive_angle"
     CURVE_DRIVE_RADIUS = "curve_drive_radius"
+    STOP_NAVIGATION = "stop_navigation"
+
+
+class ResultStatuses(object):
+    """Semantic result classifications independent from transport protocols."""
+
+    SUCCESS = "success"
+    ACCEPTED = "accepted"
+    INVALID_ARGUMENT = "invalid_argument"
+    NOT_FOUND = "not_found"
+    CONFLICT = "conflict"
+    UNAVAILABLE = "unavailable"
+    UNAUTHORIZED = "unauthorized"
+    INTERNAL_ERROR = "internal_error"
 
 
 class CommandResult(object):
-    def __init__(self, success, status_code=200, data=None, error=None):
+    """Standardized application result without HTTP-specific semantics."""
+
+    def __init__(self, success, status=ResultStatuses.SUCCESS,
+                 data=None, error=None):
         self.success = bool(success)
-        self.status_code = int(status_code)
+        self.status = status
         self.data = data
         self.error = error
 
-    @classmethod
-    def ok(cls, data=None, status_code=200):
-        return cls(True, status_code=status_code, data=data)
-
-    @classmethod
-    def bad_request(cls, message):
-        return cls(False, status_code=400, error=message)
-
-    @classmethod
-    def not_found(cls, message):
-        return cls(False, status_code=404, error=message)
-
-    @classmethod
-    def method_not_allowed(cls, message="Method not allowed"):
-        return cls(False, status_code=405, error=message)
-
-    @classmethod
-    def conflict(cls, message):
-        return cls(False, status_code=409, error=message)
-
-    @classmethod
-    def service_unavailable(cls, message):
-        return cls(False, status_code=503, error=message)
-
-    @classmethod
-    def internal_error(cls, message="Internal server error"):
-        return cls(False, status_code=500, error=message)
-
     def to_dict(self):
-        payload = {"success": self.success, "status_code": self.status_code}
+        payload = {
+            "success": self.success,
+            "status": self.status
+        }
         if self.data is not None:
             payload["data"] = self.data
         if self.error:

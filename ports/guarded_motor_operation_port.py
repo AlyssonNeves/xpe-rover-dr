@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Output port for guarded native EV3 motor operations."""
+"""Output port for safety-guarded native motor operations."""
 
 from abc import ABCMeta, abstractmethod
 
 
 class GuardedMotorOperationPort(object, metaclass=ABCMeta):
+    """Defines reservation boundaries for direct native operations."""
+
     @abstractmethod
-    def execute_guarded_operation(self, motor_codes, operation_name, operation):
+    def execute_guarded_operation(self, motor_codes, operation_name,
+                                  operation):
         raise NotImplementedError
 
     @abstractmethod
-    def begin_guarded_operation(self, motor_codes, operation_name, operation_id):
+    def begin_guarded_operation(self, motor_codes, operation_name,
+                                operation_id):
         raise NotImplementedError
 
     @abstractmethod

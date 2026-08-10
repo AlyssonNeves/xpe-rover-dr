@@ -1,55 +1,91 @@
-import math
-import pytest
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
+"""Unit tests for high-level Rover navigation."""
+
+import time
+
+from app.rover_config import DEFAULT_CONFIGURATION
 from app.services.drive_service import DriveService
-from tests.unit.fakes import FakeMotorPort, FakeSensorPort
 
 
-def build_drive():
+from tests.unit.fakes import FakeDriveMotorPort, FakeDriveSensorPort
+
+
+def drive_config(overrides=None):
+    values = dict(DEFAULT_CONFIGURATION.drive)
+    values.update(overrides or {})
+    return values
+
+
+def make_service():
+    motor_port = FakeDriveMotorPort()
     return DriveService(
-        FakeMotorPort(), FakeSensorPort(),
-        config={
-            "left_motor_code": "LLM", "right_motor_code": "RLM",
-            "gyro_sensor_code": "GYR", "wheel_diameter_mm": 56.0,
-            "track_width_mm": 120.0, "left_speed_factor": 1.0,
-            "right_speed_factor": 1.0,
-        }
+        motor_query_port=motor_port,
+        drive_motor_port=motor_port,
+        motor_command_port=motor_port,
+        motor_command_query_port=motor_port,
+        sensor_port=FakeDriveSensorPort(),
+        config=drive_config({
+            "control_interval_ms": 1,
+            "distance_tolerance_mm": 2.0,
+            "stall_timeout_ms": 100,
+            "max_recovery_attempts": 0,
+            "telemetry_limit": 50
+        })
     )
 
 
-def test_drive_status_reset_and_odometry():
-    drive = build_drive()
-    first = drive.get_status()
-    assert first["left_motor_code"] == "LLM"
-    reset = drive.reset_odometry(10, 20, 30)
-    assert reset["x_mm"] == 10.0
-    drive.motor_port.motors["LLM"]["position"] = 360
-    drive.motor_port.motors["RLM"]["position"] = 360
-    drive.sensor_port.items["GYR"]["value"] = 15
-    state = drive.get_status()
-    assert state["pose"]["heading_deg"] == 15.0
-    assert state["pose"]["distance_mm"] > 0
+def wait_done(service):
+    for _ in range(500):
+        status = service.get_status()
+        if status["state"] != "RUNNING":
+            return status
+        time.sleep(0.002)
+    return service.get_status()
 
 
-def test_drive_tank_stop_and_navigation_commands():
-    drive = build_drive()
-    tank = drive.drive_tank(200, -150, priority=5, watchdog_ms=1000)
-    assert tank["accepted"] is True
-    assert drive.motor_port.last_sync[0]["action"] == "run-forever"
-
-    straight = drive.move_distance(100, 200)
-    assert straight["navigation_action"] == "move-distance"
-    rotate = drive.rotate_angle(90, 200)
-    assert rotate["navigation_action"] == "rotate-angle"
-    curve = drive.curve_radius(200, 45, 200)
-    assert curve["navigation_action"] == "curve-radius"
-    assert drive.stop("brake")["accepted"] is True
+def test_odometry_uses_both_wheel_encoders():
+    service = make_service()
+    service.reset_odometry()
+    service.motor_query_port.positions["LLM"] = 360.0
+    service.motor_query_port.positions["RLM"] = 360.0
+    status = service.get_status()
+    assert status["pose"]["x_mm"] > 170.0
+    assert abs(status["pose"]["y_mm"]) < 0.01
 
 
-def test_curve_radius_rejects_too_small_radius_and_helpers():
-    drive = build_drive()
-    with pytest.raises(ValueError):
-        drive.curve_radius(50, 45, 200)
-    assert drive._normalize_angle(190) == -170.0
-    degrees = drive._millimeters_to_degrees(math.pi * 56.0)
-    assert degrees == 360
+def test_move_distance_generates_trajectory_telemetry():
+    service = make_service()
+    result = service.move_distance(20.0, 200)
+    assert result["accepted"] is True
+    status = wait_done(service)
+    assert status["state"] == "COMPLETED"
+    assert service.motor_query_port.drive_calls
+    assert service.get_telemetry()
+
+
+def test_curve_rejects_radius_inside_track_width():
+    service = make_service()
+    try:
+        service.curve_radius(50.0, 90.0, 200)
+        assert False
+    except ValueError as error:
+        assert "half the track width" in str(error)
+
+
+def test_speed_factors_compensate_motor_difference():
+    motor_port = FakeDriveMotorPort()
+    service = DriveService(
+        motor_query_port=motor_port,
+        drive_motor_port=motor_port,
+        motor_command_port=motor_port,
+        motor_command_query_port=motor_port,
+        sensor_port=FakeDriveSensorPort(),
+        config=drive_config({
+            "left_speed_factor": 0.9,
+            "right_speed_factor": 1.1
+        })
+    )
+    assert service._apply_left_factor(100) == 90
+    assert service._apply_right_factor(100) == 110

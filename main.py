@@ -3,8 +3,13 @@
 
 """Minimal process entry point for the Rover application."""
 
+import os
 import signal
 import sys
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from bootstrap.rover_assembly import (
     ApplicationStartupError, prepare_rover_runtime
@@ -30,15 +35,16 @@ def main():
         return runtime.exit_code
 
     signal.signal(signal.SIGINT, request_shutdown)
-    if hasattr(signal, "SIGTERM"):
-        signal.signal(signal.SIGTERM, request_shutdown)
-
+    signal.signal(signal.SIGTERM, request_shutdown)
     runtime.logger.status("Runtime: Python {0}".format(sys.version.split()[0]))
+
     exit_code = 0
     try:
         runtime.start()
     except ApplicationStartupError as error:
-        runtime.logger.error("Rover startup aborted: {0}".format(error))
+        runtime.logger.error(
+            "Rover startup aborted: {0}".format(error)
+        )
         exit_code = 1
     except KeyboardInterrupt:
         request_shutdown()

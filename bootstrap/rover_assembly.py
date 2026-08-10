@@ -1,39 +1,47 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Single composition root for Rover-DR execution graphs."""
+"""Single composition root for startup and all Rover execution graphs."""
 
 from adapters.in_evdev_joystick import EvdevJoystickAdapter
 from adapters.in_rest_api_server import RestApiServer
 from adapters.out_controller_monitor import ControllerMonitorAdapter
-from adapters.out_drive_service import DriveServiceAdapter
-from adapters.out_ev3_command_control_selector import Ev3CommandControlSelectorAdapter
-from adapters.out_ev3_local_drive_setup_selector import Ev3LocalDriveSetupSelectorAdapter
+from adapters.out_ev3_command_control_selector import (
+    Ev3CommandControlSelectorAdapter
+)
+from adapters.out_ev3_local_drive_setup_selector import (
+    Ev3LocalDriveSetupSelectorAdapter
+)
 from adapters.out_ev3_motor_hardware import Ev3MotorHardwareAdapter
-from adapters.out_ev3_gyro_sensor import Ev3GyroSensorAdapter
-from adapters.out_heading_state import HeadingStateQueryAdapter
 from adapters.out_ev3_operation_status import Ev3OperationStatusAdapter
 from adapters.out_ev3_operator_alert import Ev3OperatorAlertAdapter
+from adapters.out_ev3_status_led import Ev3StatusLedAdapter
 from adapters.out_local_manual_queries import (
     FieldManualSensorQueryAdapter,
     LocalManualControllerQueryAdapter,
     LocalManualMotorQueryAdapter,
     LocalManualSensorQueryAdapter
 )
+from adapters.out_heading_state import HeadingStateQueryAdapter
+from adapters.out_ev3_gyro_sensor import Ev3GyroSensorAdapter
 from adapters.out_motor_monitor import MotorMonitorAdapter
 from adapters.out_motor_state_publisher import MotorStateStorePublisherAdapter
-from adapters.out_rover_state_query import RoverStateQueryAdapter
 from adapters.out_sensor_monitor import SensorMonitorAdapter
-from app import rover_config
-from app.configuration import RoverConfiguration
 from app.command_service import CommandService
 from app.operation_mode_service import (
-    Centrics, Commands, Controls, Drives, OperationModeService
+    Centrics,
+    Commands,
+    Drives,
+    OperationModeService,
+    coerce_operation_mode
 )
 from app.monitor_registration import MonitorRegistration
-from app.rover_application import ApplicationStartupError, RoverApplication
+from app import rover_application as rover_application_module
+from app.rover_config import DEFAULT_CONFIGURATION
 from app.services.drive_service import DriveService
-from app.services.field_heading_reference_service import FieldHeadingReferenceService
+from app.services.field_heading_reference_service import (
+    FieldHeadingReferenceService
+)
 from app.services.joystick_control_service import JoystickControlService
 from app.services.manual_drive_service import ManualDriveService
 from app.services.rover_state_service import RoverStateService
@@ -42,7 +50,8 @@ from infrastructure.configuration.rover_configuration_loader import (
     RoverConfigurationLoader
 )
 from infrastructure.ev3.ev3dev2_motor_gateway import (
-    Ev3Dev2MotorGateway, Ev3Dev2MotorGatewayError
+    Ev3Dev2MotorGateway,
+    Ev3Dev2MotorGatewayError
 )
 from infrastructure.ev3.screen_image import warm_monochrome_screen_cache
 from infrastructure.logging.app_logger import AppLogger
@@ -55,419 +64,116 @@ from infrastructure.runtime.rover_runtime_context import RoverRuntimeContext
 from infrastructure.runtime.threading_application_concurrency import (
     ThreadingApplicationConcurrency
 )
+from ports.joystick_connection_status_port import (
+    JoystickConnectionStatusPort
+)
+from ports.startup_progress_port import StartupProgressPort
 from infrastructure.state.controller_state_store import ControllerStateStore
 from infrastructure.state.heading_state_store import HeadingStateStore
 from infrastructure.state.motor_state_store import MotorStateStore
 from infrastructure.state.sensor_state_store import SensorStateStore
 
-
-def _resolve_configuration(configuration=None):
-    """Returns an explicit immutable snapshot for graph assembly.
-
-    Production startup always passes the snapshot loaded by
-    ``RoverConfigurationLoader``.  The fallback mirrors the previous
-    increment only for direct tests/callers while configuration migration is
-    completed.
-    """
-    if configuration is not None:
-        return configuration
-    values = rover_config.build_default_configuration_values()
-    values["hardware_enabled"] = bool(rover_config.HARDWARE_ENABLED)
-    resolved = RoverConfiguration(values)
-    resolved.validate()
-    return resolved
+ApplicationStartupError = rover_application_module.ApplicationStartupError
+RoverApplication = rover_application_module.RoverApplication
 
 
-def _is_local_manual(operation_mode_service):
-    if operation_mode_service is None:
-        return True
-    return operation_mode_service.get_mode().is_local_manual()
+def prepare_rover_runtime(configuration_loader=None, logger=None):
+    """Loads configuration, selects one cohesive operation mode and assembles it."""
+    active_logger = logger or AppLogger
+    loader = configuration_loader or RoverConfigurationLoader()
+    active_logger.status("Starting Rover application.")
+    _prepare_startup_alert_resources(loader)
+    try:
+        configuration = loader.load()
+    except RuntimeError as error:
+        _report_startup_error(loader, active_logger, error)
+        return RoverRuntimeContext(logger=active_logger, exit_code=1)
 
+    operation_mode_service = OperationModeService()
+    operation_status_component = None
+    if configuration.hardware_enabled:
+        _prepare_ev3_screen_cache(active_logger)
+        operation_mode_service = OperationModeService(
+            command_control_selector_port=Ev3CommandControlSelectorAdapter(),
+            local_drive_selector_port=Ev3LocalDriveSetupSelectorAdapter()
+        )
+        while True:
+            active_logger.status(
+                "Waiting for the operator to select Command and Control."
+            )
+            selected_mode = operation_mode_service.select_command_control()
+            if selected_mode is None:
+                active_logger.status("Rover startup cancelled by the operator.")
+                return RoverRuntimeContext(logger=active_logger, exit_code=1)
 
-def build_rover_application(operation_mode_service=None, joystick_port=None,
-                            heading_query_port=None, configuration=None):
-    """Builds the execution graph selected by Command & Control."""
-    config = _resolve_configuration(configuration)
-    if _is_local_manual(operation_mode_service):
-        return build_local_manual_application(
+            if selected_mode["command"] != Commands.LOCAL:
+                break
+
+            active_logger.status(
+                "Waiting for the operator to select Front, Drive and Mode."
+            )
+            selected_mode = operation_mode_service.select_local_drive()
+            if selected_mode is None:
+                active_logger.status("Rover startup cancelled by the operator.")
+                return RoverRuntimeContext(logger=active_logger, exit_code=1)
+            if selected_mode.get("navigation") == "BACK":
+                continue
+            break
+
+        startup_gated = operation_mode_service.get_mode().is_local_manual()
+        operation_status_component = Ev3OperationStatusAdapter(
             operation_mode_service=operation_mode_service,
-            joystick_port=joystick_port,
-            heading_query_port=heading_query_port,
-            configuration=config
+            joystick_device_name=configuration.joystick_device_name,
+            startup_gated=startup_gated
         )
-    return build_standard_application(
+        if startup_gated:
+            # Match Command/Control -> Front/Drive: paint the destination first,
+            # emit its three-beep prompt, and only then assemble/check hardware.
+            start_status = getattr(operation_status_component, "start", None)
+            if callable(start_status):
+                start_status()
+    else:
+        selected_mode = operation_mode_service.get_snapshot()
+
+    active_logger.status(
+        "Rover operation mode selected: command={0}, control={1}, front={2}, "
+        "drive={3}, centric={4}, differential_mode={5}.".format(
+            selected_mode["command"],
+            selected_mode["control"],
+            selected_mode["front"],
+            selected_mode["drive"],
+            selected_mode["centric"],
+            selected_mode["differential_mode"]
+        )
+    )
+    application = build_rover_application(
+        configuration=configuration,
         operation_mode_service=operation_mode_service,
-        configuration=config
+        operation_status_component=operation_status_component,
+        logger=active_logger
+    )
+    return RoverRuntimeContext(
+        application=application, logger=active_logger, exit_code=0
     )
 
 
-def build_local_manual_application(operation_mode_service=None,
-                                   joystick_port=None,
-                                   heading_query_port=None,
-                                   configuration=None):
-    """Builds the minimal deterministic LOCAL + MANUAL runtime graph."""
-    config = _resolve_configuration(configuration)
-    mode_service = operation_mode_service or OperationModeService()
-    operation_mode = mode_service.get_mode()
-    if not operation_mode.is_local_manual():
-        raise RuntimeError(
-            "LOCAL + MANUAL runtime requires a LOCAL/MANUAL operation mode."
-        )
-
-    is_field_mode = (
-        operation_mode.drive == Drives.MECANUM and
-        operation_mode.centric == Centrics.FIELD
-    )
-    if is_field_mode and heading_query_port is None and not config.hardware_enabled:
-        raise RuntimeError(
-            "FIELD-centric Mecanum control requires EV3 hardware or an "
-            "injected cached heading source."
-        )
-
-    motor_state_store = MotorStateStore()
-    sensor_definitions = config.sensor_definitions.to_dict()
-    monitor_registrations = []
-    canonical_heading_query_port = heading_query_port
-
-    if is_field_mode and heading_query_port is None:
-        heading_config = config.field_heading
-        gyro_sensor_code = heading_config.get("sensor_code", "GYR")
-        gyro_definition = sensor_definitions.get(gyro_sensor_code)
-        if gyro_definition is None:
-            raise RuntimeError(
-                "FIELD heading sensor definition not found: {0}.".format(
-                    gyro_sensor_code
-                )
-            )
-
-        heading_store = HeadingStateStore()
-        heading_query_port = HeadingStateQueryAdapter(
-            heading_store,
-            max_age_seconds=heading_config.get("max_age_seconds", 0.1)
-        )
-        canonical_heading_query_port = heading_query_port
-        gyro_hardware = Ev3GyroSensorAdapter(
-            address=gyro_definition.get("address", "in3"),
-            mode=gyro_definition.get("mode", "GYRO-ANG"),
-            reset_on_start=heading_config.get("reset_on_start", True),
-            angle_sign=heading_config.get("angle_sign", -1.0),
-            angle_offset_deg=heading_config.get("angle_offset_deg", 0.0),
-            port_mode=gyro_definition.get("port_mode", "ev3-uart"),
-            connection_timeout_seconds=heading_config.get(
-                "connection_timeout_seconds", 10.0
-            ),
-            connection_retry_seconds=heading_config.get(
-                "connection_retry_seconds", 0.1
-            )
-        )
-        gyro_monitor = GyroHeadingMonitor(
-            heading_sensor_port=gyro_hardware,
-            state_store=heading_store,
-            sensor_code=gyro_sensor_code,
-            address=gyro_definition.get("address", "in3"),
-            mode=gyro_definition.get("mode", "GYRO-ANG"),
-            interval_seconds=heading_config.get("poll_seconds", 0.02),
-            max_consecutive_failures=heading_config.get(
-                "max_consecutive_failures", 3
-            )
-        )
-        monitor_registrations.append(
-            MonitorRegistration(gyro_monitor, "Gyro Heading", True)
-        )
-        sensor_port = FieldManualSensorQueryAdapter(
-            sensor_definitions,
-            gyro_sensor_code=gyro_sensor_code,
-            heading_query_port=heading_query_port
-        )
-    elif is_field_mode and heading_query_port is not None:
-        canonical_heading_query_port = heading_query_port
-        gyro_sensor_code = config.field_heading["sensor_code"]
-        sensor_port = FieldManualSensorQueryAdapter(
-            sensor_definitions,
-            gyro_sensor_code=gyro_sensor_code,
-            heading_query_port=heading_query_port
-        )
-    else:
-        sensor_port = LocalManualSensorQueryAdapter(sensor_definitions)
-
-    field_heading_reference_port = None
-    if is_field_mode:
-        field_heading_reference_port = FieldHeadingReferenceService(
-            canonical_heading_query_port
-        )
-        heading_query_port = field_heading_reference_port
-
-    motor_port = LocalManualMotorQueryAdapter(
-        motor_state_store,
-        config.motor_definitions.to_dict()
-    )
-    controller_port = LocalManualControllerQueryAdapter()
-
-    rover_state_service = RoverStateService(
-        sensor_port=sensor_port,
-        motor_port=motor_port,
-        controller_port=controller_port,
-        operation_mode_service=mode_service
-    )
-    rover_state_port = RoverStateQueryAdapter(rover_state_service)
-    command_service = CommandService(
-        sensor_port=sensor_port,
-        motor_port=motor_port,
-        controller_port=controller_port,
-        rover_state_port=rover_state_port,
-        drive_port=None,
-        operation_mode_service=mode_service
-    )
-
-    rest_api = RestApiServer(
-        command_service,
-        config.rest_host,
-        config.rest_port,
-        shutdown_token=config.shutdown_token,
-        hardware_api_token=config.hardware_api_token,
-        shutdown_confirmation_required=config.shutdown_confirmation_required,
-        ev3dev2_motor_gateway=None
-    )
-
-    joystick_config = config.joystick.to_dict()
-    motor_hardware_port = Ev3MotorHardwareAdapter(
-        motor_definitions=config.motor_definitions.to_dict(),
-        default_stop_action=config.motor_default_stop_action
-    )
-    motor_state_publisher_port = MotorStateStorePublisherAdapter(
-        motor_state_store
-    )
-    manual_drive_port = ManualDriveService(
-        motor_hardware_port=motor_hardware_port,
-        drive_config=config.drive.to_dict(),
-        mecanum_config=config.mecanum.to_dict(),
-        joystick_config=joystick_config,
-        default_stop_action=config.motor_default_stop_action,
-        motor_state_publisher_port=motor_state_publisher_port
-    )
-
-    if joystick_port is None and config.hardware_enabled:
-        joystick_port = EvdevJoystickAdapter(
-            device_name=joystick_config.get(
-                "device_name", "Wireless Controller"
-            ),
-            device_address=joystick_config.get("device_address", ""),
-            auto_connect=joystick_config.get("auto_connect", True),
-            connection_timeout_seconds=joystick_config.get(
-                "connection_timeout_seconds", 10.0
-            ),
-            passive_reconnect_seconds=joystick_config.get(
-                "passive_reconnect_seconds", 4.0
-            ),
-            discovery_poll_seconds=joystick_config.get(
-                "discovery_poll_seconds", 0.25
-            )
-        )
-
-    runtime_components = []
-    managed_resources = [manual_drive_port]
-    joystick_connection_status_port = None
-    if config.hardware_enabled:
-        joystick_connection_status_port = Ev3OperationStatusAdapter(
-            operation_mode_service=mode_service,
-            joystick_device_name=joystick_config.get(
-                "device_name", "Wireless Controller"
-            )
-        )
-        runtime_components.append(joystick_connection_status_port)
-
-    if joystick_port is not None:
-        joystick_control_service = JoystickControlService(
-            joystick_port=joystick_port,
-            manual_drive_port=manual_drive_port,
-            max_speed_sp=joystick_config.get("max_speed_sp", 600),
-            auxiliary_speed_sp=joystick_config.get(
-                "auxiliary_speed_sp", 400
-            ),
-            axis_center=joystick_config.get("axis_center", 127),
-            axis_deadzone=joystick_config.get("axis_deadzone", 7),
-            axis_max=joystick_config.get("axis_max", 255),
-            axis_response_intensity=joystick_config.get(
-                "axis_response_intensity", 1.0
-            ),
-            left_auxiliary_motor_code=joystick_config.get(
-                "left_auxiliary_motor_code", "LMM"
-            ),
-            right_auxiliary_motor_code=joystick_config.get(
-                "right_auxiliary_motor_code", "RMM"
-            ),
-            drive_mode=operation_mode.drive,
-            front=operation_mode.front,
-            centric=operation_mode.centric or Centrics.CHASSIS,
-            mecanum_strafe_compensation=config.mecanum.get(
-                "strafe_compensation", 1.0
-            ),
-            poll_seconds=joystick_config.get("poll_seconds", 0.02),
-            logger=AppLogger,
-            device_name=joystick_config.get(
-                "device_name", "Wireless Controller"
-            ),
-            connection_retry_seconds=joystick_config.get(
-                "connection_retry_seconds", 3.0
-            ),
-            connection_status_port=joystick_connection_status_port,
-            heading_query_port=heading_query_port,
-            field_heading_reference_port=field_heading_reference_port,
-            emergency_stop_button_code=joystick_config.get(
-                "button_codes", {}
-            ).get("emergency_stop", 304),
-            field_recenter_button_code=joystick_config.get(
-                "button_codes", {}
-            ).get("field_recenter", 307),
-            field_recenter_enabled=config.field_heading["runtime_recenter_enabled"],
-            field_recenter_requires_neutral=(
-                config.field_heading["recenter_requires_neutral"]
-            )
-        )
-        runtime_components.append(joystick_control_service)
-
-    if is_field_mode:
-        AppLogger.status(
-            "LOCAL + MANUAL FIELD runtime: dedicated cached gyro heading, "
-            "joystick and synchronous motor hardware are active; general "
-            "sensor monitor queues remain disabled."
-        )
-    else:
-        AppLogger.status(
-            "LOCAL + MANUAL runtime: joystick, synchronous motor hardware, "
-            "operation status and read-only REST queries are active; monitor "
-            "queues and the EV3Dev2 motor gateway are disabled."
-        )
-    return _finalize_application(
-        rest_api=rest_api,
-        monitor_registrations=monitor_registrations,
-        runtime_components=runtime_components,
-        managed_resources=managed_resources,
-        configuration=config
-    )
+def _prepare_startup_alert_resources(loader):
+    """Warms only the fatal-screen render resources before validation."""
+    try:
+        if loader.hardware_requested() is True:
+            Ev3OperatorAlertAdapter.prepare_render_resources()
+    except (
+            ImportError, IOError, OSError, RuntimeError, AttributeError,
+            TypeError, ValueError):
+        # Startup validation must remain authoritative.  If the warm-up cannot
+        # run, the alert adapter will retry the same resources only if needed.
+        return
 
 
-def build_standard_application(operation_mode_service=None,
-                               configuration=None):
-    """Builds the monitored runtime used outside LOCAL + MANUAL."""
-    config = _resolve_configuration(configuration)
-    sensor_state_store = SensorStateStore()
-    motor_state_store = MotorStateStore()
-    controller_state_store = ControllerStateStore()
-
-    sensor_monitor = SensorMonitor(state_store=sensor_state_store)
-    motor_monitor = MotorMonitor(state_store=motor_state_store)
-    controller_monitor = ControllerMonitor(state_store=controller_state_store)
-    monitor_registrations = [
-        MonitorRegistration(controller_monitor, "Controller", False),
-        MonitorRegistration(sensor_monitor, "Sensor", True),
-        MonitorRegistration(motor_monitor, "Motor", True)
-    ]
-
-    sensor_port = SensorMonitorAdapter(
-        sensor_monitor=sensor_monitor, state_store=sensor_state_store
-    )
-    motor_port = MotorMonitorAdapter(
-        motor_monitor=motor_monitor, state_store=motor_state_store
-    )
-    controller_port = ControllerMonitorAdapter(
-        controller_monitor=controller_monitor,
-        state_store=controller_state_store
-    )
-
-    rover_state_service = RoverStateService(
-        sensor_port=sensor_port,
-        motor_port=motor_port,
-        controller_port=controller_port,
-        operation_mode_service=operation_mode_service
-    )
-    rover_state_port = RoverStateQueryAdapter(rover_state_service)
-
-    drive_service = DriveService(motor_port=motor_port, sensor_port=sensor_port)
-    drive_port = DriveServiceAdapter(drive_service)
-    command_service = CommandService(
-        sensor_port=sensor_port,
-        motor_port=motor_port,
-        controller_port=controller_port,
-        rover_state_port=rover_state_port,
-        drive_port=drive_port,
-        operation_mode_service=operation_mode_service
-    )
-
-    ev3dev2_motor_gateway = None
-    if config.hardware_enabled:
-        try:
-            ev3dev2_motor_gateway = Ev3Dev2MotorGateway(
-                motor_port=motor_port, drive_port=drive_port
-            )
-        except Ev3Dev2MotorGatewayError as error:
-            AppLogger.warning(
-                "EV3Dev2 motor gateway unavailable: {0}".format(error)
-            )
-    else:
-        AppLogger.status(
-            "Physical EV3 hardware is disabled; motor gateway was not started."
-        )
-
-    rest_api = RestApiServer(
-        command_service,
-        config.rest_host,
-        config.rest_port,
-        shutdown_token=config.shutdown_token,
-        hardware_api_token=config.hardware_api_token,
-        shutdown_confirmation_required=config.shutdown_confirmation_required,
-        ev3dev2_motor_gateway=ev3dev2_motor_gateway
-    )
-    runtime_components = []
-    managed_resources = []
-    if ev3dev2_motor_gateway is not None:
-        managed_resources.append(ev3dev2_motor_gateway)
-    if config.hardware_enabled:
-        joystick_config = config.joystick.to_dict()
-        runtime_components.append(
-            Ev3OperationStatusAdapter(
-                operation_mode_service=operation_mode_service,
-                joystick_device_name=joystick_config.get(
-                    "device_name", "Wireless Controller"
-                )
-            )
-        )
-    return _finalize_application(
-        rest_api=rest_api,
-        monitor_registrations=monitor_registrations,
-        runtime_components=runtime_components,
-        managed_resources=managed_resources,
-        configuration=config
-    )
-
-
-
-def _finalize_application(rest_api, monitor_registrations=None,
-                          runtime_components=None, managed_resources=None,
-                          configuration=None):
-    """Centralizes lifecycle ports and REST callbacks for every graph."""
-    config = _resolve_configuration(configuration)
-    application = RoverApplication(
-        rest_api_server=rest_api,
-        monitor_registrations=monitor_registrations or [],
-        runtime_components=runtime_components or [],
-        managed_resources=managed_resources or [],
-        logger=AppLogger,
-        concurrency_port=ThreadingApplicationConcurrency(),
-        process_control_port=OsProcessController(),
-        application_name=config.application_name,
-        application_version=config.application_version
-    )
-    rest_api.set_shutdown_callback(application.request_shutdown)
-    rest_api.set_restart_callback(application.request_restart)
-    return application
-
-
-
-def _prepare_ev3_screen_cache():
-    """Preloads ready-to-use PBM screens without runtime conversion."""
+def _prepare_ev3_screen_cache(logger):
+    """Preloads ready-to-use PBM screens without converting source artwork."""
     result = warm_monochrome_screen_cache()
-    AppLogger.status(
+    logger.status(
         "EV3 PBM screens ready: {0} screen(s), {1} memory hit(s), "
         "{2} loaded from cache.".format(
             result["total"],
@@ -476,124 +182,471 @@ def _prepare_ev3_screen_cache():
         )
     )
     if result["failed"]:
-        AppLogger.warning(
+        logger.warning(
             "EV3 screen cache could not load {0} PBM screen(s); affected "
             "screens will retry during display.".format(
                 len(result["failed"])
             )
         )
-    return result
 
 
-def validate_startup_configuration():
-    """Validates startup security and reports errors to the EV3 when possible."""
-    try:
-        rover_config.validate_security_configuration()
-        return True
-    except RuntimeError as error:
-        AppLogger.error("Security configuration error: {0}".format(error))
-        if rover_config.HARDWARE_ENABLED:
-            startup_error_notifier = StartupErrorNotifier(
-                Ev3OperatorAlertAdapter()
-            )
-            AppLogger.status(
-                "Attempting to present the startup error on the EV3 brick."
-            )
-            if startup_error_notifier.show(str(error)):
-                AppLogger.status(
-                    "EV3 startup alert acknowledged by the operator."
-                )
-            else:
-                AppLogger.status(
-                    "EV3 startup alert unavailable; terminating startup."
-                )
-        else:
-            AppLogger.status(
-                "EV3 startup alert skipped because physical hardware is disabled."
-            )
-        return False
-
-
-def select_operation_mode(configuration=None):
-    """Selects the canonical Command/Control/Front/Drive/Centric mode."""
-    config = _resolve_configuration(configuration)
-    if not config.hardware_enabled:
-        service = OperationModeService()
-        selected = service.get_snapshot()
-        AppLogger.status(
-            "Physical hardware disabled; using default "
-            "LOCAL/MANUAL/NOSE/DIFFERENTIAL mode."
+def _report_startup_error(loader, logger, error):
+    logger.error("Configuration error: {0}".format(error))
+    if loader.hardware_requested():
+        notifier = StartupErrorNotifier(Ev3OperatorAlertAdapter(
+            status_led_factory=Ev3StatusLedAdapter,
+            fault_source="configuration"
+        ))
+        logger.status(
+            "Waiting for the user to press any EV3 button to terminate the program."
         )
-        return service
-
-    service = OperationModeService(
-        command_control_selector_port=Ev3CommandControlSelectorAdapter(),
-        local_drive_selector_port=Ev3LocalDriveSetupSelectorAdapter()
-    )
-    AppLogger.status(
-        "Waiting for the operator to select Command and Control."
-    )
-    selected = service.select_command_control()
-    if selected is None:
-        AppLogger.status("Rover startup cancelled by the operator.")
-        return None
-
-    if selected["command"] == Commands.LOCAL:
-        AppLogger.status(
-            "Waiting for the operator to select Front, Drive and Centric."
+        if not notifier.show(str(error)):
+            logger.status("EV3 startup alert could not be displayed.")
+    else:
+        logger.status(
+            "EV3 startup alert skipped because motor hardware is disabled."
         )
-        selected = service.select_local_drive()
-        if selected is None:
-            AppLogger.status("Rover startup cancelled by the operator.")
-            return None
 
-    AppLogger.status(
-        "Selected mode: command={0}, control={1}, front={2}, drive={3}, "
-        "centric={4}.".format(
-            selected["command"],
-            selected["control"] or "N/A",
-            selected["front"] or "N/A",
-            selected["drive"] or "N/A",
-            selected["centric"] or "N/A"
+
+def build_rover_application(configuration=None,
+                            operation_status_component=None, logger=None,
+                            operation_mode_service=None):
+    """Builds the graph selected by the canonical operation-mode structure."""
+    config = configuration or DEFAULT_CONFIGURATION
+    mode_service = _resolve_operation_mode_service(operation_mode_service)
+    if mode_service.get_mode().is_local_manual():
+        return build_local_manual_application(
+            configuration=config,
+            operation_mode_service=mode_service,
+            operation_status_component=operation_status_component,
+            logger=logger
         )
+    return build_standard_application(
+        config,
+        operation_mode_service=mode_service,
+        operation_status_component=operation_status_component,
+        logger=logger
     )
-    return service
 
 
-def prepare_rover_runtime(configuration_loader=None, logger=None):
-    """Loads one immutable snapshot and assembles a lifecycle-aware runtime."""
+def _resolve_operation_mode_service(operation_mode_service=None):
+    """Returns one canonical service for every application graph."""
+    if isinstance(operation_mode_service, OperationModeService):
+        return operation_mode_service
+    return _operation_mode_service_from_value(operation_mode_service)
+
+
+def _operation_mode_service_from_value(value):
+    mode = coerce_operation_mode(value)
+    if mode.command == Commands.REMOTE:
+        return OperationModeService(command=Commands.REMOTE)
+    return OperationModeService(
+        command=mode.command,
+        control=mode.control,
+        front=mode.front,
+        drive=mode.drive,
+        centric=mode.centric,
+        differential_mode=mode.differential_mode
+    )
+
+
+def build_local_manual_application(configuration,
+                                   operation_status_component=None,
+                                   logger=None,
+                                   operation_mode_service=None):
+    """Builds the minimal deterministic LOCAL + MANUAL joystick graph."""
     active_logger = logger or AppLogger
-    loader = configuration_loader or RoverConfigurationLoader()
-    active_logger.status("Starting Rover application.")
-    try:
-        configuration = loader.load()
-    except RuntimeError as error:
-        active_logger.error("Configuration error: {0}".format(error))
-        if loader.hardware_requested():
-            notifier = StartupErrorNotifier(Ev3OperatorAlertAdapter())
-            notifier.show(str(error))
-        return RoverRuntimeContext(logger=active_logger, exit_code=1)
+    mode_service = _resolve_operation_mode_service(operation_mode_service)
+    operation_mode = mode_service.get_mode()
+    motor_state_store = MotorStateStore()
+
+    monitor_registrations = []
+    canonical_heading_query_port = None
+    heading_query_port = None
+    field_heading_reference_port = None
+    state_monitors = {}
+    sensor_query_port = LocalManualSensorQueryAdapter(
+        configuration.sensor_definitions
+    )
+
+    is_field_mode = (
+        operation_mode.drive == Drives.MECANUM and
+        operation_mode.centric == Centrics.FIELD
+    )
+    if is_field_mode:
+        if not configuration.hardware_enabled:
+            raise RuntimeError(
+                "FIELD-centric Mecanum control requires EV3 hardware."
+            )
+        heading_config = configuration.field_heading
+        gyro_sensor_code = heading_config["sensor_code"]
+        gyro_definition = configuration.sensor_definitions.get(
+            gyro_sensor_code
+        )
+        if gyro_definition is None:
+            raise RuntimeError(
+                "FIELD heading sensor definition not found: {0}.".format(
+                    gyro_sensor_code
+                )
+            )
+
+        heading_store = HeadingStateStore()
+        canonical_heading_query_port = HeadingStateQueryAdapter(
+            heading_store,
+            max_age_seconds=float(
+                heading_config["max_age_seconds"]
+            )
+        )
+        field_heading_reference_port = FieldHeadingReferenceService(
+            canonical_heading_query_port
+        )
+        heading_query_port = field_heading_reference_port
+        gyro_hardware = Ev3GyroSensorAdapter(
+            address=gyro_definition["address"],
+            mode=gyro_definition["mode"],
+            reset_on_start=bool(heading_config["reset_on_start"]),
+            angle_sign=float(heading_config["angle_sign"]),
+            angle_offset_deg=float(heading_config["angle_offset_deg"]),
+            port_mode=gyro_definition.get("port_mode"),
+            connection_timeout_seconds=float(
+                heading_config["connection_timeout_seconds"]
+            ),
+            connection_retry_seconds=float(
+                heading_config["connection_retry_seconds"]
+            )
+        )
+        gyro_monitor = GyroHeadingMonitor(
+            heading_sensor_port=gyro_hardware,
+            state_store=heading_store,
+            sensor_code=gyro_sensor_code,
+            address=gyro_definition["address"],
+            mode=gyro_definition["mode"],
+            interval_seconds=float(
+                heading_config["poll_seconds"]
+            ),
+            max_consecutive_failures=int(
+                heading_config["max_consecutive_failures"]
+            )
+        )
+        monitor_registrations.append(
+            MonitorRegistration(gyro_monitor, "Gyro Heading", True)
+        )
+        state_monitors["gyro_heading"] = gyro_monitor
+        sensor_query_port = FieldManualSensorQueryAdapter(
+            configuration.sensor_definitions,
+            gyro_sensor_code=gyro_sensor_code,
+            heading_query_port=canonical_heading_query_port
+        )
+
+    hardware_adapter = Ev3MotorHardwareAdapter(
+        motor_definitions=configuration.motor_definitions,
+        default_stop_action=configuration.motor_default_stop_action
+    )
+    motor_query_port = LocalManualMotorQueryAdapter(
+        motor_state_store,
+        configuration.motor_definitions,
+        motor_hardware_port=(
+            hardware_adapter if configuration.hardware_enabled else None
+        )
+    )
+    controller_port = LocalManualControllerQueryAdapter()
+
+    state_service = RoverStateService(
+        sensor_query_port=sensor_query_port,
+        motor_query_port=motor_query_port,
+        controller_port=controller_port,
+        monitors=state_monitors,
+        operation_mode_service=mode_service
+    )
+    command_service = CommandService(
+        sensor_query_port=sensor_query_port,
+        motor_query_port=motor_query_port,
+        controller_port=controller_port,
+        rover_state_query_port=state_service,
+        operation_mode_service=mode_service
+    )
+    rest_server = _build_rest_server(
+        command_service, configuration, motor_gateway_port=None
+    )
+
+    runtime_components = []
+    active_status_component = operation_status_component
+    status_led_component = None
     if configuration.hardware_enabled:
-        _prepare_ev3_screen_cache()
-    operation_mode_service = select_operation_mode(configuration)
-    if operation_mode_service is None:
-        return RoverRuntimeContext(logger=active_logger, exit_code=1)
-    application = build_rover_application(
-        operation_mode_service=operation_mode_service,
+        status_led_component = Ev3StatusLedAdapter(
+            operation_mode_service=mode_service,
+            motor_query_port=None,
+            logger=active_logger
+        )
+        runtime_components.append(status_led_component)
+        active_status_component = (
+            operation_status_component or Ev3OperationStatusAdapter(
+                operation_mode_service=mode_service,
+                joystick_device_name=configuration.joystick_device_name,
+                startup_gated=True
+            )
+        )
+        if hasattr(active_status_component, "set_motor_query_port"):
+            active_status_component.set_motor_query_port(motor_query_port)
+        runtime_components.append(active_status_component)
+
+    state_publisher = MotorStateStorePublisherAdapter(motor_state_store)
+    joystick_connection_status_port = None
+    startup_progress_port = None
+    if isinstance(
+            active_status_component, JoystickConnectionStatusPort):
+        joystick_connection_status_port = active_status_component
+    if isinstance(active_status_component, StartupProgressPort):
+        startup_progress_port = active_status_component
+
+    manual_drive_service = ManualDriveService(
+        motor_hardware_port=hardware_adapter,
+        motor_state_publisher_port=state_publisher,
+        drive_config=configuration.drive,
+        mecanum_config=configuration.mecanum,
+        joystick_config=configuration.joystick,
+        default_stop_action=configuration.motor_default_stop_action,
+        logger=active_logger,
+        startup_progress_port=startup_progress_port,
+        status_led_port=status_led_component
+    )
+    joystick_adapter = EvdevJoystickAdapter(
+        device_name=configuration.joystick_device_name,
+        device_address=configuration.joystick["device_address"],
+        auto_connect=bool(configuration.joystick["auto_connect"]),
+        connection_timeout_seconds=float(
+            configuration.joystick["connection_timeout_seconds"]
+        ),
+        passive_reconnect_seconds=float(
+            configuration.joystick["passive_reconnect_seconds"]
+        ),
+        discovery_poll_seconds=float(
+            configuration.joystick["discovery_poll_seconds"]
+        )
+    )
+    joystick_service = JoystickControlService(
+        joystick_port=joystick_adapter,
+        manual_drive_port=manual_drive_service,
+        device_name=configuration.joystick_device_name,
+        max_speed_sp=int(configuration.joystick["max_speed_sp"]),
+        auxiliary_speed_sp=int(configuration.joystick["auxiliary_speed_sp"]),
+        axis_center=int(configuration.joystick["axis_center"]),
+        axis_deadzone=int(configuration.joystick["axis_deadzone"]),
+        axis_max=int(configuration.joystick["axis_max"]),
+        axis_response_intensity=float(
+            configuration.joystick["axis_response_intensity"]
+        ),
+        neutral_stability_seconds=float(
+            configuration.joystick["neutral_stability_seconds"]
+        ),
+        neutral_poll_seconds=float(
+            configuration.joystick["neutral_poll_seconds"]
+        ),
+        left_auxiliary_motor_code=(
+            configuration.joystick["left_auxiliary_motor_code"]
+        ),
+        right_auxiliary_motor_code=(
+            configuration.joystick["right_auxiliary_motor_code"]
+        ),
+        poll_seconds=float(configuration.joystick["poll_seconds"]),
+        connection_retry_seconds=float(
+            configuration.joystick["connection_retry_seconds"]
+        ),
+        operation_mode=operation_mode,
+        mecanum_strafe_compensation=float(
+            configuration.mecanum["strafe_compensation"]
+        ),
+        heading_query_port=heading_query_port,
+        field_heading_reference_port=field_heading_reference_port,
+        stop_button_code=int(
+            configuration.joystick["button_codes"]["emergency_stop"]
+        ),
+        field_recenter_button_code=int(
+            configuration.joystick["button_codes"]["field_recenter"]
+        ),
+        field_recenter_enabled=bool(
+            configuration.field_heading["runtime_recenter_enabled"]
+        ),
+        field_recenter_requires_neutral=bool(
+            configuration.field_heading["recenter_requires_neutral"]
+        ),
+        logger=active_logger,
+        connection_status_port=joystick_connection_status_port,
+        startup_progress_port=startup_progress_port,
+        status_led_port=status_led_component
+    )
+    runtime_components.extend([manual_drive_service, joystick_service])
+
+    if is_field_mode:
+        active_logger.status(
+            "LOCAL + MANUAL FIELD mode: only the dedicated gyro heading "
+            "monitor, joystick session, synchronous motor hardware adapter, "
+            "status display and read-only REST queries are active."
+        )
+    else:
+        active_logger.status(
+            "LOCAL + MANUAL mode: front={0}, drive={1}, centric={2}, "
+            "differential_mode={3}; only the joystick session, synchronous "
+            "motor hardware adapter, status display and read-only REST "
+            "queries are active.".format(
+                operation_mode.front,
+                operation_mode.drive,
+                operation_mode.centric,
+                operation_mode.differential_mode
+            )
+        )
+    return _finalize_application(
+        configuration, rest_server, monitor_registrations,
+        runtime_components, [], active_logger
+    )
+
+
+def build_standard_application(configuration,
+                               operation_status_component=None,
+                               logger=None,
+                               operation_mode_service=None):
+    """Builds the monitored command, navigation and gateway graph."""
+    active_logger = logger or AppLogger
+    mode_service = _resolve_operation_mode_service(operation_mode_service)
+    sensor_store = SensorStateStore()
+    sensor_monitor = SensorMonitor(
+        state_store=sensor_store,
+        sensor_definitions=configuration.sensor_definitions
+    )
+    sensor_port = SensorMonitorAdapter(sensor_monitor, sensor_store)
+
+    motor_store = MotorStateStore()
+    motor_monitor = MotorMonitor(
+        state_store=motor_store,
+        motor_definitions=configuration.motor_definitions,
+        hardware_enabled=configuration.hardware_enabled,
         configuration=configuration
     )
-    return RoverRuntimeContext(
-        application=application, logger=active_logger, exit_code=0
+    motor_adapter = MotorMonitorAdapter(motor_monitor, motor_store)
+
+    controller_store = ControllerStateStore()
+    controller_monitor = ControllerMonitor(state_store=controller_store)
+    controller_port = ControllerMonitorAdapter(
+        controller_monitor, controller_store
+    )
+
+    registrations = [
+        MonitorRegistration(controller_monitor, "Controller", False),
+        MonitorRegistration(sensor_monitor, "Sensor", True),
+        MonitorRegistration(motor_monitor, "Motor", True)
+    ]
+    state_service = RoverStateService(
+        sensor_query_port=sensor_port,
+        motor_query_port=motor_adapter,
+        controller_port=controller_port,
+        monitors={
+            "controller": controller_monitor,
+            "sensor": sensor_monitor,
+            "motor": motor_monitor
+        },
+        operation_mode_service=mode_service
+    )
+    drive_service = DriveService(
+        motor_query_port=motor_adapter,
+        drive_motor_port=motor_adapter,
+        motor_command_port=motor_adapter,
+        motor_command_query_port=motor_adapter,
+        sensor_port=sensor_port,
+        config=configuration.drive
+    )
+    command_service = CommandService(
+        sensor_query_port=sensor_port,
+        sensor_command_port=sensor_port,
+        motor_query_port=motor_adapter,
+        controller_port=controller_port,
+        rover_state_query_port=state_service,
+        motor_command_port=motor_adapter,
+        motor_command_query_port=motor_adapter,
+        drive_motor_port=motor_adapter,
+        drive_port=drive_service,
+        operation_mode_service=mode_service
+    )
+
+    gateway = _build_gateway(configuration, motor_adapter, active_logger)
+    rest_server = _build_rest_server(
+        command_service, configuration, motor_gateway_port=gateway
+    )
+    runtime_components = []
+    if configuration.hardware_enabled:
+        status_led_component = Ev3StatusLedAdapter(
+            operation_mode_service=mode_service,
+            motor_query_port=motor_adapter,
+            logger=active_logger
+        )
+        runtime_components.append(status_led_component)
+        active_status_component = (
+            operation_status_component or Ev3OperationStatusAdapter(
+                operation_mode_service=mode_service,
+                joystick_device_name=configuration.joystick_device_name
+            )
+        )
+        if hasattr(active_status_component, "set_motor_query_port"):
+            active_status_component.set_motor_query_port(motor_adapter)
+        runtime_components.append(active_status_component)
+
+    return _finalize_application(
+        configuration,
+        rest_server,
+        registrations,
+        runtime_components,
+        [gateway] if gateway is not None else [],
+        active_logger
     )
 
 
-def prepare_rover_application():
-    """Compatibility helper returning the assembled application, if ready."""
-    runtime = prepare_rover_runtime()
-    return runtime.application if runtime.ready else None
+def _build_gateway(configuration, motor_adapter, logger):
+    try:
+        return Ev3Dev2MotorGateway(
+            motor_query_port=motor_adapter,
+            guarded_operation_port=motor_adapter,
+            max_objects=configuration.motor_gateway_max_objects,
+            object_ttl_seconds=(
+                configuration.motor_gateway_object_ttl_seconds
+            ),
+            max_watchdog_ms=configuration.motor_gateway_max_watchdog_ms,
+            wait_max_timeout_ms=(
+                configuration.motor_gateway_wait_max_timeout_ms
+            )
+        )
+    except Ev3Dev2MotorGatewayError as error:
+        logger.error(
+            "Safe EV3Dev2 motor-domain gateway unavailable: {}".format(error)
+        )
+        return None
 
 
-# Transitional aliases kept only for callers from the previous increment.
-build_application = build_rover_application
-_build_local_manual_application = build_local_manual_application
-_build_standard_application = build_standard_application
+def _build_rest_server(command_service, configuration, motor_gateway_port):
+    return RestApiServer(
+        command_service=command_service,
+        host=configuration.rest_host,
+        port=configuration.rest_port,
+        motor_gateway_port=motor_gateway_port,
+        shutdown_token=configuration.shutdown_token,
+        hardware_api_token=configuration.hardware_api_token,
+        shutdown_confirmation_required=(
+            configuration.shutdown_confirmation_required
+        )
+    )
+
+
+def _finalize_application(configuration, rest_server, monitor_registrations,
+                          runtime_components, managed_resources, logger):
+    application = RoverApplication(
+        rest_api_server=rest_server,
+        monitor_registrations=monitor_registrations,
+        managed_resources=managed_resources,
+        runtime_components=runtime_components,
+        logger=logger,
+        concurrency_port=ThreadingApplicationConcurrency(),
+        process_control_port=OsProcessController(),
+        application_name=configuration.application_name,
+        application_version=configuration.application_version
+    )
+    rest_server.set_shutdown_callback(application.request_shutdown)
+    rest_server.set_restart_callback(application.request_restart)
+    return application

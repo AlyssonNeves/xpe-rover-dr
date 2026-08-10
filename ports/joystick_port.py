@@ -7,11 +7,11 @@ from abc import ABCMeta, abstractmethod
 
 
 class JoystickPort(object, metaclass=ABCMeta):
-    """Defines the joystick discovery and bounded event-reading contract."""
+    """Defines the joystick discovery and event-reading contract."""
 
     @abstractmethod
     def is_available(self):
-        """Returns whether the configured joystick is already in evdev."""
+        """Returns True when the configured joystick is already in evdev."""
         raise NotImplementedError
 
     @abstractmethod
@@ -21,20 +21,25 @@ class JoystickPort(object, metaclass=ABCMeta):
 
     @abstractmethod
     def read_event_batch(self, timeout_seconds, max_events):
-        """Returns one bounded batch of normalized controller events.
+        """Returns one bounded batch of normalized events.
 
-        Implementations may wait up to ``timeout_seconds`` for initial input,
-        then drain only promptly available data. At most ``max_events`` are
-        returned in one control cycle.
+        The implementation waits at most ``timeout_seconds`` for the first
+        event, then drains only promptly available input within its internal
+        latency budget. At most ``max_events`` are returned.
         """
         raise NotImplementedError
 
     @abstractmethod
     def refresh_absolute_state(self, axis_codes):
-        """Returns a fresh raw-axis snapshot for every requested axis."""
+        """Returns a fresh raw-axis snapshot after discarding queued input.
+
+        Implementations must either return every requested axis or raise an
+        explicit error. Silently omitting an axis can leave startup safety
+        gates waiting forever.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def close(self):
-        """Releases the controller device."""
+        """Releases the joystick device."""
         raise NotImplementedError

@@ -1,34 +1,46 @@
 {
+    // ============================================================
+    // EV3DEV BROWSER
+    // ============================================================
+
     // Always downloads the current VS Code project to:
-    // /home/robot/Rover-DR
+    // /home/robot/XPE-Rover-DR
     "ev3devBrowser.download.directory": "XPE-Rover-DR",
 
-    // Use LF line endings across the project to ensure
-    // consistency between Windows, Linux, and EV3 environments.
-    "files.eol": "\n",
+    // Excludes files and directories that are not required for
+    // deployment and execution of the Rover-DR on the EV3:
+    // - Development and test files: .github, scripts, tests, .venv,
+    //   requirements files, setup.cfg, and pytest.ini
+    // - Generated and coverage files: .pytest_cache, __pycache__,
+    //   *.pyc, htmlcov, coverage.xml, and .coveragerc
+    // - Documentation: *.md, *.pdf, and LICENSE
+    // - Source images: assets/images, docs/assets, and *.svg
+    // - Hidden files and directories
+    "ev3devBrowser.download.exclude": "{.github/**,scripts/**,tests/**,.venv/**,requirements-dev.txt,requirements.txt,setup.cfg,pytest.ini,.pytest_cache/**,**/__pycache__/**,**/*.pyc,htmlcov/**,coverage.xml,.coveragerc,**/*.md,**/*.MD,**/*.pdf,**/*.PDF,LICENSE,assets/images/**,docs/assets/**,**/*.svg,**/*.SVG,**/.*}",
 
-    // Ensure all files end with a trailing newline,
-    // following common Unix and source control conventions.
+    // ============================================================
+    // FILES
+    // ============================================================
+
+    "files.eol": "\n",
     "files.insertFinalNewline": true,
 
-    // Use Windows Command Prompt as the default integrated
-    // terminal for local development activities.
+    // ============================================================
+    // TERMINAL
+    // ============================================================
+
     "terminal.integrated.defaultProfile.windows": "Command Prompt",
 
-    // Enable basic Python static analysis and type checking
-    // through the Pylance language server.
+    // ============================================================
+    // PYTHON
+    // ============================================================
+
     "python.analysis.typeCheckingMode": "basic",
 
-    // Excludes from EV3 deployment operations:
-    // - Development: .github, scripts, tests, .venv
-    // - Generated: __pycache__, *.pyc, coverage, htmlcov
-    // - Documentation: *.md, *.pdf, LICENSE
-    // - Source images: assets/images, docs/assets, *.svg
-    // - Hidden files and directories
-    "ev3devBrowser.download.exclude": "{requirements-dev.txt,requirements.txt,.github/**,scripts/**,tests/**,.venv/**,.pytest_cache/**,**/__pycache__/**,**/*.pyc,htmlcov/**,coverage.xml,.coveragerc,setup.cfg,pytest.ini,LICENSE,assets/images/**,docs/assets/**,**/*.svg,**/*.SVG,**/*.md,**/*.MD,**/*.pdf,**/*.PDF,**/.*}",
+    // ============================================================
+    // FOLDER COMPARISON
+    // ============================================================
 
-    // Exclude generated files and internal Git data
-    // from folder comparison operations.
     "compareFolders.excludeFilter": [
         "**/.git/**",
         "**/__pycache__/**",

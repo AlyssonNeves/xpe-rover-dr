@@ -143,7 +143,7 @@ class Ev3ScreenImageTestCase(unittest.TestCase):
             if filename.lower().endswith(".pbm")
         )
 
-        self.assertEqual(15, len(filenames))
+        self.assertEqual(17, len(filenames))
         for filename in filenames:
             background = load_monochrome_screen(
                 os.path.join(cache_path, filename),

@@ -1,40 +1,40 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""Checks production syntax using the Python 3.5 grammar when available."""
+"""Parse production source using the Python 3.5 grammar accepted by EV3."""
 
 import ast
-import os
 import sys
+from pathlib import Path
 
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PATHS = ("app", "adapters", "bootstrap", "infrastructure", "ports")
+PATHS = ("app", "adapters", "bootstrap", "infrastructure", "ports", "main.py")
 
 
 def production_files():
-    for relative in PATHS:
-        base = os.path.join(ROOT, relative)
-        for root, _dirs, files in os.walk(base):
-            for filename in files:
-                if filename.endswith(".py"):
-                    yield os.path.join(root, filename)
-    yield os.path.join(ROOT, "main.py")
+    for name in PATHS:
+        path = Path(name)
+        if path.is_file():
+            yield path
+        else:
+            for source_path in sorted(path.rglob("*.py")):
+                yield source_path
 
 
 def main():
-    for path in production_files():
-        with open(path, "r") as source:
-            text = source.read()
+    failures = []
+    for source_path in production_files():
         try:
-            ast.parse(text, filename=path, feature_version=(3, 5))
-        except TypeError:
-            # Python versions without feature_version still perform a syntax pass.
-            ast.parse(text, filename=path)
+            ast.parse(
+                source_path.read_text(),
+                filename=str(source_path),
+                feature_version=(3, 5)
+            )
         except SyntaxError as error:
-            print("Python 3.5 syntax error in {0}: {1}".format(path, error))
-            return 1
-    print("Python 3.5 production syntax check passed.")
+            failures.append((source_path, error.lineno, error.msg))
+    for source_path, line_number, message in failures:
+        print("{}:{} {}".format(source_path, line_number, message))
+    if failures:
+        return 1
+    print("Python 3.5 syntax compatibility check passed.")
     return 0
 
 

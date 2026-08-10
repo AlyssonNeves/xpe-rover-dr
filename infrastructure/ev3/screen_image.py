@@ -3,6 +3,7 @@
 
 """Shared direct loading and in-memory reuse of EV3 PBM screen assets."""
 
+import hashlib
 import os
 import threading
 
@@ -123,8 +124,21 @@ def _read_source_state(source_path):
     return {
         "size": source_stat.st_size,
         "mtime_ns": mtime_ns,
-        "ctime_ns": ctime_ns
+        "ctime_ns": ctime_ns,
+        "sha256": _sha256_file(source_path)
     }
+
+
+def _sha256_file(source_path):
+    """Returns a deterministic content signature for one small PBM asset."""
+    digest = hashlib.sha256()
+    with open(source_path, "rb") as source_file:
+        while True:
+            chunk = source_file.read(8192)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _load_memory_image(source_path, source_state):
@@ -136,6 +150,8 @@ def _load_memory_image(source_path, source_state):
     if entry["source_mtime_ns"] != source_state["mtime_ns"]:
         return None
     if entry["source_ctime_ns"] != source_state["ctime_ns"]:
+        return None
+    if entry["source_sha256"] != source_state["sha256"]:
         return None
     return entry["image"].copy()
 
@@ -171,5 +187,6 @@ def _store_memory_image(source_path, source_state, background):
         "source_size": source_state["size"],
         "source_mtime_ns": source_state["mtime_ns"],
         "source_ctime_ns": source_state["ctime_ns"],
+        "source_sha256": source_state["sha256"],
         "image": background.copy()
     }

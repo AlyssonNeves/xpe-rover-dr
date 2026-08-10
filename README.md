@@ -1,643 +1,1189 @@
-# Rover-DR
+# Rover DR by DUDA Robotics
 
-Educational and experimental mobile robotics platform based on LEGO MINDSTORMS EV3, ev3dev and Python.
+Monitoring and control system for LEGO EV3 running on ev3dev using Python and ev3dev2.
 
-![Rover-DR](assets/images/rover_dr.png)
+![Rover DR](assets/images/rover_dr.png)
 
-## Objective
+---
 
-Rover-DR provides a modular foundation for the progressive development of monitoring, control, navigation and autonomous robotics capabilities on the LEGO EV3 platform.
+## Features
 
-This release consolidates deployment configuration for EV3 and simulation environments. A single `ROVER_HARDWARE_ENABLED` switch now controls physical integrations, startup includes operator selection of command/operation mode on the EV3, and deployment/security requirements are documented for reproducible execution.
+* Sensor monitoring
+* Motor monitoring
+* REST API integration
+* Remote monitoring and control
+* Distributed system integration
+* EV3 controller management
+* Structured logging
+* Modular and scalable architecture
+* Hexagonal architecture approach
+
+---
 
 ## Platform
 
-- LEGO MINDSTORMS EV3
-- ev3dev
-- Python 3
-- python-ev3dev2
+* LEGO Mindstorms EV3
+* ev3dev OS
+* Python 3
+* ev3dev2
 
-## Current capabilities
+---
 
-- Hexagonal Architecture with explicit application, port, adapter, infrastructure and bootstrap boundaries
-- Dedicated `LOCAL + MANUAL` runtime for low-latency joystick control
-- Direct synchronous motor control isolated from monitoring command queues
-- Four-wheel Mecanum motor mapping with independent per-wheel calibration factors
-- Linux joystick integration through `evdev`
-- Fail-safe stop and neutral-safety barrier after joystick disconnection
-- EV3 graphical mode selection and operational status feedback
-- Periodic sensor, motor and controller monitoring for the standard runtime
-- Thread-safe state repositories and read-only query adapters
-- HTTP/JSON REST API on TCP port `8080`
-- Consolidated Rover state through `GET /api/rover/state`
-- Explicit motor query, command, guarded-operation and gateway ports
-- Declarative REST route table with explicit gateway dispatch
-- Shared EV3 motor-driver repository used by monitored and manual-control paths
-- Motor state collection extracted from the monitor orchestration
-- Centralized concrete composition in `bootstrap/rover_assembly.py`
-- Architecture and Python 3.5 compatibility quality gates
-- Graceful fallback when EV3 hardware integrations are disabled or unavailable
-
-## Project structure
+## Project Structure
 
 ```text
-xpe-rover-dr/
-├── adapters/                 # inbound/outbound adapters
-│   └── rest/                 # HTTP routing and declarative API route table
+Rover-DR/
 ├── app/
-│   ├── commands/             # focused command handlers
-│   ├── services/             # application use cases
-│   ├── command_service.py
-│   ├── rover_application.py
-│   └── rover_config.py
-├── bootstrap/
-│   └── rover_assembly.py     # concrete composition root
+│   ├── commands/          # Protocol-independent command handlers
+│   └── services/          # Application use cases and orchestration
+├── ports/                 # Segregated input/output contracts
+├── adapters/
+│   └── rest/              # Declarative HTTP route table and matching
 ├── infrastructure/
-│   ├── ev3/                  # EV3 gateways, drivers and UI helpers
-│   ├── logging/              # application logging implementation
-│   ├── monitoring/           # runtime monitors
-│   ├── motor/                # driver repository and state collection
-│   └── state/                # thread-safe state stores
-├── ports/                    # focused input/output contracts
-├── assets/
+│   ├── configuration/     # Explicit JSON/environment configuration loader
+│   ├── ev3/               # EV3 drivers and guarded motor gateway
+│   ├── logging/           # Runtime logging implementation
+│   ├── monitoring/        # Sensor, motor and controller coordinators
+│   ├── motor/             # Driver repository, scheduler, executors and watchdog
+│   ├── runtime/           # Threading, process and runtime-context adapters
+│   └── state/             # Thread-safe state stores
+├── bootstrap/             # Composition root for each operating graph
 ├── config/
 ├── docs/
-├── scripts/
 ├── tests/
-└── main.py                   # process entry point
+├── main.py
+└── README.md
 ```
-
-The former top-level `services/` package no longer exists. Application services live
-under `app/services/`, while monitoring, state, logging and EV3-specific concerns live
-under `infrastructure/`.
 
 ## Architecture
 
-The S02.10 structure reinforces the dependency direction of the hexagonal design:
+The application follows explicit hexagonal boundaries:
 
-1. `app/` contains use cases and orchestration and does not import concrete adapters or infrastructure;
-2. `ports/` contains focused contracts and does not depend on application or concrete layers;
-3. `adapters/` translate external protocols and application-facing queries;
-4. `infrastructure/` implements EV3 hardware, monitoring, logging and state persistence details;
-5. `bootstrap/rover_assembly.py` is the single concrete composition point introduced in this increment;
-6. `main.py` delegates composition to bootstrap and remains focused on process signals and execution;
-7. the `LOCAL + MANUAL` graph retains synchronous motor writes and read-only REST queries, without monitoring queues in its control path;
-8. the standard runtime preserves the monitored command path;
-9. the broad motor contract is retained only as a compatibility aggregate over focused query, command, guarded-operation and gateway contracts;
-10. REST command routing uses an explicit declarative route table rather than reflective dispatch over concrete gateways;
-11. `MotorMonitor` delegates EV3 driver access to a shared driver repository and snapshot acquisition to a dedicated state collector;
-12. automated architecture checks protect these dependency rules and Python 3.5 compatibility.
+* `app` contains protocol-independent use cases and does not import adapters or infrastructure.
+* `ports` contains small, responsibility-specific contracts and does not import implementations.
+* `adapters` translate REST, joystick, monitor and hardware interactions.
+* `infrastructure` owns EV3 drivers, monitoring threads, registries, logging and state storage.
+* `bootstrap` is the only composition root and explicitly defines monitor criticality and lifecycle ownership.
 
-![Hexagonal Architecture](assets/images/hexagonal_architecture.png)
+The `LOCAL + MANUAL` graph is deliberately minimal. Joystick input reaches `ManualDriveService` synchronously through `ManualDrivePort`, which delegates only low-level operations to `MotorHardwarePort`. Motor-state publication uses the explicit `MotorStatePublisherPort`; the application service does not depend on a concrete state store. The graph does not construct `MotorMonitor`, command queues, navigation services or the guarded EV3Dev2 gateway. `MECANUM + FIELD` adds only a dedicated physical gyro monitor and a thread-safe latest-heading cache; all EV3 sensor I/O remains outside the joystick thread.
 
-The broader application lifecycle abstraction and the final consolidation of runtime/security configuration are intentionally deferred to later Sprint 2 increments.
+Configuration is loaded explicitly by the composition root into an immutable `RoverConfiguration` snapshot. Importing application modules performs no JSON or environment I/O. `main.py` is only the process entry point and delegates assembly, startup error presentation and operating-mode selection to `bootstrap`.
 
-## Deployment modes
+---
 
-Rover-DR supports two deployment profiles controlled by a single switch:
+## Installation
+
+Clone the repository into a local directory named `Rover-DR`:
 
 ```bash
-export ROVER_HARDWARE_ENABLED=true   # EV3 deployment
-export ROVER_HARDWARE_ENABLED=false  # development/simulation
+git clone https://github.com/AlyssonNeves/ROVER_DR.git Rover-DR
 ```
 
-When the environment variable is omitted, `hardware_enabled` from `config/rover_config.json` is used. In hardware mode the application enables physical motor/sensor access, startup alerts, the `ev3dev2.motor` gateway and the EV3 operating-mode selector. In simulation mode these physical integrations are skipped and the Rover starts in `LOCAL/MANUAL`.
+Access the project directory:
 
-### EV3 deployment
+```bash
+cd Rover-DR
+```
+
+---
+
+## Security Configuration
+
+Rover DR does not provide default operational tokens. Before signal registration, service construction, REST binding, monitor startup, or hardware access, the bootstrap composition root explicitly resolves and validates one immutable configuration snapshot. No configuration file or environment variable is read as an import side effect.
+
+### Configuration resolution and precedence
+
+All business defaults are defined canonically in `app/rover_config.py`. The runtime loader applies a recursive merge in this order:
+
+```text
+Python defaults < config/rover_config.json < approved deployment environment overrides
+```
+
+The JSON file is an override layer and may contain only the sections that differ from the canonical defaults. Nested mappings are merged deeply, so overriding one Mecanum or joystick property does not discard sibling properties. The default-path JSON file is optional; when it is absent, the Python defaults remain effective. A file explicitly selected through `ROVER_CONFIG_FILE` must exist and be valid. After merging, the complete configuration is validated and frozen before any service or hardware adapter is constructed. Application services do not contain fallback motor codes, speed factors, geometry, joystick calibration, polling intervals, or stop-action values.
+
+The packaged `config/rover_config.json` is intentionally empty (`{}`). Add only deployment-specific differences. An automated regression test rejects packaged JSON leaves that merely repeat their canonical Python default.
+
+Environment access is intentionally limited to deployment concerns. Rover DR recognizes only `ROVER_CONFIG_FILE`, `ROVER_HARDWARE_ENABLED`, `ROVER_SHUTDOWN_TOKEN`, `ROVER_HARDWARE_API_TOKEN`, `ROVER_REST_HOST`, and `ROVER_REST_PORT`. Application version, shutdown policy, motor-gateway limits, motor mappings, polarities, wheel factors, Mecanum parameters, gyro settings, and joystick behavior cannot be changed through environment variables; they remain controlled by the canonical defaults and JSON configuration.
+
+When the configuration is incomplete, the application records the failure through `AppLogger`, displays a concise message on the EV3 LCD when available, emits a repeating audible alert, alternates the EV3 LEDs in red using a police-light pattern, waits for the operator to press any EV3 button, stops the alarm, turns the LEDs off, and exits with status code `1` without an exception traceback.
+
+### Supported environment variables
+
+| Environment variable | Requirement | Purpose |
+|---|---|---|
+| `ROVER_CONFIG_FILE` | Optional | Selects an external JSON override file; an explicitly selected file must exist. |
+| `ROVER_HARDWARE_ENABLED` | Optional | Selects physical EV3 integration or simulation-only execution. |
+| `ROVER_REST_HOST` | Optional | Overrides the REST bind address for the deployment environment. |
+| `ROVER_REST_PORT` | Optional | Overrides the REST bind port for the deployment environment. |
+| `ROVER_SHUTDOWN_TOKEN` | Required | Authorizes remote shutdown and restart requests. |
+| `ROVER_HARDWARE_API_TOKEN` | Required when `ROVER_HARDWARE_ENABLED=true` | Authorizes API operations that access or command Rover hardware. |
+
+Use different, randomly generated values for the two tokens. Empty or whitespace-only values are rejected. In hardware mode, startup also fails when both variables contain the same value. Any other `ROVER_*` variable is rejected during startup. This fail-fast rule prevents obsolete variables and typing mistakes from appearing to configure the robot while having no effect.
+
+Never commit real tokens to Git, source code, Postman collections, screenshots, logs, or documentation.
+
+---
+
+## EV3 Deployment
+
+Rover DR separates replaceable application files from persistent, EV3-specific deployment configuration.
+
+### Recommended EV3 directory structure
+
+```text
+/home/robot/
+├── .rover.env
+├── start-rover.sh
+└── Rover-DR/
+    ├── app/
+    ├── adapters/
+    ├── bootstrap/
+    ├── config/
+    ├── infrastructure/
+    ├── ports/
+    ├── main.py
+    └── ...
+```
+
+| Path | Responsibility |
+|---|---|
+| `/home/robot/Rover-DR` | Replaceable application directory downloaded from VS Code or uploaded manually. |
+| `/home/robot/.rover.env` | Persistent EV3-specific environment variables and security tokens. |
+| `/home/robot/start-rover.sh` | Persistent startup script used by the EV3 screen, VS Code/`brickrun`, and SSH. |
+
+This separation allows `/home/robot/Rover-DR` to be deleted and uploaded again without removing the EV3 security configuration or startup script.
+
+### Configure the EV3 through SSH
+
+Replace `192.168.1.12` if the EV3 uses a different IP address.
+
+#### 1. Connect to the EV3
+
+```bash
+ssh robot@192.168.1.12
+```
+
+Enter the EV3 password when prompted.
+
+#### 2. Configure the EV3 time zone and automatic clock synchronization
+
+Correct system time is required for reliable application logs, diagnostics, operational timestamps and event correlation.
+
+The LEGO EV3 does not maintain an accurate battery-backed system clock while powered off. Until network synchronization occurs, the system may start with a previously saved date and time. For this reason, automatic network time synchronization should remain enabled.
+
+The EV3 must have Internet access for automatic synchronization. A local SSH or USB connection alone does not necessarily provide Internet connectivity.
+
+##### 2.1. Check the current date, time and time zone
+
+Run:
+
+```bash
+timedatectl status
+```
+
+Display the current local date and time in a concise format:
+
+```bash
+date "+%Y-%m-%d %H:%M:%S %Z %z"
+```
+
+Example output for the São Paulo time zone:
+
+```text
+2026-07-04 17:30:00 -03 -0300
+```
+
+##### 2.2. Configure the time zone
+
+Configure the EV3 to use the São Paulo time zone:
+
+```bash
+sudo timedatectl set-timezone America/Sao_Paulo
+```
+
+Verify the configuration:
+
+```bash
+timedatectl status
+```
+
+The output should identify the configured time zone as:
+
+```text
+America/Sao_Paulo
+```
+
+Use a geographic time-zone identifier instead of manually applying a fixed UTC offset. This allows the operating system to manage the applicable regional time rules.
+
+To list available time zones when deploying the Rover in another region, run:
+
+```bash
+timedatectl list-timezones
+```
+
+A filtered search can also be used:
+
+```bash
+timedatectl list-timezones | grep -i sao
+```
+
+##### 2.3. Enable automatic date and time synchronization
+
+Enable network time synchronization:
+
+```bash
+sudo timedatectl set-ntp true
+```
+
+Verify the system clock configuration:
+
+```bash
+timedatectl status
+```
+
+Depending on the systemd version installed by ev3dev, the output should report fields similar to:
+
+```text
+Time zone: America/Sao_Paulo
+Network time on: yes
+NTP synchronized: yes
+```
+
+Some ev3dev versions may display `NTP enabled` instead of `Network time on`.
+
+Check the time synchronization service directly:
+
+```bash
+systemctl status systemd-timesyncd.service --no-pager
+```
+
+If the EV3 has Internet access but synchronization is not active, restart the service:
+
+```bash
+sudo systemctl restart systemd-timesyncd.service
+```
+
+Then verify the status again:
+
+```bash
+timedatectl status
+date "+%Y-%m-%d %H:%M:%S %Z %z"
+```
+
+Automatic synchronization corrects the EV3 clock whenever a suitable network connection becomes available.
+
+##### 2.4. Optional manual date and time configuration
+
+Manual configuration should be used only when the EV3 cannot access a network time server.
+
+Temporarily disable automatic synchronization:
+
+```bash
+sudo timedatectl set-ntp false
+```
+
+Set the local date and time using the `YYYY-MM-DD HH:MM:SS` format:
+
+```bash
+sudo timedatectl set-time "2026-07-04 17:30:00"
+```
+
+Verify the result:
+
+```bash
+date "+%Y-%m-%d %H:%M:%S %Z %z"
+```
+
+Re-enable automatic synchronization when Internet access becomes available:
+
+```bash
+sudo timedatectl set-ntp true
+```
+
+#### 3. Generate the security tokens
+
+Generate two independent tokens:
+
+```bash
+openssl rand -hex 32
+openssl rand -hex 32
+```
+
+Assign one value to `ROVER_SHUTDOWN_TOKEN` and the other to `ROVER_HARDWARE_API_TOKEN`.
+
+If OpenSSL is unavailable, use Python 3:
+
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Each command produces a 256-bit random token. The two values must be different.
+
+#### 4. Create the persistent environment file
+
+Create the file outside the application directory:
+
+```bash
+nano /home/robot/.rover.env
+```
+
+Add:
+
+```bash
+export ROVER_HARDWARE_ENABLED="true"
+export ROVER_SHUTDOWN_TOKEN="<generated-shutdown-token>"
+export ROVER_HARDWARE_API_TOKEN="<generated-hardware-token>"
+```
+
+Replace the placeholders with the generated values.
+
+Save and close nano:
+
+1. Press `Ctrl+O`.
+2. Press `Enter` to confirm the filename.
+3. Press `Ctrl+X`.
+
+Protect the file so that only the `robot` user can read and modify it:
+
+```bash
+chmod 600 /home/robot/.rover.env
+```
+
+Because `.rover.env` is outside the repository, it remains available when `/home/robot/Rover-DR` is replaced and is not included in Git commits.
+
+#### 5. Create the persistent startup script
+
+Create:
+
+```bash
+nano /home/robot/start-rover.sh
+```
+
+Add:
+
+```bash
+#!/bin/bash
+
+set -eu
+
+PROJECT_DIR="/home/robot/Rover-DR"
+ENV_FILE="/home/robot/.rover.env"
+MAIN_FILE="${PROJECT_DIR}/main.py"
+
+if [ ! -f "${ENV_FILE}" ]; then
+    echo "Configuration error: ${ENV_FILE} not found."
+    exit 1
+fi
+
+if [ ! -f "${MAIN_FILE}" ]; then
+    echo "Application error: ${MAIN_FILE} not found."
+    exit 1
+fi
+
+cd "${PROJECT_DIR}"
+
+. "${ENV_FILE}"
+
+exec /usr/bin/python3 "${MAIN_FILE}"
+```
+
+Save and close nano:
+
+1. Press `Ctrl+O`.
+2. Press `Enter` to confirm the filename.
+3. Press `Ctrl+X`.
+
+Make the script executable:
+
+```bash
+chmod +x /home/robot/start-rover.sh
+```
+
+#### 6. Verify the persistent configuration
+
+Verify the variables without displaying their secret values:
+
+```bash
+bash -c '
+. /home/robot/.rover.env
+
+test -n "$ROVER_SHUTDOWN_TOKEN" \
+    && echo "ROVER_SHUTDOWN_TOKEN: configured" \
+    || echo "ROVER_SHUTDOWN_TOKEN: missing"
+
+test -n "$ROVER_HARDWARE_API_TOKEN" \
+    && echo "ROVER_HARDWARE_API_TOKEN: configured" \
+    || echo "ROVER_HARDWARE_API_TOKEN: missing"
+
+test "${ROVER_HARDWARE_ENABLED:-}" = "true" \
+    && echo "ROVER_HARDWARE_ENABLED: true" \
+    || echo "ROVER_HARDWARE_ENABLED: not enabled"
+'
+```
+
+Expected output:
+
+```text
+ROVER_SHUTDOWN_TOKEN: configured
+ROVER_HARDWARE_API_TOKEN: configured
+ROVER_HARDWARE_ENABLED: true
+```
+
+---
+
+## VS Code EV3Dev Browser Configuration
+
+The VS Code workspace is always downloaded to `/home/robot/Rover-DR`. After the download, the extension starts the persistent `/home/robot/start-rover.sh` script instead of executing `main.py` directly.
+
+### `.vscode/settings.json`
+
+Add the following property to the existing workspace settings:
+
+```jsonc
+{
+    // Always downloads the current VS Code project to:
+    // /home/robot/Rover-DR
+    "ev3devBrowser.download.directory": "Rover-DR"
+}
+```
+
+The property may coexist with the other editor, Python, terminal, deployment-exclusion, and folder-comparison settings already defined by the project.
+
+### `.vscode/launch.json`
+
+Use the persistent startup script as the remote program:
+
+```jsonc
+{
+    // VS Code launch configurations for Rover DR.
+    "version": "0.2.0",
+
+    "configurations": [
+        {
+            // Downloads the Rover DR project to the EV3 and then
+            // starts it through the persistent deployment script.
+            "name": "EV3 - Download and Run Rover DR",
+
+            // Launch configuration provided by the EV3Dev Browser extension.
+            "type": "ev3devBrowser",
+
+            // Starts a new execution on the target device.
+            "request": "launch",
+
+            // Persistent EV3 startup script. It loads
+            // /home/robot/.rover.env and executes
+            // /home/robot/Rover-DR/main.py.
+            "program": "/home/robot/start-rover.sh"
+        }
+    ]
+}
+```
+
+When F5 is pressed, the execution flow is:
+
+```text
+VS Code / EV3Dev Browser
+        |
+        | 1. Downloads the workspace
+        v
+/home/robot/Rover-DR
+        |
+        | 2. Executes the configured remote program through brickrun
+        v
+/home/robot/start-rover.sh
+        |
+        | 3. Loads the persistent environment
+        v
+/home/robot/.rover.env
+        |
+        | 4. Starts the application
+        v
+/home/robot/Rover-DR/main.py
+```
+
+---
+
+## Execution Options
+
+All normal EV3 execution methods use `/home/robot/start-rover.sh`. This ensures that the persistent environment configuration is loaded before `main.py` starts.
+
+### Option 1 — Run from the EV3 screen
+
+From the EV3 file browser:
+
+1. Navigate to `/home/robot`.
+2. Select `start-rover.sh`.
+3. Press the EV3 center button to execute it.
+
+Do not select `/home/robot/Rover-DR/main.py` directly for normal operation. A process started directly from the EV3 screen may not receive the variables stored in `/home/robot/.rover.env`.
+
+### Option 2 — Run from VS Code
+
+With `.vscode/settings.json` and `.vscode/launch.json` configured as described above:
+
+1. Connect VS Code to the EV3 through the EV3Dev Browser extension.
+2. Select **EV3 - Download and Run Rover DR**.
+3. Press `F5`.
+
+The extension downloads the project to `/home/robot/Rover-DR` and executes:
+
+```bash
+brickrun --directory="/home/robot" "/home/robot/start-rover.sh"
+```
+
+The equivalent command may also be executed manually from an EV3 SSH terminal.
+
+### Option 3 — Run directly through SSH
+
+For execution without the VS Code launch action:
+
+```bash
+/home/robot/start-rover.sh
+```
+
+This uses the same persistent configuration and startup validation as the EV3-screen and VS Code methods.
+
+### Direct `main.py` execution for diagnostics only
+
+Direct execution remains available when the environment file is explicitly loaded in the current shell:
+
+```bash
+cd /home/robot/Rover-DR
+. /home/robot/.rover.env
+python3 main.py
+```
+
+Running only the following command is not the recommended EV3 deployment procedure:
+
+```bash
+python3 main.py
+```
+
+The required environment variables may be unavailable to that process.
+
+### EV3 execution notes
+
+This project uses a local Windows virtual environment only for VS Code IntelliSense and dependency recognition.
+
+When using the EV3 SSH terminal opened by the EV3 Device Browser, the project must run with the native Python environment provided by ev3dev.
+
+VS Code may attempt to activate the local Windows virtual environment inside the EV3 SSH terminal. If a PowerShell-related error such as the following is displayed, it can be safely ignored:
+
+```text
+-bash: syntax error near unexpected token '&'
+```
+
+---
+
+## Updating the Application on the EV3
+
+Stop Rover DR before replacing the application.
+
+Remove only the replaceable application directory:
+
+```bash
+rm -rf /home/robot/Rover-DR
+```
+
+Upload or download the new version to:
+
+```text
+/home/robot/Rover-DR
+```
+
+Confirm that the application entry point exists:
+
+```bash
+test -f /home/robot/Rover-DR/main.py \
+    && echo "Rover DR application found" \
+    || echo "Rover DR application missing"
+```
+
+The following persistent files must not be removed during a normal application update:
+
+```text
+/home/robot/.rover.env
+/home/robot/start-rover.sh
+```
+
+After the new version is available, start Rover DR from the EV3 screen, through VS Code, or through SSH.
+
+### Stopping a running application
+
+Use the normal EV3 stop action or the VS Code stop action whenever available.
+
+If the application continues running, connect through SSH and request a normal termination:
+
+```bash
+pkill -TERM -f "/home/robot/Rover-DR/main.py"
+```
+
+If the process does not terminate, force it to stop:
+
+```bash
+pkill -KILL -f "/home/robot/Rover-DR/main.py"
+```
+
+---
+
+## Temporary and Diagnostic Security Configuration
+
+### Temporary configuration for the current SSH session
+
+For a temporary test without loading `/home/robot/.rover.env`, run:
 
 ```bash
 export ROVER_HARDWARE_ENABLED=true
 export ROVER_SHUTDOWN_TOKEN="<generated-shutdown-token>"
 export ROVER_HARDWARE_API_TOKEN="<generated-hardware-token>"
-python3 main.py
 ```
 
-The two tokens must be different. At startup, use the EV3 buttons to select `LOCAL/REMOTE` and `MANUAL/AUTOMATIC`, then confirm with the center button.
+Then start the application from the project directory. These values are lost when the SSH session ends or the EV3 restarts.
 
-### Development without EV3 hardware
+### Simulate missing security tokens
+
+Use this diagnostic procedure to validate the controlled startup-error screen, audible alert, LED pattern, log message, button acknowledgement, and exit behavior without deleting or modifying `/home/robot/.rover.env`.
+
+Do not use `/home/robot/start-rover.sh` for this test, because the startup script intentionally loads the real persistent tokens. Instead, execute `main.py` directly in a child process whose environment has the token variables removed.
+
+#### Simulate both tokens missing through `brickrun`
+
+This option most closely reproduces execution initiated by VS Code or the EV3 launcher:
 
 ```bash
-export ROVER_HARDWARE_ENABLED=false
-export ROVER_SHUTDOWN_TOKEN="<generated-shutdown-token>"
-python3 main.py
+env \
+    -u ROVER_SHUTDOWN_TOKEN \
+    -u ROVER_HARDWARE_API_TOKEN \
+    ROVER_HARDWARE_ENABLED=true \
+    brickrun --directory="/home/robot/Rover-DR" \
+    "/home/robot/Rover-DR/main.py"
 ```
 
-The hardware API token is not required in this profile because the hardware gateway is not started.
+Setting `ROVER_HARDWARE_ENABLED=true` ensures that both security variables are required during the diagnostic test, regardless of the value stored in `config/rover_config.json`.
 
-## Installation
-
-```bash
-git clone https://github.com/AlyssonNeves/xpe-rover-dr.git
-cd xpe-rover-dr
-pip install -r requirements.txt
-```
-
-
-## Security configuration
-
-Commit 17 introduces mandatory credentials for remote lifecycle operations and
-the reflective `ev3dev2.motor` gateway. Rover-DR does not ship operational
-default tokens. Configure both variables before running `main.py`:
-
-```bash
-export ROVER_SHUTDOWN_TOKEN="<generated-shutdown-token>"
-export ROVER_HARDWARE_API_TOKEN="<generated-hardware-token>"
-```
-
-Use different cryptographically random values and never commit them to Git.
-`.env.example` documents the variable names but intentionally contains only
-placeholders. Startup terminates with status `1` when either token is missing,
-blank or when both tokens contain the same value.
-
-The following system operations use `ROVER_SHUTDOWN_TOKEN` and require
-`{"confirm": true}` by default:
+The expected log output includes a controlled configuration error similar to:
 
 ```text
-POST /api/system/shutdown
-POST /api/system/restart
+Configuration error: Missing required security configuration: ROVER_SHUTDOWN_TOKEN, ROVER_HARDWARE_API_TOKEN. Define the environment variable(s) before starting Rover DR.
 ```
 
-The token may be supplied in `X-Rover-Token`, as `Authorization: Bearer ...`,
-or in the JSON `token` field.
+The EV3 should present the startup-error screen and wait for the operator to press any EV3 button before terminating the program.
 
-Every `/api/ev3dev2/motor/...` request requires the dedicated
-`ROVER_HARDWARE_API_TOKEN`, supplied through `X-Rover-Hardware-Token` or
-`Authorization: Bearer ...`. Regular monitoring, motor-command and drive routes
-retain their existing behavior in this historical increment.
+#### Simulate both tokens missing through Python
 
-## EV3 startup alerts
-
-Commit 18 adds an operator-facing fallback for fatal startup configuration errors.
-When security validation fails, Rover-DR attempts to show a compact message on the
-EV3 console, alternates the left/right status LEDs in red and emits an audible tone.
-The alert remains active until the operator acknowledges it by pressing a physical
-brick button.
-
-This mechanism is intentionally implemented through the `OperatorAlertPort` output
-contract and `StartupErrorNotifier` application service. If the process is running
-on a development computer where EV3 display, LED, sound or button interfaces are
-unavailable, the adapter fails safely and startup still terminates with status `1`.
-
-The global hardware enable/disable switch and interactive operating-mode selection
-are not part of this historical increment; they are introduced in Commit 19.
-
-## Execution
+The same validation can be run without `brickrun`:
 
 ```bash
-python3 main.py
+cd /home/robot/Rover-DR
+
+env \
+    -u ROVER_SHUTDOWN_TOKEN \
+    -u ROVER_HARDWARE_API_TOKEN \
+    ROVER_HARDWARE_ENABLED=true \
+    /usr/bin/python3 main.py
 ```
 
-The REST API will be available at:
+#### Simulate one missing token
+
+Test only the shutdown token:
+
+```bash
+cd /home/robot/Rover-DR
+
+env \
+    -u ROVER_SHUTDOWN_TOKEN \
+    ROVER_HARDWARE_ENABLED=true \
+    /usr/bin/python3 main.py
+```
+
+Test only the hardware API token:
+
+```bash
+cd /home/robot/Rover-DR
+
+env \
+    -u ROVER_HARDWARE_API_TOKEN \
+    ROVER_HARDWARE_ENABLED=true \
+    /usr/bin/python3 main.py
+```
+
+These commands modify only the environment inherited by the diagnostic child process. They do not change the current SSH session, `/home/robot/.rover.env`, the application configuration, or any stored token value.
+
+After completing the test, start Rover DR normally through the persistent startup script:
+
+```bash
+/home/robot/start-rover.sh
+```
+
+Or reproduce the normal VS Code execution path:
+
+```bash
+brickrun --directory="/home/robot" "/home/robot/start-rover.sh"
+```
+
+A shutdown request may send the configured shutdown token in the `X-Rover-Token` header, as a Bearer token, or in the request body according to the REST contract. Motor-domain requests use the dedicated `X-Rover-Hardware-Token` header or the supported authorization mechanism documented in `docs/MOTOR_GATEWAY_SECURITY_AND_LIFECYCLE.md`.
+
+---
+
+## Distributed Architecture Ready
+
+Although Rover DR runs locally on the LEGO EV3, its architecture was designed to support distributed solutions through the REST API layer.
+
+The implemented REST endpoints allow external systems to:
+
+* Monitor rover status in real time
+* Retrieve sensor information remotely
+* Query motor and controller states
+* Execute control commands
+* Perform operational diagnostics
+* Integrate with supervisory systems
+
+This enables the development of higher-level applications such as:
+
+* Web dashboards
+* Remote control panels
+* Mobile applications
+* Fleet management systems
+* IoT monitoring platforms
+* Educational robotics control centers
+
+### Example Distributed Architecture
 
 ```text
-http://<EV3-IP>:8080
++---------------------+
+| Web Dashboard       |
+| Mobile Application  |
+| Monitoring System   |
++----------+----------+
+           |
+           | HTTP / REST
+           |
++----------v----------+
+| Rover DR REST API   |
+| Running on EV3      |
++----------+----------+
+           |
+           |
++----------v----------+
+| Sensors / Motors    |
+| EV3 Controller      |
++---------------------+
 ```
 
-Examples:
+The Hexagonal Architecture approach adopted by Rover DR simplifies the integration of new interfaces and external systems without impacting the core application logic.
 
-```text
-GET  /api/health
-GET  /api/rover/state
-GET  /api/motors
-GET  /api/motors/LLM
-POST /api/motors/LLM/run-timed
-POST /api/motors/LLM/run-forever
-POST /api/motors/LLM/run-to-rel-pos
-POST /api/motors/LLM/cancel
-POST /api/motors/LLM/stop
-POST /api/motors/synchronized
-GET  /api/drive/status
-POST /api/drive/tank
-POST /api/drive/move-distance
-POST /api/drive/rotate-angle
-POST /api/drive/curve-radius
-POST /api/drive/reset-odometry
-POST /api/drive/stop
-GET  /api/motor-commands
-GET  /api/motor-commands/1
-GET  /api/motors/LLM/commands
-GET  /api/ev3dev2/motor/catalog
-GET  /api/ev3dev2/motor/objects
-POST /api/ev3dev2/motor/objects
-GET  /api/ev3dev2/motor/operations
-DELETE /api/ev3dev2/motor/objects/{object_id}
-POST /api/system/shutdown
-POST /api/system/restart
-```
+---
 
-A queued command normally returns HTTP `202 Accepted` with its `command_id`. The command lifecycle can then be queried independently.
+## Architecture
 
-See [`docs/rest_api_contract.md`](docs/rest_api_contract.md) for the complete API contract, [`docs/ev3dev2_motor_complete_api.md`](docs/ev3dev2_motor_complete_api.md) for the expanded motor-domain catalog, [`docs/MOTOR_GATEWAY_SECURITY_AND_LIFECYCLE.md`](docs/MOTOR_GATEWAY_SECURITY_AND_LIFECYCLE.md) for gateway safety/lifecycle rules, and [`docs/MOTOR_PHYSICAL_QUALIFICATION_PROTOCOL.md`](docs/MOTOR_PHYSICAL_QUALIFICATION_PROTOCOL.md) for physical qualification guidance.
+The project follows a modular architecture inspired by Hexagonal Architecture principles, separating:
 
-Use `Ctrl+C` to request an orderly application shutdown.
+* Application layer
+* Ports
+* Adapters
+* Infrastructure services
+
+This structure improves maintainability, scalability, and testability.
+
+The REST API layer acts as a gateway between the rover and external systems, enabling the construction of distributed monitoring and control solutions such as web applications, mobile applications, IoT platforms, and educational robotics environments.
+
+![Hexagonal Architecture](assets/images/hexagonal_architecture.png)
+
+---
 
 ## Status
 
-Centralized configuration, live EV3 motor integration, prioritized command orchestration, synchronized scheduling, motor safety supervision, differential-drive odometry, gyroscope heading, basic geometric navigation and a safety-managed `ev3dev2.motor` gateway.
+Project under active development.
+
+The authoritative application version is defined by `app.rover_config.APPLICATION_VERSION`.
+
+Current version provides:
+
+* Modular rover application lifecycle
+* Sensor, motor, and controller monitoring
+* REST-based monitoring and control services
+* Structured diagnostics and health monitoring
+* Foundation for distributed robotic systems
+* Mecanum front/rear drivetrain RPM compensation
+
+---
 
 ## Author
 
 Developed by DUDA Robotics.
 
-## License
+---
 
-This project is licensed under the MIT License. See `LICENSE` for details.
+## Future Evolution
 
-## Arquitetura hexagonal
+The current architecture was intentionally designed to support future expansion beyond a standalone EV3 application.
 
-A camada REST foi separada do despacho de comandos. O transporte HTTP permanece em `adapters/in_rest_api_server.py`, o mapeamento de endpoints fica em `adapters/rest/command_routes.py` e o `CommandService` despacha comandos para handlers explícitos em `app/commands/`. Essa separação evita que detalhes HTTP se propaguem para os serviços e portas do Rover. Consulte `docs/hexagonal_architecture.md`.
+Potential evolutions include:
 
-## Qualidade e testes automatizados
+* Browser-based monitoring dashboards
+* Remote rover operation over local networks or the Internet
+* Mobile control applications
+* Multi-rover fleet management
+* Cloud-based telemetry collection
+* IoT platform integration
+* Artificial Intelligence and autonomous navigation modules
+* Real-time operational analytics
 
-A partir deste marco, o projeto possui uma suíte unitária organizada por domínio e
-quality gates executáveis localmente e no GitHub Actions. O pipeline verifica sintaxe,
-regras críticas de lint, complexidade ciclomática e cobertura automatizada mínima de 60%.
+The existing REST API and Hexagonal Architecture provide the foundation required to implement these capabilities while preserving the separation between business logic, hardware interfaces, and external systems.
+
+## Motor hardware default and safety
+
+Rover hardware access is enabled by the canonical Python default `hardware_enabled: true`; `config/rover_config.json` may override it, and `ROVER_HARDWARE_ENABLED` has the final deployment precedence. This is the intended EV3 deployment behavior. Development environments without EV3Dev2 remain operational and expose the backend as unavailable; they should explicitly override the setting when simulation-only behavior is required.
+
+The motor subsystem supports regulated continuous, timed, relative-position and absolute-position commands, plus native direct duty-cycle control (`run-direct`). Direct mode accepts values from -100 to 100 and is protected by a watchdog.
+
+The Postman collection includes an advanced motor and navigation folder. Because those requests can move physical hardware, secure the Rover on a test stand, keep wheels clear, and run the stop requests immediately after each motion sequence.
+
+## Safety-managed `ev3dev2.motor` domain
+
+The application provides controlled coverage of the supported EV3Dev2 motor domain through `/api/ev3dev2/motor`. The gateway is intentionally restricted to the approved motor and movement classes, methods, properties, constants and exceptions documented in `docs/ev3dev2_motor_complete_api.md` and the traceability manifest `docs/ev3dev2_motor_api_manifest.json`. Unsupported or unsafe reflective access is rejected by design.
+
+Authenticated operational observability is available through `GET /api/ev3dev2/motor/operations`, which reports gateway-managed operations without expanding the allowed motor API surface.
+
+### EV3Dev2 motor gateway security
+
+The safety-managed EV3Dev2 motor endpoints require a dedicated
+`ROVER_HARDWARE_API_TOKEN`. Continuous calls must include `rover_watchdog_ms`, and
+non-blocking or `wait*` calls must include `rover_timeout_ms`. See
+`docs/MOTOR_GATEWAY_SECURITY_AND_LIFECYCLE.md` and
+`docs/MOTOR_PHYSICAL_QUALIFICATION_PROTOCOL.md`.
+
+---
+
+## Quality gates
+
+Run the complete local quality pipeline with:
 
 ```bash
-pip install -r requirements-dev.txt
-bash scripts/quality.sh
+./scripts/quality.sh
 ```
 
-Os testes não exigem hardware EV3 físico; dependências de hardware são simuladas nas
-verificações automatizadas. Consulte `tests/README.md` para o escopo atual.
+The pipeline compiles production modules, validates Python 3.5 syntax compatibility, runs Flake8 with a cyclomatic-complexity limit of 15, executes real HTTP integration tests separately from instrumented tests, enforces combined line/branch coverage of at least 70%, and applies individual coverage floors to safety-critical modules.
 
-## Local manual joystick control
+Version v0.68.0 removes duplicated REST defaults from the HTTP adapter, requires explicit transport and security configuration, and adds architectural protection against adapter-owned business defaults. See `docs/RELEASE_NOTES_v0.68.0.md`; the most recent instrumented coverage baseline is documented in `tests/COVERAGE_SUMMARY.md`.
 
-The `LOCAL + MANUAL` application mode now includes an application service that
-translates generic joystick events into differential traction commands. Left
-stick Y controls forward/backward motion, right stick X controls steering and
-rotation, the D-pad controls the two auxiliary Medium motors, and the X button
-requests an immediate stop.
+---
 
-This first increment deliberately depends only on the existing `DrivePort` and
-`MotorPort`. Linux device discovery and `evdev` integration are kept outside
-the application logic and are introduced in the next evolution step.
+## Rover operation modes and local manual joystick control
 
-## Mecanum motor calibration
+The application owns the complete selected mode in one application-layer structure: `RoverOperationMode`, managed by `OperationModeService`. This is the single source of truth shared with the composition root, status display, state query service, command authorization and joystick service. EV3 adapters only collect operator choices through ports; they do not own runtime state.
 
-S02.11 prepares the synchronous manual-drive layer for four-wheel Mecanum
-traction without changing the joystick kinematics yet. The configuration now
-defines explicit front-left, rear-left, front-right and rear-right motor codes,
-with one independent speed factor for each wheel. The default baseline factors
-are `1.0`, so this increment introduces the calibration boundary without
-anticipating the polarity/cinematic corrections or the later RPM compensation.
+The structure always contains the same five keys:
 
-`ManualDriveService.apply_mecanum_setpoint()` writes all four calibrated wheel
-setpoints synchronously through `MotorHardwarePort`. A failure on any wheel
-causes a rollback stop across the complete Mecanum traction set, preserving the
-fail-safe behavior established for differential control. At the S02.11
-baseline, the four configured motor codes had to be distinct and calibration
-factors were restricted to positive numeric values; S02.12 extends that
-validation to signed nonzero drivetrain factors.
+```json
+{
+  "command": "LOCAL",
+  "control": "MANUAL",
+  "front": "NOSE",
+  "drive": "DIFFERENTIAL",
+  "centric": null
+}
+```
 
-The physical mapping introduced in this increment is:
+Applicability is enforced by the value object rather than repeated by consumers:
+
+- `Command = REMOTE` makes `control`, `front`, `drive` and `centric` not applicable (`null`).
+- `Command = LOCAL` requires `Control`, `Front` and `Drive`.
+- `Drive = DIFFERENTIAL` makes `Centric` not applicable (`null`).
+- `Drive = MECANUM` requires `Centric = CHASSIS` or `FIELD`.
+
+At startup, the EV3 first displays **Screen 02 - Command Control**. When `REMOTE` is selected, the Control row is disabled and startup skips all local-drive choices. When `LOCAL` is selected, the EV3 displays **Screen 04 - Front Drive Centric** for both `MANUAL` and `AUTOMATIC` control. The Centric row is disabled for `DIFFERENTIAL` and enabled for `MECANUM`. `MECANUM + FIELD` is accepted only with EV3 hardware enabled and a configured gyro heading source.
+
+The editable SVG masters remain under `assets/screens`, while every deployable EV3 display asset is a ready-to-use 1-bit PBM file under `assets/screens/cache`. Every processed EV3 brick-button press emits a short best-effort confirmation beep; Left, Right and Enter alternate values on active rows, while Enter confirms on the confirmation row. The general status screen emits three short operator-attention beeps when it first appears.
+
+When EV3 hardware is enabled, startup validates and preloads every PBM directly from `assets/screens/cache`. Runtime TIFF conversion, source hashing, manifest maintenance and PBM generation are no longer performed. A missing, corrupted, non-monochrome or incorrectly sized PBM is reported and retried when the affected screen is displayed. During a local-manual Bluetooth failure, **Screen 03 - Bluetooth Error** is shown with the retry interval; the general status screen is restored immediately after reconnection.
+
+Joystick control is enabled only for `LOCAL + MANUAL`. This mode uses a dedicated synchronous path: `JoystickControlService` depends on `ManualDrivePort`, implemented by `ManualDriveService`; the service delegates low-level hardware primitives to `Ev3MotorHardwareAdapter` through `MotorHardwarePort` and publishes read-only telemetry through `MotorStatePublisherPort`. The general `SensorMonitor`, `MotorMonitor`, `ControllerMonitor`, command queues, navigation service, motor watchdogs and EV3Dev2 write gateway are not constructed in this graph. In `MECANUM + FIELD`, only `GyroHeadingMonitor` is added as a critical monitor.
+
+`Front = TAIL` inverts traction polarity and exchanges the logical left/right outputs so that steering remains consistent with the operator-selected front. Physical motor polarity remains an independent hardware-configuration concern.
+
+Default mapping for a controller reported by Linux as `Wireless Controller`:
+
+| Control | `DIFFERENTIAL` | `MECANUM + CHASSIS` | `MECANUM + FIELD` |
+|---|---|---|---|
+| R2 | Not used | Not used | Not used |
+| L2 | Not used | Not used | Not used |
+| Left stick X | Not used | Chassis-relative right/left translation | Field-relative right/left translation |
+| Left stick Y | Forward/backward translation | Chassis-relative forward/backward translation | Field-relative forward/backward translation |
+| Right stick X | Clockwise/counterclockwise rotation (`ABS_RX`) | Clockwise/counterclockwise rotation (`ABS_RX`) | Rover rotation; translation remains field-relative |
+| D-pad up/down | Left medium motor (`LMM`) | Disabled because the medium motors are traction motors | Disabled because the medium motors are traction motors |
+| D-pad left/right | Right medium motor (`RMM`) | Disabled because the medium motors are traction motors | Disabled because the medium motors are traction motors |
+| X button | Immediately stops all manual motors | Immediately stops all four traction motors | Immediately stops all four traction motors |
+| Triangle button | No action | No action | Sets the current fresh gyro heading as FIELD zero when all traction axes are neutral |
+
+Analog-stick displacement directly controls motor speed in both drive systems. Each active axis uses the configured center/dead zone followed by the existing signed exponential response, giving low sensitivity near the center and full speed at the limit. R2 and L2 no longer gate or modify traction.
+
+Differential control uses normalized arcade-drive mixing:
 
 ```text
-front-left  = LLM (outA)
-rear-left   = LMM (outB)
-front-right = RLM (outD)
-rear-right  = RMM (outC)
+translation = -left-stick Y
+rotation    = right-stick X
+left        = translation + rotation
+right       = translation - rotation
+denominator = max(abs(left), abs(right), 1)
+left        = left / denominator
+right       = right / denominator
 ```
 
-Joystick Mecanum equations, direction/polarity corrections and operator-facing
-Mecanum mode selection remain intentionally deferred to later Sprint 2 commits.
-
-## Mecanum polarity and kinematics correction
-
-S02.12 separates three concerns that must not be mixed: logical Mecanum
-kinematics, Mecanum-specific drivetrain direction factors, and the global
-physical polarity of each EV3 motor. The corrected installation polarity is
-`inversed` for `LLM`, `LMM` and `RLM`, and `normal` for `RMM`; this rule is
-applied only by `Ev3MotorDriverFactory` when a native driver is created.
-
-The Mecanum layer now accepts signed wheel factors. At this stage the front
-wheels use `-1.0` and the rear wheels `+1.0`, representing the direction
-change introduced by the front drivetrain without yet applying the measured
-front/rear RPM compensation reserved for S02.23. A logical forward Mecanum
-command therefore remains `(+, +, +, +)` before the drivetrain factors are
-applied.
-
-The joystick service also defines the standard normalized logical Mecanum
-equations for forward/backward, strafe, diagonals and rotation. Linux `evdev`
-reports stick-up as negative Y, so the existing Y inversion establishes
-positive logical forward before those equations are evaluated. Runtime
-selection and continuous Robot-Centric dispatch are activated in S02.14.
-
-## Graphical EV3 mode-selection screens
-
-The EV3 operating-mode selector now uses ready-made monochrome PBM artwork sized
-for the 178 x 128 brick display. Three visual states are packaged for the current
-Command/Control combinations: `LOCAL + MANUAL`, `LOCAL + AUTOMATIC` and `REMOTE`.
-The existing EV3 button interaction is preserved while the dynamically drawn
-selection screen is replaced by deterministic graphical assets.
-
-This increment intentionally performs direct PBM loading from `assets/screens`.
-The complete screen catalogue, deployment cache and in-memory PBM reuse are kept
-for the later screen/cache consolidation increment.
-
-## Bluetooth disconnect fail-safe
-
-The `LOCAL + MANUAL` input path now treats evdev descriptor errors and read
-failures as a lost Bluetooth joystick connection. Rover-DR synchronously stops
-all motors owned by the manual path, invalidates the active manual session and
-discards the previous traction/steering state before the worker terminates.
-
-S02.19 extends this fail-safe with automatic recovery. The adapter first checks
-whether the configured controller is already exposed by Linux `evdev`; when it
-is absent and automatic connection is enabled, Rover-DR executes
-`bluetoothctl connect <MAC>` and waits for the named device to appear. After a
-connection loss the manual service stays alive, stops the motors, releases the
-session, reports the Bluetooth error on the EV3 display and retries after the
-configured interval. Motion remains blocked by the neutral-safety barrier until
-the required traction axes return to neutral. Capability-based selection among
-same-name HID nodes remains reserved for S02.24.
-
-## EV3 battery monitoring and operational feedback
-
-When physical EV3 hardware is enabled, Rover-DR now starts an informational
-status display using the packaged `Screen 05 - General Status.pbm` artwork. The
-screen is refreshed periodically with the EV3 battery percentage, current IP
-address, joystick connection state and the selected Command/Control values.
-Battery lookup explicitly addresses `legoev3-battery` so a Bluetooth controller
-power-supply entry cannot be mistaken for the brick battery.
-
-Processed EV3 brick-button presses also emit a short best-effort confirmation
-beep, and the general status screen announces `Rover D R Online` without making
-audio availability a startup requirement. Bluetooth recovery states, startup
-progress screens and the consolidated PBM cache remain reserved for later
-increments.
-
-### S02.08 - Fronteiras arquiteturais do controle manual
-
-O caminho `LOCAL + MANUAL` utiliza contratos explícitos para entrada do joystick,
-controle síncrono, escrita física e publicação de estado. O serviço de controle
-manual não acessa `MotorMonitor`, `MotorStateStore` ou adaptadores concretos;
-estados produzidos pelo caminho direto são publicados por `MotorStatePublisherPort`.
-
-### S02.09 - Consolidação do runtime LOCAL + MANUAL
-
-O modo `LOCAL + MANUAL` passa a possuir um grafo de execução dedicado. Nesse
-runtime não são instanciados `SensorMonitor`, `MotorMonitor`, `ControllerMonitor`,
-`DriveService` nem `Ev3Dev2MotorGateway`; o joystick controla diretamente o
-`ManualDriveService`, que escreve de forma síncrona no hardware e publica os
-snapshots de motores para consultas REST somente leitura.
-
-Em hardware real, o composition root conecta automaticamente o
-`EvdevJoystickAdapter` ao serviço de controle manual. Sensores e informações do
-controlador permanecem consultáveis por adaptadores read-only sem threads de
-monitoração, e comandos REST de escrita em motores/drive retornam conflito enquanto
-o controle `LOCAL + MANUAL` possui o hardware.
-
-## S02.13 - Telas e cache PBM
-
-O runtime gráfico do EV3 passa a consumir exclusivamente telas PBM monocromáticas
-prontas para uso em `assets/screens/cache`. O catálogo deste incremento contém 15
-telas de 178 x 128 pixels, enquanto `infrastructure/ev3/screen_image.py` centraliza
-validação, cache em memória, invalidação por alteração do arquivo e pré-carga no
-startup com `warm_monochrome_screen_cache()`.
-
-Nenhuma conversão TIFF/SVG é executada no Rover. Os adaptadores de Command & Control
-e General Status resolvem seus fundos diretamente no cache deployável. As telas que
-serão conectadas a funcionalidades posteriores (Bluetooth, Front/Drive/Centric e
-status de motores/inicialização) já ficam empacotadas e validadas, sem antecipar a
-lógica desses requisitos.
-
-
-## S02.14 - Configuração Robot-Centric
-
-O runtime `LOCAL + MANUAL` passa a ativar o controle Mecanum no referencial do
-próprio chassi, denominado `CHASSIS` no código. O stick esquerdo fornece
-translação longitudinal (Y) e lateral (X), enquanto o eixo horizontal do stick
-direito fornece rotação. Os três componentes são combinados pelas equações
-Mecanum normalizadas já validadas no S02.12.
-
-A configuração Mecanum introduz `strafe_compensation = 1.1`, aplicada ao eixo X
-antes do denominador comum de normalização. Como `LMM` e `RMM` passam a compor a
-tração de quatro rodas neste modo, comandos auxiliares pelo D-pad são ignorados.
-A seleção dinâmica de `DIFFERENTIAL`/`MECANUM` e `CHASSIS`/`FIELD` permanece
-reservada ao fluxo canônico do S02.16 e ao pipeline FIELD-centric do S02.20.
-
-
-## S02.15 - Perfis de movimento
-
-Os comandos monitorados de motor e de navegação passam a aceitar quatro perfis
-de movimento: `direct`, `ramp-up`, `ramp-down` e `ramp-up-down`. O perfil
-`direct` é o padrão e desativa explicitamente `ramp_up_sp` e `ramp_down_sp`; os
-demais perfis mapeiam os tempos configurados em `motor_ramp_up_ms` e
-`motor_ramp_down_ms` somente para a fase correspondente.
-
-O mapeamento para propriedades nativas EV3 fica centralizado em
-`MotorCommandExecutor`, preservando filas, watchdogs e lifecycle existentes. O
-parâmetro `profile` é validado pela aplicação e propagado tanto para comandos
-individuais/sincronizados de motor quanto para `drive/tank`, deslocamentos,
-rotações e curvas. Os ajustes de resposta do joystick permanecem reservados ao
-S02.17.
-
-## S02.16 - Fluxo canônico de seleção dos modos do Rover
-
-O estado operacional passa a ser representado por um único `RoverOperationMode`,
-contendo `Command`, `Control`, `Front`, `Drive` e `Centric`. As regras de
-aplicabilidade são centralizadas: `REMOTE` elimina todos os parâmetros locais,
-`LOCAL` exige `Control`, `Front` e `Drive`, `DIFFERENTIAL` torna `Centric` não
-aplicável e `MECANUM` aceita `CHASSIS` ou `FIELD`.
-
-No EV3, a seleção ocorre em duas etapas: `Command + Control` e, quando o comando
-é `LOCAL`, `Front + Drive + Centric`. O composition root passa a encaminhar o
-`Drive` e o `Centric` selecionados ao controle manual em vez de fixar
-`MECANUM + CHASSIS`. O modo `FIELD` já pertence ao modelo e à interface, mas é
-rejeitado no runtime manual até a integração de uma fonte de heading nos commits
-S02.20/S02.21. O snapshot consolidado REST passa a expor os cinco parâmetros em
-uma única estrutura canônica.
-
-## S02.17 - Tratamento de deadzone e resposta exponencial do joystick
-
-Os eixos analógicos utilizados pelo controle manual passam a ter geometria e
-resposta configuráveis por `axis_center`, `axis_deadzone`, `axis_max` e
-`axis_response_intensity`. A configuração deste marco utiliza centro `127`,
-deadzone `7`, máximo `255` e intensidade exponencial `1.0`.
-
-Valores dentro da deadzone são tratados como neutros. A região morta é removida
-matematicamente do restante do curso: o primeiro valor útil após a deadzone
-reinicia a faixa normalizada próximo de zero e os extremos físicos continuam
-mapeados para `-1.0` e `+1.0`. Somente depois dessa renormalização é aplicada a
-curva exponencial assinada, preservando direção e escala máxima enquanto reduz a
-sensibilidade em deslocamentos parciais do stick.
-
-O mesmo processamento é utilizado pelos eixos de avanço, rotação e strafe, sem
-alterar a cinemática diferencial ou Mecanum. A orientação `NOSE/TAIL` permanece
-reservada ao S02.18.
-
-## S02.18 - Orientação NOSE/TAIL
-
-O controle manual passa a interpretar os comandos de movimento a partir da
-frente selecionada pelo operador. `NOSE` preserva o referencial físico já
-utilizado; `TAIL` inverte a translação longitudinal e troca logicamente os
-lados do Rover, permitindo dirigir olhando a traseira como nova frente sem
-alterar a configuração elétrica ou mecânica dos motores.
-
-No modo diferencial, a transformação `TAIL` é aplicada aos setpoints finais
-como `(-right, -left)`. No Mecanum, o referencial translacional é rotacionado
-em 180 graus por `(-RR, -FR, -RL, -FL)`, preservando o sentido solicitado de
-rotação. Polaridade física, inversões do drivetrain e calibração permanecem
-responsabilidades independentes do `ManualDriveService` e da fronteira EV3.
-
-
-## S02.19 - Conexão e reconexão automática do joystick Bluetooth
-
-- `EvdevJoystickAdapter` reutiliza primeiro um joystick já disponível em `evdev`.
-- Na ausência do dispositivo, `bluetoothctl connect <MAC>` é executado quando `auto_connect` está habilitado.
-- Endereço Bluetooth, timeout de conexão, intervalo de retry e polling de descoberta passam a ser configuráveis.
-- `JoystickControlService` permanece ativo após desconexões, aplica parada fail-safe, libera a sessão e tenta reconectar automaticamente.
-- A retomada continua condicionada à barreira de neutralidade estabelecida no S02.07.
-- `Ev3OperationStatusAdapter` utiliza `Screen 03 - Bluetooth Error.pbm` durante falhas e restaura o General Status após a recuperação.
-- A seleção do nó `evdev` ainda é por nome; descoberta por capacidades fica reservada ao S02.24.
-
-## S02.20 - Pipeline dedicado para controle FIELD-centric
-
-O controle `MECANUM + FIELD` passa a utilizar um `HeadingQueryPort` somente
-leitura no caminho crítico do joystick. O serviço de controle não realiza I/O
-físico do giroscópio: ele consome apenas um heading já publicado em cache e
-considerado recente pela camada de consulta.
-
-A transformação converte o vetor de translação do referencial do campo para o
-referencial do chassi antes da cinemática Mecanum. Se o heading estiver ausente
-ou exceder a idade máxima configurada, a tração FIELD é parada de forma
-fail-safe e a retomada exige heading fresco e neutralidade dos três eixos de
-movimento. A integração física do giroscópio e o monitor produtor desse cache
-permanecem reservados ao S02.21.
-
-## S02.21 - Integração do giroscópio
-
-O runtime `LOCAL + MANUAL + MECANUM + FIELD` passa a produzir seu próprio
-heading por um monitor físico dedicado. `Ev3GyroSensorAdapter` configura a
-entrada `in3` como `ev3-uart`, conecta o sensor LEGO EV3 em `GYRO-ANG` e aplica
-`angle_sign` e `angle_offset_deg` uma única vez na fronteira de hardware antes
-de publicar a leitura canônica.
-
-`GyroHeadingMonitor` consulta somente esse sensor a cada `0,02 s` e publica o
-resultado no `HeadingStateStore` introduzido no S02.20. O joystick continua
-consumindo exclusivamente `HeadingQueryPort`, portanto nenhuma operação física
-do giroscópio entra no caminho crítico do controle. O monitor é montado somente
-para `MECANUM + FIELD`; `DIFFERENTIAL` e `MECANUM + CHASSIS` permanecem sem esse
-I/O adicional. O recenter do zero operacional permanece reservado ao S02.22.
-
-## S02.22 - Recenter do heading FIELD
-
-O controle `LOCAL + MANUAL + MECANUM + FIELD` passa a permitir redefinir, em
-runtime, o zero operacional do heading pelo botão Triangle (`BTN_NORTH`, código
-307). O `FieldHeadingReferenceService` envolve a consulta canônica do gyro sem
-realizar I/O físico ou resetar o sensor: o cache e as consultas REST continuam
-expondo o heading canônico, enquanto apenas o pipeline FIELD utiliza o valor
-relativo à referência do operador.
-
-Por segurança, o recenter somente é aceito com heading fresco e com os três
-eixos de tração (`X`, `Y` e `RX`) neutros. A referência é mantida em memória e
-normalizada para `[-180, 180)`. O botão de parada de emergência permanece no
-código 304 e o recenter utiliza o código 307.
-
-## S02.23 - Compensação das diferenças de RPM
-
-A calibração Mecanum passa a incorporar a diferença mecânica entre os conjuntos
-dianteiro e traseiro. O trem dianteiro utiliza relação `1:1,25`, enquanto o
-traseiro permanece em `1:1`; por isso, os comandos das rodas dianteiras recebem
-magnitude `0,8` (`1 / 1,25`) e as traseiras permanecem em `1,0`. Os sinais
-negativos dos fatores dianteiros continuam representando exclusivamente a
-inversão específica da transmissão introduzida no S02.12.
-
-A compensação permanece confinada ao `ManualDriveService`: a cinemática gera
-setpoints lógicos independentes do hardware e, imediatamente antes da escrita
-física, os fatores Mecanum transformam os comandos de `FL/RL/FR/RR`. A
-polaridade global continua sendo aplicada apenas pelo adaptador EV3. Isso evita
-duplicar correções mecânicas na cinemática, na orientação NOSE/TAIL ou no
-pipeline FIELD-centric.
-
-## S02.24 - Robustez na descoberta dos dispositivos
-
-A descoberta do joystick deixa de confiar apenas no nome `Wireless Controller`
-e passa a aceitar somente um nó `evdev` que exponha os três eixos necessários
-à tração manual: `ABS_X` (0), `ABS_Y` (1) e `ABS_RX` (3). Assim, nós auxiliares
-de controles como o PS4, incluindo interfaces de touch e motion que reutilizam
-o mesmo nome, são fechados e ignorados antes da seleção do gamepad efetivo.
-
-A integração também passa a tratar explicitamente `evdev==1.1.2`: quando
-`InputDevice.absinfo()` não está disponível, o adaptador consulta
-`_input.ioctl_capabilities(fd)` para obter valores absolutos atuais. O mesmo
-mecanismo alimenta snapshots físicos dos eixos após conexão, descartando o
-histórico enfileirado e mantendo a neutral-safety barrier ativa se qualquer
-controle estiver fora do centro, sem emitir comandos de motor durante essa
-validação.
-
-Antes de solicitar uma conexão ativa ao BlueZ, o adaptador aguarda até `4,0 s`
-por uma reconexão passiva do dispositivo já pareado, dentro do timeout total de
-`10,0 s`. Quando a conexão ativa é necessária, `bluetoothctl` é controlado em
-modo interativo e a existência de um nó `evdev` utilizável é tratada como sinal
-autoritativo de prontidão. Falhas passam a incluir diagnóstico do BlueZ e dos
-eixos observados em todos os nós de mesmo nome.
-
-## S02.25 - Centralização do ciclo de vida da aplicação
-
-O ciclo de vida deixa de ser distribuído entre `main.py`, `RoverApplication`,
-o servidor REST e threads auxiliares específicas de shutdown/restart. O estado
-concorrente passa a ter um único proprietário por meio de
-`ApplicationConcurrencyPort`, concretizado por
-`ThreadingApplicationConcurrency`, enquanto reinicializações do processo são
-abstraídas por `ProcessControlPort` e `OsProcessController`.
-
-O composition root monta explicitamente os `runtime_components`, os recursos
-que precisam apenas de `close()` e os monitores registrados com política de
-criticidade. `Sensor` e `Motor` são críticos no runtime monitorado, o
-`Controller` é diagnóstico e o `Gyro Heading` é crítico somente quando o modo
-FIELD exige essa dependência. Shutdown e restart remotos passam a chamar
-`request_shutdown()`/`request_restart()`; o adaptador REST não cria uma segunda
-thread de lifecycle.
-
-`RoverRuntimeContext` passa a ser a única interface usada pelo `main.py`, que
-fica restrito à preparação do runtime, instalação dos handlers de sinal,
-execução e finalização. A ordem de encerramento também é centralizada:
-servidor REST, componentes de runtime em ordem inversa, monitores, recursos
-gerenciados e joins dos monitores.
-
-## S02.26 - Pipeline unificado dos eventos do joystick
-
-O caminho `LOCAL + MANUAL` deixa de consumir eventos `evdev` individualmente e
-passa a processar lotes limitados por ciclo. `JoystickPort` expõe
-`read_event_batch(timeout_seconds, max_events)`, e o adaptador Linux aguarda o
-primeiro evento pelo descritor do dispositivo e drena apenas os eventos
-imediatamente disponíveis dentro de limites explícitos de quantidade e tempo.
-
-Cada ciclo aceita no máximo **64 eventos**, enquanto a drenagem do `evdev` é
-limitada a **8 lotes de kernel** ou **3 ms**, o que ocorrer primeiro. Eventos de
-eixo (`EV_ABS`) são coalescidos por código, mantendo apenas o valor mais recente;
-eventos discretos de botão (`EV_KEY`) preservam sua ordem. O restante de um lote
-que ultrapasse o limite de entrega permanece no buffer para o ciclo seguinte.
-
-`JoystickControlService.process_event_batch()` torna-se o único caminho público
-de processamento. O Emergency Stop possui prioridade sobre todo o lote, o
-recenter FIELD é tratado antes do despacho de tração e, após consolidar os eixos,
-é emitido no máximo um setpoint de tração por ciclo. Essa abordagem reduz backlog
-de movimentos obsoletos sem alterar as regras de neutral-safety, FIELD-centric,
-Bluetooth ou lifecycle já estabelecidas.
-
-
-## S02.27 - Consolidação das configurações REST, segurança e transporte
-
-A configuração de execução passa a ser resolvida explicitamente em um único
-`RoverConfiguration` imutável. A precedência canônica é **defaults Python →
-JSON → variáveis de ambiente**, e o arquivo empacotado
-`config/rover_config.json` contém apenas overrides não redundantes (vazio nesta
-versão). O carregamento é realizado por `RoverConfigurationLoader` no
-composition root, antes da montagem de qualquer grafo de execução.
-
-A superfície de ambiente `ROVER_*` fica restrita a `ROVER_CONFIG_FILE`,
-`ROVER_HARDWARE_ENABLED`, `ROVER_SHUTDOWN_TOKEN`,
-`ROVER_HARDWARE_API_TOKEN`, `ROVER_REST_HOST` e `ROVER_REST_PORT`. Nomes
-descontinuados ou digitados incorretamente falham imediatamente, evitando
-configurações silenciosamente ignoradas. Regras operacionais, cinemáticas e
-de joystick permanecem no snapshot canônico/JSON, e não em variáveis de
-ambiente.
-
-`RestApiServer` deixa de importar configuração global: `host`, `port`, tokens
-de lifecycle/hardware e a exigência de confirmação são argumentos obrigatórios
-do construtor e são injetados pelo `bootstrap/rover_assembly.py`. Assim, o
-adaptador HTTP fica responsável apenas por transporte, autenticação e
-serialização, sem ler ambiente ou manter credenciais globais mutáveis.
+This supports proportional curves and rotation in place while ensuring neither logical motor output exceeds the configured `max_speed_sp`.
+
+For Chassis-centric Mecanum control, the shaped joystick values are `x = left-stick X * strafe_compensation`, `y = -left-stick Y`, and `rx = right-stick X`. Linux evdev defines analog-stick up as negative and down as positive, so Y is intentionally negated to make forward positive. The default `strafe_compensation` is `1.1`. The logical wheel ratios are:
+
+```text
+denominator = max(abs(y) + abs(x) + abs(rx), 1)
+front-left  = (y + x + rx) / denominator
+rear-left   = (y - x + rx) / denominator
+front-right = (y - x - rx) / denominator
+rear-right  = (y + x - rx) / denominator
+```
+
+The denominator normalizes all four ratios together and preserves the relative contribution of translation and rotation. `MECANUM + TAIL` changes only the operator-facing front convention; the Mecanum wheel equations remain unchanged.
+
+For FIELD-centric Mecanum control, `GyroHeadingMonitor` reads only the physical gyro in its own monitor thread and writes the latest angle into `HeadingStateStore`. The joystick thread reads a minimal cached tuple through `HeadingQueryPort`; it never reads `/sys`, constructs an EV3 sensor, waits for a monitor cycle or invokes the general sensor monitor. With operational FIELD heading `h` derived from the canonical, mounting-corrected gyro value and the current runtime-zero reference, the field translation vector is converted to the Rover frame before wheel mixing:
+
+```text
+rover_x = field_x * cos(h) - field_y * sin(h)
+rover_y = field_x * sin(h) + field_y * cos(h)
+```
+
+The default gyro poll interval is 20 ms and a sample older than 100 ms is rejected. A missing or stale heading immediately stops traction once and requires all active traction axes to return to neutral before motion can resume. Repeated physical read failures make the dedicated gyro monitor fail critically and trigger the normal controlled application shutdown.
+
+The operational FIELD zero can be redefined while the application is running. With all three traction axes neutral, point the Rover toward the desired FIELD-forward direction and press the configured Triangle button. `FieldHeadingReferenceService` stores the current fresh canonical heading in memory and the joystick then uses `normalize(canonical_heading - runtime_zero)`. The physical sensor is not reset, the canonical cache and REST value are not changed, and the reference is cleared on application restart. Requests made during motion or without a fresh heading are rejected and logged.
+
+The default Mecanum mapping is `LLM` front-left, `LMM` rear-left, `RLM` front-right and `RMM` rear-right. Mode-specific speed factors and global motor polarity remain independently configurable in `config/rover_config.json`.
+
+The FIELD heading configuration is isolated from the general sensor monitor:
+
+```json
+"field_heading": {
+  "sensor_code": "GYR",
+  "poll_seconds": 0.02,
+  "max_age_seconds": 0.1,
+  "reset_on_start": true,
+  "angle_sign": -1.0,
+  "angle_offset_deg": 0.0,
+  "runtime_recenter_enabled": true,
+  "recenter_requires_neutral": true,
+  "max_consecutive_failures": 3
+}
+```
+
+The deployed Rover uses `angle_sign = -1.0` because the gyroscope is mounted upside down. The EV3 gyro adapter applies the sign and static offset before publishing the sample, so the cache and REST sensor value consume the same canonical heading. Use `angle_offset_deg` only for a fixed installation correction; use Triangle for the temporary operator FIELD reference.
+
+The `joystick` section configures the evdev name, Bluetooth address, automatic connection, retry/timeout intervals, maximum speeds, `axis_center`, `axis_deadzone`, `axis_max`, `axis_response_intensity`, auxiliary motor codes and polling interval. Values inside `axis_deadzone` are neutral; the remaining travel is rescaled to the full normalized range before the configured exponential response is applied. A typical automatic-reconnection configuration is:
+
+```json
+"joystick": {
+  "device_name": "Wireless Controller",
+  "device_address": "AA:BB:CC:DD:EE:FF",
+  "auto_connect": true,
+  "connection_retry_seconds": 3.0,
+  "connection_timeout_seconds": 10.0,
+  "passive_reconnect_seconds": 4.0,
+  "discovery_poll_seconds": 0.25,
+  "axis_center": 127,
+  "axis_deadzone": 7,
+  "axis_max": 255,
+  "axis_response_intensity": 2.0,
+  "button_codes": {
+    "emergency_stop": 304,
+    "field_recenter": 307
+  }
+}
+```
+
+The controller must be paired and trusted once in BlueZ. When `LOCAL + MANUAL` starts, the adapter first checks whether the configured evdev device already exists. If it does not, it waits up to `passive_reconnect_seconds` for the paired controller to reconnect naturally and create its evdev nodes. Only after that passive phase expires does it send `connect <device_address>` through the legacy interactive `bluetoothctl` session. Both phases share the single `connection_timeout_seconds` budget, and the complete cycle is retried after `connection_retry_seconds` when it fails. The same sequence is used after an in-operation disconnect.
+
+During every disconnected interval, Rover synchronously stops all manual motors, releases the manual-control session and discards all previous axis values. After startup or reconnection, traction remains blocked until every active analog axis has been observed at neutral. REST motor and navigation writes return `409` while read-only state queries remain available through thread-free query adapters.
+
+### Discover, pair and trust the Wireless Controller
+
+Prepare the controller once on the EV3 before enabling automatic reconnection. Stop Rover DR while performing the procedure; otherwise the running application may issue its own connection attempts.
+
+#### 1. Open the Bluetooth control shell
+
+From the EV3 SSH terminal, run:
+
+```bash
+bluetoothctl
+```
+
+The prompt changes to `[bluetooth]#`. The following commands are entered inside that prompt:
+
+```text
+power on
+agent on
+default-agent
+```
+
+#### 2. Obtain the controller Bluetooth address
+
+First list devices already known by BlueZ:
+
+```text
+devices
+```
+
+A detected controller is normally displayed as:
+
+```text
+Device 41:42:76:52:94:E8 Wireless Controller
+```
+
+The six hexadecimal pairs are the Bluetooth address, also called the MAC address. In the example, the address is `41:42:76:52:94:E8`. Use the address reported by the EV3, not the example address.
+
+The same list can be requested directly from the normal SSH shell without entering the interactive prompt:
+
+```bash
+bluetoothctl devices
+```
+
+If `Wireless Controller` is not listed, make the controller discoverable, start scanning and wait for a line containing its name:
+
+```text
+scan on
+```
+
+Turn on or wake the controller while scanning. When a line similar to the following appears, copy the address:
+
+```text
+[NEW] Device 41:42:76:52:94:E8 Wireless Controller
+```
+
+Then stop scanning:
+
+```text
+scan off
+```
+
+#### 3. Pair the controller
+
+Replace `<controller-address>` with the address obtained above:
+
+```text
+pair <controller-address>
+```
+
+Wait for a success message. If BlueZ requests confirmation or authorization, accept it on the EV3.
+
+#### 4. Mark the controller as trusted
+
+Trusted devices may reconnect without requiring a new authorization after each restart:
+
+```text
+trust <controller-address>
+```
+
+#### 5. Connect the controller
+
+Ensure that the controller is powered on and then run:
+
+```text
+connect <controller-address>
+```
+
+#### 6. Verify pairing, trust and connection
+
+Run:
+
+```text
+info <controller-address>
+```
+
+The relevant fields should be similar to:
+
+```text
+Name: Wireless Controller
+Paired: yes
+Trusted: yes
+Blocked: no
+Connected: yes
+```
+
+`Connected: no` is acceptable when the controller is intentionally turned off, but `Paired` and `Trusted` should remain `yes`.
+
+Exit `bluetoothctl` with:
+
+```text
+quit
+```
+
+#### 7. Confirm that Linux created the evdev input device
+
+After connecting the controller, run from the normal SSH shell:
+
+```bash
+for file in /sys/class/input/event*/device/name; do
+    echo "$file: $(cat "$file")"
+done
+```
+
+At least one line should end with:
+
+```text
+Wireless Controller
+```
+
+The value must match the configured `joystick.device_name`.
+
+#### 8. Configure Rover DR with the controller address
+
+Set the discovered address in `config/rover_config.json`:
+
+```json
+"joystick": {
+  "device_name": "Wireless Controller",
+  "device_address": "41:42:76:52:94:E8",
+  "auto_connect": true
+}
+```
+
+Use the address reported by the EV3. Leaving `device_address` empty keeps the safety retry loop active but prevents Rover from issuing an automatic Bluetooth connection command.
+
+#### Useful maintenance commands
+
+Connect an already paired and trusted controller from the SSH shell:
+
+```bash
+bluetoothctl connect <controller-address>
+```
+
+Disconnect it while preserving pairing and trust:
+
+```bash
+bluetoothctl disconnect <controller-address>
+```
+
+Stop Rover DR before manually disconnecting the controller; otherwise automatic reconnection will attempt to connect it again.
+
+Display the current status:
+
+```bash
+bluetoothctl info <controller-address>
+```
+
+Remove the device only when a complete re-pairing is required:
+
+```bash
+bluetoothctl remove <controller-address>
+```
+
+`remove` deletes the pairing and trust records. It is not required for a normal disconnection.
+
+Install the evdev dependency on the EV3 with:
+
+```bash
+pip3 install -r requirements.txt
+```
+
+Confirm that Linux detects the controller before starting Rover DR:
+
+```bash
+python3 -m evdev.evtest
+```

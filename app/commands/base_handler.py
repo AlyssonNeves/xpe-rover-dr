@@ -1,36 +1,32 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Shared command-handler primitives for Rover application commands."""
+"""Shared command-result helpers."""
+
+from app.models import CommandResult, ResultStatuses
+
+INTEGER_TYPES = (int,)
 
 
-class DomainCommandHandler(object):
-    """Binds a command target to one application-level executor."""
+class BaseCommandHandler(object):
+    @staticmethod
+    def unsupported(domain, action):
+        return CommandResult(
+            success=False,
+            status=ResultStatuses.INVALID_ARGUMENT,
+            error="Unsupported {} action: {}".format(domain, action)
+        )
 
-    def __init__(self, target, executor):
-        self.target = target
-        self._executor = executor
+    @staticmethod
+    def _success_or_not_found(data, resource_name, code):
+        if data is None:
+            return CommandResult(
+                success=False,
+                status=ResultStatuses.NOT_FOUND,
+                error="{} not found: {}".format(resource_name, code)
+            )
+        return CommandResult(success=True, data=data)
 
-    def handle(self, action, params):
-        return self._executor(action, params)
-
-
-class CommandHandlerRegistry(object):
-    """Deterministic lookup of one handler per command target."""
-
-    def __init__(self, handlers):
-        self._handlers = {}
-        for handler in handlers:
-            if handler.target in self._handlers:
-                raise ValueError(
-                    "Duplicate command handler for target: {0}".format(
-                        handler.target
-                    )
-                )
-            self._handlers[handler.target] = handler
-
-    def get(self, target):
-        return self._handlers.get(target)
-
-    def targets(self):
-        return tuple(sorted(self._handlers.keys()))
+    @staticmethod
+    def _is_integer(value):
+        return isinstance(value, INTEGER_TYPES) and not isinstance(value, bool)

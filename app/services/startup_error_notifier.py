@@ -7,8 +7,9 @@
 class StartupErrorNotifier(object):
     """Builds and delegates operator-visible startup error notifications."""
 
-    MAX_COLUMNS = 22
-    MAX_ROWS = 9
+    MAX_COLUMNS = 16
+    MAX_MAIN_ROWS = 3
+    FOOTER_TEXT = "Press any button to finish"
 
     def __init__(self, operator_alert_port):
         """Initializes the notifier with an operator alert output port."""
@@ -16,43 +17,44 @@ class StartupErrorNotifier(object):
 
     @classmethod
     def _screen_lines(cls, message):
-        """Builds short lines that fit the EV3 text console."""
-        lines = ["ROVER DR", "STARTUP ERROR"]
+        """Builds a concise main message plus the fixed bottom instruction."""
+        token_labels = []
 
-        token_names = []
-        for token_name in (
-                "ROVER_SHUTDOWN_TOKEN",
-                "ROVER_HARDWARE_API_TOKEN"):
-            if token_name in message:
-                token_names.append(token_name.replace("ROVER_", ""))
+        if "ROVER_SHUTDOWN_TOKEN" in message:
+            token_labels.append("SHUTDOWN")
+        if "ROVER_HARDWARE_API_TOKEN" in message:
+            token_labels.append("HARDWARE API")
 
-        if token_names:
-            lines.append("Missing config:")
-            lines.extend(token_names)
+        if token_labels:
+            main_lines = ["Missing tokens:"] + token_labels
         else:
-            words = str(message).split()
-            current = ""
+            main_lines = cls._wrap_message(message)
 
-            for word in words:
-                candidate = word if not current else current + " " + word
+        return main_lines[:cls.MAX_MAIN_ROWS] + [cls.FOOTER_TEXT]
 
-                if len(candidate) <= cls.MAX_COLUMNS:
-                    current = candidate
-                else:
-                    if current:
-                        lines.append(current)
+    @classmethod
+    def _wrap_message(cls, message):
+        """Wraps a generic error into the available main-message rows."""
+        lines = []
+        current = ""
 
-                    current = word[:cls.MAX_COLUMNS]
+        for word in str(message).split():
+            candidate = word if not current else current + " " + word
 
-            if current:
-                lines.append(current)
+            if len(candidate) <= cls.MAX_COLUMNS:
+                current = candidate
+            else:
+                if current:
+                    lines.append(current)
+                current = word[:cls.MAX_COLUMNS]
 
-        lines.append("See README.md")
-        lines.append("")
-        lines.append("Press any button")
-        lines.append("to finish")
+            if len(lines) >= cls.MAX_MAIN_ROWS:
+                break
 
-        return lines[:cls.MAX_ROWS]
+        if current and len(lines) < cls.MAX_MAIN_ROWS:
+            lines.append(current)
+
+        return lines or ["Startup error"]
 
     def show(self, message):
         """Delegates a formatted fatal startup error to the output port."""

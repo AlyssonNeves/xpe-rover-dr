@@ -16,6 +16,8 @@ from infrastructure.ev3.button_feedback import Ev3ButtonFeedback
 
 
 class Ev3ButtonFeedbackTests(unittest.TestCase):
+    """Covers the short tone and best-effort failure behavior."""
+
     def test_play_emits_one_short_blocking_tone(self):
         sound = mock.Mock()
         sound_class = mock.Mock()
@@ -25,8 +27,12 @@ class Ev3ButtonFeedbackTests(unittest.TestCase):
         ev3dev2_module = types.ModuleType("ev3dev2")
 
         with mock.patch.dict(
-                sys.modules,
-                {"ev3dev2": ev3dev2_module, "ev3dev2.sound": sound_module}):
+            sys.modules,
+            {
+                "ev3dev2": ev3dev2_module,
+                "ev3dev2.sound": sound_module
+            }
+        ):
             emitted = Ev3ButtonFeedback.play(sound)
 
         self.assertTrue(emitted)
@@ -45,8 +51,12 @@ class Ev3ButtonFeedbackTests(unittest.TestCase):
         ev3dev2_module = types.ModuleType("ev3dev2")
 
         with mock.patch.dict(
-                sys.modules,
-                {"ev3dev2": ev3dev2_module, "ev3dev2.sound": sound_module}):
+            sys.modules,
+            {
+                "ev3dev2": ev3dev2_module,
+                "ev3dev2.sound": sound_module
+            }
+        ):
             emitted = Ev3ButtonFeedback.play()
 
         self.assertTrue(emitted)
@@ -57,11 +67,13 @@ class Ev3ButtonFeedbackTests(unittest.TestCase):
             play_type=3
         )
 
-    def test_play_does_not_interrupt_navigation_when_sound_is_unavailable(self):
+    def test_play_does_not_interrupt_screen_when_sound_is_unavailable(self):
         with mock.patch.dict(
-                sys.modules,
-                {"ev3dev2": None, "ev3dev2.sound": None}), mock.patch(
-                "infrastructure.ev3.button_feedback.AppLogger.warning") as warning:
+            sys.modules,
+            {"ev3dev2": None, "ev3dev2.sound": None}
+        ), mock.patch(
+            "infrastructure.ev3.button_feedback.AppLogger.warning"
+        ) as warning:
             emitted = Ev3ButtonFeedback.play()
 
         self.assertFalse(emitted)

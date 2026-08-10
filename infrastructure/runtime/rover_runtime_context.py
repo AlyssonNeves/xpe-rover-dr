@@ -5,7 +5,7 @@
 
 
 class RoverRuntimeContext(object):
-    """Owns entry-point delegation without duplicating lifecycle state."""
+    """Owns entry-point lifecycle details without runtime synchronization."""
 
     def __init__(self, application=None, logger=None, exit_code=0):
         self.application = application
@@ -21,8 +21,7 @@ class RoverRuntimeContext(object):
 
     def request_shutdown(self):
         if self.application is not None:
-            return self.application.request_shutdown()
-        return False
+            self.application.request_shutdown()
 
     def stop_or_join(self):
         if self.application is not None:

@@ -7,7 +7,7 @@ from infrastructure.logging.app_logger import AppLogger
 
 
 class Ev3ButtonFeedback(object):
-    """Emits one short confirmation tone without disrupting navigation."""
+    """Emits one short confirmation tone without disrupting screen operation."""
 
     FREQUENCY_HZ = 1200
     TONE_MS = 40
@@ -28,6 +28,8 @@ class Ev3ButtonFeedback(object):
         except (
                 ImportError, IOError, OSError, RuntimeError,
                 AttributeError, TypeError) as error:
+            # Button audio is feedback only. Screen navigation must continue
+            # normally when the speaker or the EV3 sound API is unavailable.
             AppLogger.warning(
                 "Unable to emit EV3 button beep: {0}".format(error)
             )

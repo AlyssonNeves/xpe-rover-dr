@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Read-only port for the latest cached Rover heading."""
+"""Read-only port for the latest monitored heading."""
 
 from abc import ABCMeta, abstractmethod
 
 
 class HeadingQueryPort(object, metaclass=ABCMeta):
-    """Defines non-blocking access to a monitored heading snapshot."""
+    """Defines non-blocking access to cached heading information."""
 
     @abstractmethod
     def get_heading_deg(self):
-        """Returns a fresh heading in degrees or ``None`` when unavailable."""
+        """Returns a fresh heading value or ``None`` when unavailable."""
         raise NotImplementedError
 
     @abstractmethod
     def get_heading_snapshot(self):
-        """Returns a defensive snapshot including freshness information."""
+        """Returns the latest defensive heading-state snapshot."""
         raise NotImplementedError
