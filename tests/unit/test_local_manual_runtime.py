@@ -153,8 +153,8 @@ def test_local_manual_builder_excludes_monitor_and_gateway_graph(monkeypatch):
         operation_mode_service=OperationModeService()
     )
     assert application.monitors == []
-    assert application.rest_api.gateway is None
-    assert len(application.managed_services) == 1
+    assert application.rest_api_server.gateway is None
+    assert len(application.managed_resources) == 1
 
 
 def test_local_manual_builder_autowires_evdev_in_hardware_mode(monkeypatch):
@@ -210,7 +210,7 @@ def test_local_manual_runtime_publishes_manual_motor_state_to_rest(monkeypatch):
     captured["publisher"].publish_motor_state("LLM", {
         "connected": True, "speed_sp": 250, "running": True
     })
-    result = application.rest_api.command_service.execute(
+    result = application.rest_api_server.command_service.execute(
         T.MOTOR, A.READ_MOTOR, {"code": "LLM"}
     )
     assert result.status_code == 200

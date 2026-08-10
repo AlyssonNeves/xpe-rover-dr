@@ -25,9 +25,10 @@ from app.rover_config import (
     REST_SHUTDOWN_TOKEN,
 )
 from infrastructure.logging.app_logger import AppLogger
+from ports.application_server_port import ApplicationServerPort
 
 
-class RestApiServer(object):
+class RestApiServer(ApplicationServerPort):
     """Exposes Rover-DR application routes over HTTP."""
 
     MAX_REQUEST_BODY_BYTES = 8192
@@ -277,12 +278,11 @@ class RestApiServer(object):
                     status_code=202
                 ))
 
-                lifecycle_thread = threading.Thread(
-                    target=callback,
-                    name="Remote{}Thread".format(operation.capitalize())
-                )
-                lifecycle_thread.daemon = False
-                lifecycle_thread.start()
+                # The application lifecycle coordinator owns concurrency.
+                # The transport callback schedules shutdown/restart and returns
+                # immediately; the REST adapter must not create a competing
+                # lifecycle thread.
+                callback()
 
             def _send_method_not_allowed(self):
                 self._send_result(

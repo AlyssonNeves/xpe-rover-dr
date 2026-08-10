@@ -290,7 +290,7 @@ def test_field_hardware_graph_autowires_only_dedicated_gyro_monitor(monkeypatch)
     assert len(application.monitors) == 1
     assert isinstance(application.monitors[0], GyroHeadingMonitor)
     joystick_services = [
-        item for item in application.managed_services
+        item for item in application.runtime_components
         if isinstance(item, JoystickControlService)
     ]
     assert len(joystick_services) == 1

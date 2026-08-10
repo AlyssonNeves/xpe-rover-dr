@@ -3,15 +3,25 @@ from app.operation_mode_service import Fronts
 from bootstrap import rover_assembly as assembly
 
 
-class FakeApplication(object):
+class FakeLogger(object):
+    def status(self, message):
+        del message
+    def error(self, message):
+        del message
+
+
+class FakeRuntime(object):
     def __init__(self):
+        self.ready = True
+        self.exit_code = 0
+        self.logger = FakeLogger()
         self.started = False
         self.stopped = False
-        self.waited = False
+        self.finished = False
     def start(self): self.started = True
-    def wait(self): self.waited = True
-    def stop(self): self.stopped = True
-    def is_restart_requested(self): return False
+    def stop_or_join(self): self.stopped = True
+    def finish(self): self.finished = True
+    def request_shutdown(self): return True
 
 
 def test_mode_selection_defaults_without_physical_hardware(monkeypatch):
@@ -71,14 +81,12 @@ def test_invalid_security_skips_ev3_alert_when_hardware_disabled(monkeypatch):
     assert called["alert"] is False
 
 
-def test_main_delegates_application_preparation_to_bootstrap(monkeypatch):
-    app = FakeApplication()
-    monkeypatch.setattr(
-        main_module.rover_assembly, "prepare_rover_application", lambda: app
-    )
+def test_main_delegates_runtime_preparation_to_bootstrap(monkeypatch):
+    runtime = FakeRuntime()
+    monkeypatch.setattr(main_module, "prepare_rover_runtime", lambda: runtime)
     monkeypatch.setattr(main_module.signal, "signal", lambda *args: None)
     assert main_module.main() == 0
-    assert app.started and app.waited and app.stopped
+    assert runtime.started and runtime.stopped and runtime.finished
 
 
 def test_build_application_adds_operation_status_in_hardware_mode(monkeypatch):
@@ -102,7 +110,7 @@ def test_build_application_adds_operation_status_in_hardware_mode(monkeypatch):
         operation_mode_service=mode_service
     )
 
-    assert status_service in application.managed_services
+    assert status_service in application.runtime_components
     assert captured_status == {
         "mode": mode_service, "name": "Wireless Controller"
     }
@@ -170,7 +178,7 @@ def test_local_manual_joystick_is_wired_to_direct_manual_drive_path(monkeypatch)
     assert captured["joystick"]["axis_response_intensity"] == 1.0
     assert "drive_port" not in captured["joystick"]
     assert "motor_port" not in captured["joystick"]
-    assert joystick_service in application.managed_services
+    assert joystick_service in application.runtime_components
 
 
 def test_local_mode_selection_runs_front_drive_centric_selector(monkeypatch):

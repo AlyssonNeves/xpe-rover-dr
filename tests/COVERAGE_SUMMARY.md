@@ -196,3 +196,19 @@ gate mínimo de 60%.
 - Cobertura combinada de linhas e branches: **75%**.
 - Gate de arquitetura: aprovado.
 - Compatibilidade sintática de produção: **Python 3.5** aprovada.
+
+## S02.25 - Centralização do ciclo de vida da aplicação
+
+- Novas portas `ApplicationConcurrencyPort`, `ProcessControlPort`, `RuntimeComponentPort` e `ApplicationServerPort` explicitam as fronteiras do lifecycle.
+- `ThreadingApplicationConcurrency` torna-se o único proprietário das flags e primitivas de shutdown/restart/stop.
+- `OsProcessController` isola o `os.execv()` da camada de aplicação.
+- `RoverRuntimeContext` delega startup/shutdown sem manter locks, flags ou threads próprios.
+- `RoverApplication` deixa de criar `threading.Lock`, `threading.Event` e `threading.Thread` diretamente.
+- `RestApiServer` implementa `ApplicationServerPort` e deixa de criar threads `RemoteShutdownThread`/`RemoteRestartThread`.
+- Monitores recebem `MonitorRegistration` com criticidade explícita; falhas críticas acionam um único shutdown coordenado.
+- Componentes de runtime são interrompidos em ordem inversa à montagem; recursos com `close()` são encerrados separadamente.
+- `main.py` passa a consumir `prepare_rover_runtime()` e não executa mais restart de processo diretamente.
+- Suíte completa: **284 testes aprovados**.
+- Cobertura combinada de linhas e branches: **74%**.
+- Gate de arquitetura: aprovado.
+- Compatibilidade sintática de produção: **Python 3.5** aprovada.

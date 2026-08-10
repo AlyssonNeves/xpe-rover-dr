@@ -573,3 +573,26 @@ por uma reconexão passiva do dispositivo já pareado, dentro do timeout total d
 modo interativo e a existência de um nó `evdev` utilizável é tratada como sinal
 autoritativo de prontidão. Falhas passam a incluir diagnóstico do BlueZ e dos
 eixos observados em todos os nós de mesmo nome.
+
+## S02.25 - Centralização do ciclo de vida da aplicação
+
+O ciclo de vida deixa de ser distribuído entre `main.py`, `RoverApplication`,
+o servidor REST e threads auxiliares específicas de shutdown/restart. O estado
+concorrente passa a ter um único proprietário por meio de
+`ApplicationConcurrencyPort`, concretizado por
+`ThreadingApplicationConcurrency`, enquanto reinicializações do processo são
+abstraídas por `ProcessControlPort` e `OsProcessController`.
+
+O composition root monta explicitamente os `runtime_components`, os recursos
+que precisam apenas de `close()` e os monitores registrados com política de
+criticidade. `Sensor` e `Motor` são críticos no runtime monitorado, o
+`Controller` é diagnóstico e o `Gyro Heading` é crítico somente quando o modo
+FIELD exige essa dependência. Shutdown e restart remotos passam a chamar
+`request_shutdown()`/`request_restart()`; o adaptador REST não cria uma segunda
+thread de lifecycle.
+
+`RoverRuntimeContext` passa a ser a única interface usada pelo `main.py`, que
+fica restrito à preparação do runtime, instalação dos handlers de sinal,
+execução e finalização. A ordem de encerramento também é centralizada:
+servidor REST, componentes de runtime em ordem inversa, monitores, recursos
+gerenciados e joins dos monitores.

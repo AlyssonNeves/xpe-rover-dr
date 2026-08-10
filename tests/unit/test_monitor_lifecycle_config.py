@@ -6,8 +6,12 @@ import time
 import pytest
 
 from app import rover_config
+from app.monitor_registration import MonitorRegistration
 from app.rover_application import RoverApplication
 from infrastructure.monitoring.monitor_base import MonitorBase
+from infrastructure.runtime.threading_application_concurrency import (
+    ThreadingApplicationConcurrency
+)
 
 
 class CountingMonitor(MonitorBase):
@@ -41,6 +45,15 @@ class FakeRest(object):
         self.stopped = True
 
 
+
+
+class FakeProcessControl(object):
+    def __init__(self):
+        self.restart_calls = 0
+    def restart_current_process(self):
+        self.restart_calls += 1
+
+
 class Closable(object):
     def __init__(self): self.closed = False
     def close(self): self.closed = True
@@ -60,15 +73,23 @@ def test_rover_application_start_stop_is_ordered_and_idempotent():
     monitor = CountingMonitor()
     rest = FakeRest()
     managed = Closable()
-    app = RoverApplication([monitor], rest, [managed])
+    concurrency = ThreadingApplicationConcurrency()
+    app = RoverApplication(
+        rest_api_server=rest,
+        monitor_registrations=[
+            MonitorRegistration(monitor, "Counting", False)
+        ],
+        managed_resources=[managed],
+        concurrency_port=concurrency,
+        process_control_port=FakeProcessControl()
+    )
     app.start()
     time.sleep(0.02)
-    assert app.get_status() == app.RUNNING
     app.stop()
     app.stop()
-    assert app.get_status() == app.STOPPED
     assert rest.started and rest.stopped
     assert managed.closed
+    assert concurrency.is_stop_requested() is True
 
 
 def test_configuration_copy_and_invalid_files():
@@ -155,8 +176,13 @@ def test_security_configuration_depends_on_hardware_mode(monkeypatch):
 
 def test_rover_application_restart_marks_request_and_stops():
     rest = FakeRest()
-    app = RoverApplication([], rest)
-    app.restart()
+    concurrency = ThreadingApplicationConcurrency()
+    app = RoverApplication(
+        rest_api_server=rest,
+        concurrency_port=concurrency,
+        process_control_port=FakeProcessControl()
+    )
+    assert app.request_restart() is True
+    assert concurrency.wait_for_stop_completed(1.0) is True
     assert app.is_restart_requested() is True
-    assert app.get_status() == app.STOPPED
     assert rest.stopped is True

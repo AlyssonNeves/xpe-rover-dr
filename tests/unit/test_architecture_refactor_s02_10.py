@@ -60,14 +60,14 @@ def test_ports_have_no_inward_or_concrete_dependencies():
 
 def test_main_is_entry_point_and_concrete_assembly_is_in_bootstrap():
     imports = _imports("main.py")
-    assert "bootstrap" in imports
+    assert "bootstrap.rover_assembly" in imports
     assert not any(name.startswith("adapters") for name in imports)
     assert not any(name.startswith("app") for name in imports)
     assert not any(name.startswith("infrastructure") for name in imports)
     source = (ROOT / "main.py").read_text()
     assert "RestApiServer(" not in source
     assert "MotorMonitor(" not in source
-    assert "prepare_rover_application()" in source
+    assert "prepare_rover_runtime()" in source
 
 
 def test_local_manual_graph_stays_monitor_and_queue_free():

@@ -29,7 +29,8 @@ from app.command_service import CommandService
 from app.operation_mode_service import (
     Centrics, Commands, Controls, Drives, OperationModeService
 )
-from app.rover_application import RoverApplication
+from app.monitor_registration import MonitorRegistration
+from app.rover_application import ApplicationStartupError, RoverApplication
 from app.services.drive_service import DriveService
 from app.services.field_heading_reference_service import FieldHeadingReferenceService
 from app.services.joystick_control_service import JoystickControlService
@@ -45,6 +46,11 @@ from infrastructure.monitoring.controller_monitor import ControllerMonitor
 from infrastructure.monitoring.gyro_heading_monitor import GyroHeadingMonitor
 from infrastructure.monitoring.motor_monitor import MotorMonitor
 from infrastructure.monitoring.sensor_monitor import SensorMonitor
+from infrastructure.runtime.os_process_controller import OsProcessController
+from infrastructure.runtime.rover_runtime_context import RoverRuntimeContext
+from infrastructure.runtime.threading_application_concurrency import (
+    ThreadingApplicationConcurrency
+)
 from infrastructure.state.controller_state_store import ControllerStateStore
 from infrastructure.state.heading_state_store import HeadingStateStore
 from infrastructure.state.motor_state_store import MotorStateStore
@@ -94,7 +100,7 @@ def build_local_manual_application(operation_mode_service=None,
 
     motor_state_store = MotorStateStore()
     sensor_definitions = rover_config.get_sensor_definitions()
-    monitors = []
+    monitor_registrations = []
     canonical_heading_query_port = heading_query_port
 
     if is_field_mode and heading_query_port is None:
@@ -139,7 +145,9 @@ def build_local_manual_application(operation_mode_service=None,
                 "max_consecutive_failures", 3
             )
         )
-        monitors.append(gyro_monitor)
+        monitor_registrations.append(
+            MonitorRegistration(gyro_monitor, "Gyro Heading", True)
+        )
         sensor_port = FieldManualSensorQueryAdapter(
             sensor_definitions,
             gyro_sensor_code=gyro_sensor_code,
@@ -229,7 +237,8 @@ def build_local_manual_application(operation_mode_service=None,
             )
         )
 
-    managed_services = []
+    runtime_components = []
+    managed_resources = [manual_drive_port]
     joystick_connection_status_port = None
     if rover_config.HARDWARE_ENABLED:
         joystick_connection_status_port = Ev3OperationStatusAdapter(
@@ -238,7 +247,7 @@ def build_local_manual_application(operation_mode_service=None,
                 "device_name", "Wireless Controller"
             )
         )
-        managed_services.append(joystick_connection_status_port)
+        runtime_components.append(joystick_connection_status_port)
 
     if joystick_port is not None:
         joystick_control_service = JoystickControlService(
@@ -292,9 +301,7 @@ def build_local_manual_application(operation_mode_service=None,
                 )
             )
         )
-        managed_services.extend([joystick_control_service, manual_drive_port])
-    else:
-        managed_services.append(manual_drive_port)
+        runtime_components.append(joystick_control_service)
 
     if is_field_mode:
         AppLogger.status(
@@ -308,13 +315,12 @@ def build_local_manual_application(operation_mode_service=None,
             "operation status and read-only REST queries are active; monitor "
             "queues and the EV3Dev2 motor gateway are disabled."
         )
-    application = RoverApplication(
-        monitors=monitors, rest_api=rest_api, managed_services=managed_services,
-        logger=AppLogger
+    return _finalize_application(
+        rest_api=rest_api,
+        monitor_registrations=monitor_registrations,
+        runtime_components=runtime_components,
+        managed_resources=managed_resources
     )
-    rest_api.set_shutdown_callback(application.stop)
-    rest_api.set_restart_callback(application.restart)
-    return application
 
 
 def build_standard_application(operation_mode_service=None):
@@ -326,7 +332,11 @@ def build_standard_application(operation_mode_service=None):
     sensor_monitor = SensorMonitor(state_store=sensor_state_store)
     motor_monitor = MotorMonitor(state_store=motor_state_store)
     controller_monitor = ControllerMonitor(state_store=controller_state_store)
-    monitors = [sensor_monitor, motor_monitor, controller_monitor]
+    monitor_registrations = [
+        MonitorRegistration(controller_monitor, "Controller", False),
+        MonitorRegistration(sensor_monitor, "Sensor", True),
+        MonitorRegistration(motor_monitor, "Motor", True)
+    ]
 
     sensor_port = SensorMonitorAdapter(
         sensor_monitor=sensor_monitor, state_store=sensor_state_store
@@ -379,12 +389,13 @@ def build_standard_application(operation_mode_service=None):
         rover_config.REST_PORT,
         ev3dev2_motor_gateway=ev3dev2_motor_gateway
     )
-    managed_services = []
+    runtime_components = []
+    managed_resources = []
     if ev3dev2_motor_gateway is not None:
-        managed_services.append(ev3dev2_motor_gateway)
+        managed_resources.append(ev3dev2_motor_gateway)
     if rover_config.HARDWARE_ENABLED:
         joystick_config = rover_config.get_joystick_config()
-        managed_services.append(
+        runtime_components.append(
             Ev3OperationStatusAdapter(
                 operation_mode_service=operation_mode_service,
                 joystick_device_name=joystick_config.get(
@@ -392,14 +403,31 @@ def build_standard_application(operation_mode_service=None):
                 )
             )
         )
-    application = RoverApplication(
-        monitors=monitors,
+    return _finalize_application(
         rest_api=rest_api,
-        managed_services=managed_services,
-        logger=AppLogger
+        monitor_registrations=monitor_registrations,
+        runtime_components=runtime_components,
+        managed_resources=managed_resources
     )
-    rest_api.set_shutdown_callback(application.stop)
-    rest_api.set_restart_callback(application.restart)
+
+
+
+def _finalize_application(rest_api, monitor_registrations=None,
+                          runtime_components=None, managed_resources=None):
+    """Centralizes lifecycle ports and REST callbacks for every graph."""
+    application = RoverApplication(
+        rest_api_server=rest_api,
+        monitor_registrations=monitor_registrations or [],
+        runtime_components=runtime_components or [],
+        managed_resources=managed_resources or [],
+        logger=AppLogger,
+        concurrency_port=ThreadingApplicationConcurrency(),
+        process_control_port=OsProcessController(),
+        application_name=rover_config.APPLICATION_NAME,
+        application_version=rover_config.APPLICATION_VERSION
+    )
+    rest_api.set_shutdown_callback(application.request_shutdown)
+    rest_api.set_restart_callback(application.request_restart)
     return application
 
 
@@ -499,18 +527,28 @@ def select_operation_mode():
     return service
 
 
-def prepare_rover_application():
-    """Validates startup, preloads EV3 screens and assembles one graph."""
+def prepare_rover_runtime():
+    """Validates startup and returns one lifecycle-aware runtime context."""
+    AppLogger.status("Starting Rover application.")
     if not validate_startup_configuration():
-        return None
+        return RoverRuntimeContext(logger=AppLogger, exit_code=1)
     if rover_config.HARDWARE_ENABLED:
         _prepare_ev3_screen_cache()
     operation_mode_service = select_operation_mode()
     if operation_mode_service is None:
-        return None
-    return build_rover_application(
+        return RoverRuntimeContext(logger=AppLogger, exit_code=1)
+    application = build_rover_application(
         operation_mode_service=operation_mode_service
     )
+    return RoverRuntimeContext(
+        application=application, logger=AppLogger, exit_code=0
+    )
+
+
+def prepare_rover_application():
+    """Compatibility helper returning the assembled application, if ready."""
+    runtime = prepare_rover_runtime()
+    return runtime.application if runtime.ready else None
 
 
 # Transitional aliases kept only for callers from the previous increment.

@@ -200,7 +200,7 @@ def test_field_graph_wraps_heading_for_control_but_keeps_rest_canonical(monkeypa
         heading_query_port=canonical
     )
     joystick_services = [
-        item for item in application.managed_services
+        item for item in application.runtime_components
         if isinstance(item, JoystickControlService)
     ]
     assert len(joystick_services) == 1
