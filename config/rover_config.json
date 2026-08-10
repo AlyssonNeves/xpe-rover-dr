@@ -30,7 +30,8 @@
       "supported_modes": [
         "GYRO-ANG",
         "GYRO-RATE"
-      ]
+      ],
+      "port_mode": "ev3-uart"
     },
     "RCS": {
       "name": "Right Color Sensor",
@@ -144,6 +145,14 @@
     "strafe_compensation": 1.1
   },
   "field_heading": {
-    "max_age_seconds": 0.1
+    "sensor_code": "GYR",
+    "poll_seconds": 0.02,
+    "max_age_seconds": 0.1,
+    "connection_timeout_seconds": 10.0,
+    "connection_retry_seconds": 0.1,
+    "reset_on_start": true,
+    "angle_sign": -1.0,
+    "angle_offset_deg": 0.0,
+    "max_consecutive_failures": 3
   }
 }

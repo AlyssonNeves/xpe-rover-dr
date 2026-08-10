@@ -505,3 +505,18 @@ ou exceder a idade máxima configurada, a tração FIELD é parada de forma
 fail-safe e a retomada exige heading fresco e neutralidade dos três eixos de
 movimento. A integração física do giroscópio e o monitor produtor desse cache
 permanecem reservados ao S02.21.
+
+## S02.21 - Integração do giroscópio
+
+O runtime `LOCAL + MANUAL + MECANUM + FIELD` passa a produzir seu próprio
+heading por um monitor físico dedicado. `Ev3GyroSensorAdapter` configura a
+entrada `in3` como `ev3-uart`, conecta o sensor LEGO EV3 em `GYRO-ANG` e aplica
+`angle_sign` e `angle_offset_deg` uma única vez na fronteira de hardware antes
+de publicar a leitura canônica.
+
+`GyroHeadingMonitor` consulta somente esse sensor a cada `0,02 s` e publica o
+resultado no `HeadingStateStore` introduzido no S02.20. O joystick continua
+consumindo exclusivamente `HeadingQueryPort`, portanto nenhuma operação física
+do giroscópio entra no caminho crítico do controle. O monitor é montado somente
+para `MECANUM + FIELD`; `DIFFERENTIAL` e `MECANUM + CHASSIS` permanecem sem esse
+I/O adicional. O recenter do zero operacional permanece reservado ao S02.22.

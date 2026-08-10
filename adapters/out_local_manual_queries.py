@@ -43,6 +43,41 @@ class LocalManualSensorQueryAdapter(SensorQueryPort):
         return [copy.deepcopy(item) for item in self._sensors.values()]
 
 
+class FieldManualSensorQueryAdapter(LocalManualSensorQueryAdapter):
+    """Adds the live cached gyro reading to the minimal manual query graph."""
+
+    def __init__(self, sensor_definitions, gyro_sensor_code,
+                 heading_query_port):
+        LocalManualSensorQueryAdapter.__init__(
+            self, sensor_definitions=sensor_definitions
+        )
+        self._gyro_sensor_code = gyro_sensor_code
+        self._heading_query_port = heading_query_port
+
+    def read_sensor(self, code):
+        item = LocalManualSensorQueryAdapter.read_sensor(self, code)
+        if item is None or code != self._gyro_sensor_code:
+            return item
+        snapshot = self._heading_query_port.get_heading_snapshot()
+        item.update({
+            "connected": bool(snapshot.get("fresh")),
+            "hardware_error": snapshot.get("error"),
+            "value": (
+                snapshot.get("heading_deg")
+                if snapshot.get("fresh") else None
+            ),
+            "sample_age_seconds": snapshot.get("age_seconds"),
+            "monitoring": True
+        })
+        return item
+
+    def read_all_sensors(self):
+        return [
+            self.read_sensor(code)
+            for code in self._sensors
+        ]
+
+
 class LocalManualMotorQueryAdapter(MotorQueryPort):
     """Exposes manual motor snapshots while rejecting queued motor writes."""
 

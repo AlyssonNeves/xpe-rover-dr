@@ -15,20 +15,28 @@ class HeadingStateStore(object):
             "available": False,
             "heading_deg": None,
             "sample_monotonic": None,
-            "error": None
+            "error": None,
+            "sensor_code": None,
+            "address": None,
+            "mode": None
         }
 
-    def update(self, heading_deg, sample_monotonic):
+    def update(self, heading_deg, sample_monotonic, sensor_code=None,
+               address=None, mode=None):
         """Publishes one successful heading sample."""
         with self._lock:
             self._snapshot = {
                 "available": True,
                 "heading_deg": float(heading_deg),
                 "sample_monotonic": float(sample_monotonic),
-                "error": None
+                "error": None,
+                "sensor_code": sensor_code,
+                "address": address,
+                "mode": mode
             }
 
-    def mark_unavailable(self, error=None, sample_monotonic=None):
+    def mark_unavailable(self, error=None, sample_monotonic=None,
+                         sensor_code=None, address=None, mode=None):
         """Marks the cache unavailable without treating old data as fresh."""
         with self._lock:
             previous = self._snapshot
@@ -36,7 +44,10 @@ class HeadingStateStore(object):
                 "available": False,
                 "heading_deg": previous.get("heading_deg"),
                 "sample_monotonic": sample_monotonic,
-                "error": str(error) if error is not None else None
+                "error": str(error) if error is not None else None,
+                "sensor_code": sensor_code or previous.get("sensor_code"),
+                "address": address or previous.get("address"),
+                "mode": mode or previous.get("mode")
             }
 
     def get_sample(self):

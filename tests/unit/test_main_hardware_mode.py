@@ -207,11 +207,14 @@ def test_local_mode_selection_runs_front_drive_centric_selector(monkeypatch):
     }
 
 
-def test_field_selection_requires_cached_heading_until_gyro_integration(monkeypatch):
+def test_field_selection_is_available_after_gyro_integration(monkeypatch):
     monkeypatch.setattr(assembly.rover_config, "HARDWARE_ENABLED", True)
     service = assembly.OperationModeService(
         drive=assembly.Drives.MECANUM,
         centric=assembly.Centrics.FIELD
     )
-    with __import__("pytest").raises(RuntimeError, match="cached heading"):
-        assembly.build_local_manual_application(operation_mode_service=service)
+    application = assembly.build_local_manual_application(
+        operation_mode_service=service
+    )
+    assert len(application.monitors) == 1
+    assert application.monitors[0].__class__.__name__ == "GyroHeadingMonitor"

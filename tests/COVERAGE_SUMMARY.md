@@ -152,3 +152,13 @@ gate mínimo de 60%.
 - `CHASSIS` permanece independente da consulta de heading.
 - O composition root aceita uma fonte de heading em cache injetada; a criação do produtor físico fica para S02.21.
 - A suíte completa possui **235 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.
+
+## S02.21 - Integração do giroscópio
+
+- Novo `HeadingSensorPort` para a fronteira física do heading.
+- `Ev3GyroSensorAdapter` configura `in3` como `ev3-uart`, usa `GYRO-ANG` e tenta detectar o sensor durante o timeout configurado.
+- Calibração de montagem aplicada na fronteira EV3 por `angle_sign = -1.0` e `angle_offset_deg = 0.0`.
+- `GyroHeadingMonitor` publica apenas o heading do sensor configurado no `HeadingStateStore` e marca amostras indisponíveis em falhas de leitura.
+- O monitor dedicado é montado somente em `LOCAL + MANUAL + MECANUM + FIELD`; CHASSIS e Differential continuam sem monitor de giroscópio.
+- Consultas REST do sensor `GYR` usam o mesmo heading em cache e nunca fazem I/O físico na requisição.
+- A suíte completa possui **247 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.

@@ -229,7 +229,17 @@ JOYSTICK_CONFIG = validate_joystick_configuration(JOYSTICK_CONFIG)
 DRIVE_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("drive", {}))
 MECANUM_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("mecanum", {}))
 FIELD_HEADING_CONFIG = copy.deepcopy(
-    ROVER_JSON_CONFIG.get("field_heading", {"max_age_seconds": 0.1})
+    ROVER_JSON_CONFIG.get("field_heading", {
+        "sensor_code": "GYR",
+        "poll_seconds": 0.02,
+        "max_age_seconds": 0.1,
+        "connection_timeout_seconds": 10.0,
+        "connection_retry_seconds": 0.1,
+        "reset_on_start": True,
+        "angle_sign": -1.0,
+        "angle_offset_deg": 0.0,
+        "max_consecutive_failures": 3
+    })
 )
 DRIVE_LEFT_MOTOR_CODE = DRIVE_CONFIG.get("left_motor_code", "LLM")
 DRIVE_RIGHT_MOTOR_CODE = DRIVE_CONFIG.get("right_motor_code", "RLM")
@@ -315,18 +325,85 @@ if MECANUM_STRAFE_COMPENSATION <= 0.0:
     raise RuntimeError("Mecanum strafe_compensation must be positive.")
 
 
-try:
-    FIELD_HEADING_MAX_AGE_SECONDS = float(
-        FIELD_HEADING_CONFIG.get("max_age_seconds", 0.1)
+def validate_field_heading_configuration(configuration):
+    """Validates the dedicated FIELD gyroscope configuration."""
+    if not isinstance(configuration, dict):
+        raise RuntimeError("field_heading configuration must be an object.")
+
+    sensor_code = str(configuration.get("sensor_code", "GYR") or "").strip()
+    if not sensor_code or sensor_code not in SENSOR_DEFINITIONS:
+        raise RuntimeError(
+            "field_heading.sensor_code must reference a configured sensor."
+        )
+    try:
+        poll_seconds = float(configuration.get("poll_seconds", 0.02))
+        max_age_seconds = float(configuration.get("max_age_seconds", 0.1))
+        timeout_seconds = float(
+            configuration.get("connection_timeout_seconds", 10.0)
+        )
+        retry_seconds = float(
+            configuration.get("connection_retry_seconds", 0.1)
+        )
+        angle_sign = float(configuration.get("angle_sign", -1.0))
+        angle_offset_deg = float(
+            configuration.get("angle_offset_deg", 0.0)
+        )
+        max_failures = int(
+            configuration.get("max_consecutive_failures", 3)
+        )
+    except (TypeError, ValueError):
+        raise RuntimeError(
+            "field_heading timing, calibration and failure values must be "
+            "numeric."
+        )
+
+    for name, value in (
+            ("poll_seconds", poll_seconds),
+            ("max_age_seconds", max_age_seconds),
+            ("connection_timeout_seconds", timeout_seconds),
+            ("connection_retry_seconds", retry_seconds)):
+        if not math.isfinite(value) or value <= 0.0:
+            raise RuntimeError(
+                "field_heading.{0} must be finite and greater than zero.".format(
+                    name
+                )
+            )
+    if retry_seconds > timeout_seconds:
+        raise RuntimeError(
+            "field_heading.connection_retry_seconds must not exceed "
+            "connection_timeout_seconds."
+        )
+    if angle_sign not in (-1.0, 1.0):
+        raise RuntimeError(
+            "field_heading.angle_sign must be either -1.0 or 1.0."
+        )
+    if not math.isfinite(angle_offset_deg):
+        raise RuntimeError(
+            "field_heading.angle_offset_deg must be finite."
+        )
+    if max_failures <= 0:
+        raise RuntimeError(
+            "field_heading.max_consecutive_failures must be greater than zero."
+        )
+
+    configuration["sensor_code"] = sensor_code
+    configuration["poll_seconds"] = poll_seconds
+    configuration["max_age_seconds"] = max_age_seconds
+    configuration["connection_timeout_seconds"] = timeout_seconds
+    configuration["connection_retry_seconds"] = retry_seconds
+    configuration["reset_on_start"] = parse_boolean(
+        configuration.get("reset_on_start"), default=True
     )
-except (TypeError, ValueError):
-    raise RuntimeError("field_heading.max_age_seconds must be numeric.")
-if (not math.isfinite(FIELD_HEADING_MAX_AGE_SECONDS) or
-        FIELD_HEADING_MAX_AGE_SECONDS <= 0.0):
-    raise RuntimeError(
-        "field_heading.max_age_seconds must be finite and greater than zero."
-    )
-FIELD_HEADING_CONFIG["max_age_seconds"] = FIELD_HEADING_MAX_AGE_SECONDS
+    configuration["angle_sign"] = angle_sign
+    configuration["angle_offset_deg"] = angle_offset_deg
+    configuration["max_consecutive_failures"] = max_failures
+    return configuration
+
+
+FIELD_HEADING_CONFIG = validate_field_heading_configuration(
+    FIELD_HEADING_CONFIG
+)
+FIELD_HEADING_MAX_AGE_SECONDS = FIELD_HEADING_CONFIG["max_age_seconds"]
 
 
 def validate_security_configuration():
