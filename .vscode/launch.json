@@ -1,6 +1,4 @@
 {
-    // VS Code launch/debug configurations for Rover-DR.
-
     // Refers to the VS Code launch.json schema, not to the Rover-DR software
     // version.
     "version": "0.2.0",
@@ -18,8 +16,32 @@
             "request": "launch",
 
             // Remote path of the Rover-DR application entry point on the EV3.
-            "program": "/home/robot/${workspaceFolderBasename}/main.py"
+            // "program": "/home/robot/${workspaceFolderBasename}/main.py",
+            "program": "/home/robot/02-start-by-VSCode.sh",
+
+            // Downloads the workspace before execution.
+            "download": true
         },
+
+        {
+            // Executes the version of main.py already stored on the EV3
+            // without downloading the workspace again.
+            "name": "EV3 - Run main.py",
+
+            // Launch configuration provided by the EV3Dev Browser extension.
+            "type": "ev3devBrowser",
+
+            // Starts a new execution on the target EV3 device.
+            "request": "launch",
+
+            // Remote path of the Rover-DR application entry point on the EV3.
+            //"program": "/home/robot/${workspaceFolderBasename}/main.py",
+            "program": "/home/robot/02-start-by-VSCode.sh",
+
+            // Skips the workspace download and runs the existing remote files.
+            "download": false
+        },
+
         {
             // Executes Rover-DR locally in simulation mode without requiring
             // physical EV3 hardware.

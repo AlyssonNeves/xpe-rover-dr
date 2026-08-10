@@ -3,7 +3,6 @@ import json
 import threading
 import time
 
-import adapters.in_rest_api_server as rest_module
 from adapters.in_rest_api_server import RestApiServer
 from app.command_service import CommandService
 from tests.unit.fakes import (
@@ -11,13 +10,19 @@ from tests.unit.fakes import (
 )
 
 
-def build_server(gateway=None, shutdown_callback=None, restart_callback=None):
+def build_server(gateway=None, shutdown_callback=None, restart_callback=None,
+                 shutdown_token="shutdown-secret",
+                 hardware_api_token="hardware-secret",
+                 shutdown_confirmation_required=True):
     service = CommandService(
         FakeSensorPort(), FakeMotorPort(), FakeControllerPort(),
         FakeRoverStatePort(), FakeDrivePort()
     )
     return RestApiServer(
         service, host="127.0.0.1", port=0,
+        shutdown_token=shutdown_token,
+        hardware_api_token=hardware_api_token,
+        shutdown_confirmation_required=shutdown_confirmation_required,
         ev3dev2_motor_gateway=gateway,
         shutdown_callback=shutdown_callback,
         restart_callback=restart_callback
@@ -81,13 +86,7 @@ def _start_server(server):
     return thread
 
 
-def test_protected_gateway_and_system_lifecycle(monkeypatch):
-    monkeypatch.setattr(rest_module, "REST_SHUTDOWN_TOKEN", "shutdown-secret")
-    monkeypatch.setattr(rest_module, "REST_HARDWARE_API_TOKEN", "hardware-secret")
-    monkeypatch.setattr(
-        rest_module, "REST_SHUTDOWN_CONFIRMATION_REQUIRED", True
-    )
-
+def test_protected_gateway_and_system_lifecycle():
     shutdown_event = threading.Event()
     restart_event = threading.Event()
     server = build_server(

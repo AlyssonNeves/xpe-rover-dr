@@ -7,5 +7,5 @@ flake8 app adapters bootstrap infrastructure ports main.py
 python scripts/check_complexity.py
 coverage erase
 coverage run -m pytest
-coverage report --fail-under=65 -m
+coverage report --fail-under=70 -m
 coverage xml

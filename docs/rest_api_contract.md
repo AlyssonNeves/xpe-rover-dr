@@ -446,8 +446,10 @@ reserved for subsequent commits.
 
 ## Authentication and protected operations
 
-Rover-DR uses two independent credentials supplied only through environment
-variables. No operational token is stored in `config/rover_config.json`.
+Rover-DR uses two independent credentials resolved by the configuration
+loader and injected into the HTTP adapter. In deployment, the supported
+overrides are the environment variables below. No operational token is stored
+in `config/rover_config.json`.
 
 | Environment variable | Protected scope |
 | --- | --- |
@@ -484,8 +486,9 @@ Content-Type: application/json
 ```
 
 The same token may alternatively be sent as `Authorization: Bearer <token>` or
-in the JSON body as `token`. Confirmation can be disabled only through
-`ROVER_SHUTDOWN_CONFIRMATION_REQUIRED=false`.
+in the JSON body as `token`. The confirmation rule belongs to the canonical
+configuration (`shutdown_confirmation_required`) and is not an environment
+override.
 
 ### EV3Dev2 motor gateway
 
@@ -516,3 +519,17 @@ Example:
   "stop_action": "brake"
 }
 ```
+
+
+## Deployment configuration (S02.27)
+
+Runtime configuration is resolved once, before graph assembly, with the
+precedence `Python defaults < JSON overrides < environment overrides`. Only the
+following `ROVER_*` variables are accepted: `ROVER_CONFIG_FILE`,
+`ROVER_HARDWARE_ENABLED`, `ROVER_SHUTDOWN_TOKEN`,
+`ROVER_HARDWARE_API_TOKEN`, `ROVER_REST_HOST` and `ROVER_REST_PORT`. Any other
+`ROVER_*` variable is rejected to prevent silent configuration drift.
+
+The REST adapter receives host, port, both credentials and the confirmation
+policy through its constructor. It performs no environment/configuration lookup
+on its own.

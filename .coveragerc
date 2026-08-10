@@ -12,7 +12,7 @@ source =
 show_missing = True
 skip_covered = False
 precision = 0
-fail_under = 65
+fail_under = 70
 exclude_lines =
     pragma: no cover
     if __name__ == .__main__.:

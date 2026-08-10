@@ -11,7 +11,9 @@ from bootstrap import rover_assembly as main_module
 
 
 class FakeRestApi(object):
-    def __init__(self, command_service, host, port, ev3dev2_motor_gateway=None):
+    def __init__(self, command_service, host, port, shutdown_token=None,
+                 hardware_api_token=None, shutdown_confirmation_required=True,
+                 ev3dev2_motor_gateway=None):
         self.command_service = command_service
         self.host = host
         self.port = port

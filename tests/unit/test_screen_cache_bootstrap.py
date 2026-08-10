@@ -51,30 +51,39 @@ def test_prepare_ev3_screen_cache_warns_but_does_not_abort_on_bad_asset():
     warning.assert_called_once()
 
 
-def test_prepare_rover_application_warms_cache_before_mode_selection():
+def test_prepare_rover_runtime_warms_cache_before_mode_selection():
     call_order = []
     mode_service = mock.Mock()
     application = object()
+    configuration = rover_assembly._resolve_configuration()
 
-    with mock.patch.object(rover_assembly.rover_config, "HARDWARE_ENABLED", True), \
-            mock.patch.object(
-                rover_assembly,
-                "validate_startup_configuration",
-                side_effect=lambda: call_order.append("validate") or True), \
-            mock.patch.object(
-                rover_assembly,
-                "_prepare_ev3_screen_cache",
-                side_effect=lambda: call_order.append("warm") or {}), \
+    class FakeLoader(object):
+        def load(self):
+            call_order.append("load")
+            return configuration
+
+        def hardware_requested(self):
+            return True
+
+    with mock.patch.object(
+            rover_assembly,
+            "_prepare_ev3_screen_cache",
+            side_effect=lambda: call_order.append("warm") or {}), \
             mock.patch.object(
                 rover_assembly,
                 "select_operation_mode",
-                side_effect=lambda: call_order.append("select") or mode_service), \
+                side_effect=lambda config: call_order.append("select") or mode_service), \
             mock.patch.object(
                 rover_assembly,
                 "build_rover_application",
                 return_value=application) as build:
-        returned = rover_assembly.prepare_rover_application()
+        runtime = rover_assembly.prepare_rover_runtime(
+            configuration_loader=FakeLoader()
+        )
 
-    assert application is returned
-    assert ["validate", "warm", "select"] == call_order
-    build.assert_called_once_with(operation_mode_service=mode_service)
+    assert application is runtime.application
+    assert ["load", "warm", "select"] == call_order
+    build.assert_called_once_with(
+        operation_mode_service=mode_service,
+        configuration=configuration
+    )

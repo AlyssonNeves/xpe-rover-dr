@@ -1,6 +1,41 @@
 {
+    // Always downloads the current VS Code project to:
+    // /home/robot/Rover-DR
+    "ev3devBrowser.download.directory": "XPE-Rover-DR",
+
+    // Use LF line endings across the project to ensure
+    // consistency between Windows, Linux, and EV3 environments.
     "files.eol": "\n",
+
+    // Ensure all files end with a trailing newline,
+    // following common Unix and source control conventions.
     "files.insertFinalNewline": true,
+
+    // Use Windows Command Prompt as the default integrated
+    // terminal for local development activities.
+    "terminal.integrated.defaultProfile.windows": "Command Prompt",
+
+    // Enable basic Python static analysis and type checking
+    // through the Pylance language server.
     "python.analysis.typeCheckingMode": "basic",
-    "ev3devBrowser.download.exclude": "{**/.*,.git/**,LICENSE,README.md,requirements.txt,.venv/**,__pycache__/**,**/__pycache__/**,*.pyc,**/*.pyc,assets/**}"
+
+    // Excludes from EV3 deployment operations:
+    // - Development: .github, scripts, tests, .venv
+    // - Generated: __pycache__, *.pyc, coverage, htmlcov
+    // - Documentation: *.md, *.pdf, LICENSE
+    // - Source images: assets/images, docs/assets, *.svg
+    // - Hidden files and directories
+    "ev3devBrowser.download.exclude": "{requirements-dev.txt,requirements.txt,.github/**,scripts/**,tests/**,.venv/**,.pytest_cache/**,**/__pycache__/**,**/*.pyc,htmlcov/**,coverage.xml,.coveragerc,setup.cfg,pytest.ini,LICENSE,assets/images/**,docs/assets/**,**/*.svg,**/*.SVG,**/*.md,**/*.MD,**/*.pdf,**/*.PDF,**/.*}",
+
+    // Exclude generated files and internal Git data
+    // from folder comparison operations.
+    "compareFolders.excludeFilter": [
+        "**/.git/**",
+        "**/__pycache__/**",
+        "**/.pytest_cache/**",
+        "**/.coverage",
+        "**/coverage.xml",
+        "**/htmlcov/**",
+        "/.venv"
+    ]
 }

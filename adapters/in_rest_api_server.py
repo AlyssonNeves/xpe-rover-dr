@@ -17,13 +17,6 @@ from urllib.parse import unquote, urlparse
 
 from adapters.rest.command_routes import CommandRoutes
 from app.models import CommandResult
-from app.rover_config import (
-    REST_HARDWARE_API_TOKEN,
-    REST_HOST,
-    REST_PORT,
-    REST_SHUTDOWN_CONFIRMATION_REQUIRED,
-    REST_SHUTDOWN_TOKEN,
-)
 from infrastructure.logging.app_logger import AppLogger
 from ports.application_server_port import ApplicationServerPort
 
@@ -33,11 +26,17 @@ class RestApiServer(ApplicationServerPort):
 
     MAX_REQUEST_BODY_BYTES = 8192
 
-    def __init__(self, command_service, host=REST_HOST, port=REST_PORT,
+    def __init__(self, command_service, host, port, shutdown_token,
+                 hardware_api_token, shutdown_confirmation_required,
                  ev3dev2_motor_gateway=None, shutdown_callback=None,
                  restart_callback=None):
         self.host = host
-        self.port = port
+        self.port = int(port)
+        self.shutdown_token = shutdown_token
+        self.hardware_api_token = hardware_api_token
+        self.shutdown_confirmation_required = bool(
+            shutdown_confirmation_required
+        )
         self.routes = CommandRoutes(
             command_service,
             ev3dev2_motor_gateway=ev3dev2_motor_gateway
@@ -92,6 +91,11 @@ class RestApiServer(ApplicationServerPort):
         max_body_bytes = self.MAX_REQUEST_BODY_BYTES
         shutdown_callback = self.shutdown_callback
         restart_callback = self.restart_callback
+        shutdown_token = self.shutdown_token
+        hardware_api_token = self.hardware_api_token
+        shutdown_confirmation_required = (
+            self.shutdown_confirmation_required
+        )
 
         class RoverRequestHandler(BaseHTTPRequestHandler):
             server_version = "RoverDR"
@@ -229,7 +233,7 @@ class RestApiServer(ApplicationServerPort):
                 if token is None:
                     token = self._authorization_bearer()
 
-                if self._tokens_match(token, REST_HARDWARE_API_TOKEN):
+                if self._tokens_match(token, hardware_api_token):
                     return True
 
                 AppLogger.warning("Unauthorized EV3Dev2 motor API request.")
@@ -246,7 +250,7 @@ class RestApiServer(ApplicationServerPort):
                     token = self.headers.get("X-Rover-Token")
                 if token is None:
                     token = self._authorization_bearer()
-                return self._tokens_match(token, REST_SHUTDOWN_TOKEN)
+                return self._tokens_match(token, shutdown_token)
 
             def _handle_system_operation(self, operation, body, callback):
                 if not self._shutdown_token_is_valid(body):
@@ -259,7 +263,7 @@ class RestApiServer(ApplicationServerPort):
                     return
 
                 if (
-                    REST_SHUTDOWN_CONFIRMATION_REQUIRED
+                    shutdown_confirmation_required
                     and body.get("confirm") is not True
                 ):
                     self._send_result(CommandResult.bad_request(

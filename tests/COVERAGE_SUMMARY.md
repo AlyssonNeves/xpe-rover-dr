@@ -226,3 +226,16 @@ gate mínimo de 60%.
 - Cobertura combinada de linhas e branches: **75%**.
 - Gate de arquitetura: aprovado.
 - Compatibilidade sintática de produção: **Python 3.5** aprovada.
+
+
+## S02.27 - Consolidação das configurações REST, segurança e transporte
+
+- Novo `RoverConfiguration` recursivamente imutável para o snapshot completo de execução.
+- Novo `RoverConfigurationLoader` com precedência `Python defaults < JSON < environment`.
+- `config/rover_config.json` passa a conter somente overrides não redundantes; o pacote final usa `{}`.
+- Superfície `ROVER_*` limitada a seis variáveis de implantação; valores desconhecidos falham no startup.
+- `RestApiServer` exige `host`, `port`, `shutdown_token`, `hardware_api_token` e `shutdown_confirmation_required` por injeção.
+- Tokens e política de confirmação deixam de ser importados do módulo de configuração pelo adaptador HTTP.
+- `prepare_rover_runtime()` carrega uma única configuração imutável antes da seleção do modo e montagem do grafo.
+- `.env.example` documenta apenas os overrides de implantação suportados.
+- Suíte completa: **349 testes aprovados**.

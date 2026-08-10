@@ -617,3 +617,27 @@ recenter FIELD é tratado antes do despacho de tração e, após consolidar os e
 é emitido no máximo um setpoint de tração por ciclo. Essa abordagem reduz backlog
 de movimentos obsoletos sem alterar as regras de neutral-safety, FIELD-centric,
 Bluetooth ou lifecycle já estabelecidas.
+
+
+## S02.27 - Consolidação das configurações REST, segurança e transporte
+
+A configuração de execução passa a ser resolvida explicitamente em um único
+`RoverConfiguration` imutável. A precedência canônica é **defaults Python →
+JSON → variáveis de ambiente**, e o arquivo empacotado
+`config/rover_config.json` contém apenas overrides não redundantes (vazio nesta
+versão). O carregamento é realizado por `RoverConfigurationLoader` no
+composition root, antes da montagem de qualquer grafo de execução.
+
+A superfície de ambiente `ROVER_*` fica restrita a `ROVER_CONFIG_FILE`,
+`ROVER_HARDWARE_ENABLED`, `ROVER_SHUTDOWN_TOKEN`,
+`ROVER_HARDWARE_API_TOKEN`, `ROVER_REST_HOST` e `ROVER_REST_PORT`. Nomes
+descontinuados ou digitados incorretamente falham imediatamente, evitando
+configurações silenciosamente ignoradas. Regras operacionais, cinemáticas e
+de joystick permanecem no snapshot canônico/JSON, e não em variáveis de
+ambiente.
+
+`RestApiServer` deixa de importar configuração global: `host`, `port`, tokens
+de lifecycle/hardware e a exigência de confirmação são argumentos obrigatórios
+do construtor e são injetados pelo `bootstrap/rover_assembly.py`. Assim, o
+adaptador HTTP fica responsável apenas por transporte, autenticação e
+serialização, sem ler ambiente ou manter credenciais globais mutáveis.
