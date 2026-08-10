@@ -171,3 +171,13 @@ gate mínimo de 60%.
 - O snapshot da referência preserva `canonical_heading_deg`, `reference_heading_deg` e o heading operacional relativo normalizado para `[-180, 180)`.
 - `runtime_recenter_enabled`, `recenter_requires_neutral` e os códigos dos botões passam a ser configuração explícita e validada.
 - A suíte completa possui **258 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.
+
+## S02.23 - Compensação das diferenças de RPM
+
+- Relação mecânica canônica: dianteira `1:1,25` e traseira `1:1`.
+- Fator de magnitude dianteiro derivado como `1 / 1,25 = 0,8`; traseiro permanece `1,0`.
+- Fatores finais Mecanum: `FL=-0,8`, `RL=1,0`, `FR=-0,8`, `RR=1,0`.
+- Sinal do fator continua separado da polaridade global; magnitude realiza somente a compensação da transmissão.
+- `ManualDriveService` aplica os fatores após a cinemática lógica e antes do `MotorHardwarePort`.
+- Testes protegem a paridade entre constantes de transmissão, configuração e setpoints enviados ao hardware.
+- A suíte completa possui **260 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.

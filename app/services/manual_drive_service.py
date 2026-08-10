@@ -52,9 +52,10 @@ class ManualDriveService(ManualDrivePort):
                 "Mecanum motor codes must identify four distinct motors."
             )
         # Global motor polarity is applied exclusively at the EV3 hardware
-        # boundary. These Mecanum factors are a second, mode-specific layer;
-        # signed values are allowed because the front gear train reverses the
-        # logical wheel direction independently of installation polarity.
+        # boundary. These Mecanum factors are a second, mode-specific layer:
+        # their sign handles the front gear-train direction and their magnitude
+        # compensates the 1:1.25 front transmission. They are applied only
+        # after the logical kinematics and immediately before hardware writes.
         self._mecanum_speed_factors = (
             self._nonzero_factor(
                 mecanum_config.get("front_left_speed_factor", 1.0),

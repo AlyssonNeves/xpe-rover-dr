@@ -15,6 +15,18 @@ APPLICATION_VERSION = os.environ.get("ROVER_APPLICATION_VERSION", "0.1.0")
 REST_HOST = "0.0.0.0"
 REST_PORT = 8080
 
+# Mecanum drivetrain compensation. The front wheel train has a 1:1.25
+# transmission while the rear wheel train is direct (1:1). Commands sent to
+# the front wheels are therefore reduced by 1 / 1.25 = 0.8. The sign remains
+# a separate Mecanum direction concern; global motor polarity is applied only
+# at the EV3 hardware boundary.
+MECANUM_FRONT_GEAR_RATIO = 1.25
+MECANUM_REAR_GEAR_RATIO = 1.0
+MECANUM_FRONT_SPEED_FACTOR = (
+    MECANUM_REAR_GEAR_RATIO / MECANUM_FRONT_GEAR_RATIO
+)
+MECANUM_REAR_SPEED_FACTOR = 1.0
+
 REST_SHUTDOWN_TOKEN = os.environ.get("ROVER_SHUTDOWN_TOKEN")
 REST_HARDWARE_API_TOKEN = os.environ.get("ROVER_HARDWARE_API_TOKEN")
 
@@ -246,6 +258,20 @@ JOYSTICK_CONFIG = validate_joystick_configuration(JOYSTICK_CONFIG)
 
 DRIVE_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("drive", {}))
 MECANUM_CONFIG = copy.deepcopy(ROVER_JSON_CONFIG.get("mecanum", {}))
+# Keep explicit JSON overrides supported while providing the canonical
+# front/rear compensation values when individual factors are omitted.
+MECANUM_CONFIG.setdefault(
+    "front_left_speed_factor", -MECANUM_FRONT_SPEED_FACTOR
+)
+MECANUM_CONFIG.setdefault(
+    "rear_left_speed_factor", MECANUM_REAR_SPEED_FACTOR
+)
+MECANUM_CONFIG.setdefault(
+    "front_right_speed_factor", -MECANUM_FRONT_SPEED_FACTOR
+)
+MECANUM_CONFIG.setdefault(
+    "rear_right_speed_factor", MECANUM_REAR_SPEED_FACTOR
+)
 FIELD_HEADING_CONFIG = copy.deepcopy(
     ROVER_JSON_CONFIG.get("field_heading", {
         "sensor_code": "GYR",

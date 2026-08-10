@@ -16,9 +16,9 @@ MECANUM = {
     "rear_left_motor_code": "LMM",
     "front_right_motor_code": "RLM",
     "rear_right_motor_code": "RMM",
-    "front_left_speed_factor": -1.0,
+    "front_left_speed_factor": -0.8,
     "rear_left_speed_factor": 1.0,
-    "front_right_speed_factor": -1.0,
+    "front_right_speed_factor": -0.8,
     "rear_right_speed_factor": 1.0
 }
 
@@ -225,11 +225,11 @@ def test_mecanum_setpoint_drives_all_four_configured_motors():
     )
 
     assert result["success"] is True
-    assert result["setpoint"] == (-100, 200, 300, -400)
+    assert result["setpoint"] == (-80, 200, 240, -400)
     assert result["motor_codes"] == ["LLM", "LMM", "RLM", "RMM"]
     assert hardware.run_calls == [
-        ("LLM", -100), ("LMM", 200),
-        ("RLM", 300), ("RMM", -400)
+        ("LLM", -80), ("LMM", 200),
+        ("RLM", 240), ("RMM", -400)
     ]
 
 
@@ -257,6 +257,23 @@ def test_mecanum_independent_speed_factors_calibrate_each_wheel():
     assert hardware.run_calls == [
         ("LLM", 450), ("LMM", 500),
         ("RLM", 400), ("RMM", 550)
+    ]
+
+
+def test_mecanum_front_transmission_compensation_is_applied_before_hardware():
+    service, hardware = acquire_service()
+    hardware.run_calls[:] = []
+
+    result = service.apply_mecanum_setpoint(
+        "session-1", 500, 500, 500, 500
+    )
+
+    # Logical wheel setpoints arrive equal from the kinematics. Only the
+    # Mecanum physical-compensation layer reduces/inverts the front wheels.
+    assert result["setpoint"] == (-400, 500, -400, 500)
+    assert hardware.run_calls == [
+        ("LLM", -400), ("LMM", 500),
+        ("RLM", -400), ("RMM", 500)
     ]
 
 
@@ -334,8 +351,8 @@ def test_mecanum_signed_factors_are_independent_from_hardware_polarity():
         "session-1", 600, 600, 600, 600
     )
 
-    assert result["setpoint"] == (-600, 600, -600, 600)
+    assert result["setpoint"] == (-480, 600, -480, 600)
     assert hardware.run_calls == [
-        ("LLM", -600), ("LMM", 600),
-        ("RLM", -600), ("RMM", 600)
+        ("LLM", -480), ("LMM", 600),
+        ("RLM", -480), ("RMM", 600)
     ]

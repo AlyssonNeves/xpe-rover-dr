@@ -142,9 +142,9 @@
     "rear_left_motor_code": "LMM",
     "front_right_motor_code": "RLM",
     "rear_right_motor_code": "RMM",
-    "front_left_speed_factor": -1.0,
+    "front_left_speed_factor": -0.8,
     "rear_left_speed_factor": 1.0,
-    "front_right_speed_factor": -1.0,
+    "front_right_speed_factor": -0.8,
     "rear_right_speed_factor": 1.0,
     "strafe_compensation": 1.1
   },

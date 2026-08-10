@@ -82,7 +82,7 @@ def test_configuration_copy_and_invalid_files():
     assert mecanum["front_right_motor_code"] == "RLM"
     assert mecanum["rear_right_motor_code"] == "RMM"
     mecanum["front_left_speed_factor"] = 99.0
-    assert rover_config.get_mecanum_config()["front_left_speed_factor"] == -1.0
+    assert rover_config.get_mecanum_config()["front_left_speed_factor"] == -0.8
     assert rover_config.get_mecanum_config()["strafe_compensation"] == 1.1
     motors = rover_config.get_motor_definitions()
     assert motors["LLM"]["polarity"] == "inversed"
@@ -103,6 +103,25 @@ def test_configuration_copy_and_invalid_files():
             rover_config.load_json_configuration(path)
     finally:
         os.unlink(path)
+
+
+def test_mecanum_front_rear_speed_factors_match_transmission_ratio():
+    mecanum = rover_config.get_mecanum_config()
+
+    assert rover_config.MECANUM_FRONT_GEAR_RATIO == 1.25
+    assert rover_config.MECANUM_REAR_GEAR_RATIO == 1.0
+    assert rover_config.MECANUM_FRONT_SPEED_FACTOR == 0.8
+    assert rover_config.MECANUM_REAR_SPEED_FACTOR == 1.0
+    assert mecanum["front_left_speed_factor"] == -0.8
+    assert mecanum["front_right_speed_factor"] == -0.8
+    assert mecanum["rear_left_speed_factor"] == 1.0
+    assert mecanum["rear_right_speed_factor"] == 1.0
+    assert (
+        abs(mecanum["front_left_speed_factor"])
+        * rover_config.MECANUM_FRONT_GEAR_RATIO
+        == mecanum["rear_left_speed_factor"]
+        * rover_config.MECANUM_REAR_GEAR_RATIO
+    )
 
 
 def test_hardware_environment_overrides_json_default(monkeypatch):

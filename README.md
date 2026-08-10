@@ -534,3 +534,19 @@ Por segurança, o recenter somente é aceito com heading fresco e com os três
 eixos de tração (`X`, `Y` e `RX`) neutros. A referência é mantida em memória e
 normalizada para `[-180, 180)`. O botão de parada de emergência permanece no
 código 304 e o recenter utiliza o código 307.
+
+## S02.23 - Compensação das diferenças de RPM
+
+A calibração Mecanum passa a incorporar a diferença mecânica entre os conjuntos
+dianteiro e traseiro. O trem dianteiro utiliza relação `1:1,25`, enquanto o
+traseiro permanece em `1:1`; por isso, os comandos das rodas dianteiras recebem
+magnitude `0,8` (`1 / 1,25`) e as traseiras permanecem em `1,0`. Os sinais
+negativos dos fatores dianteiros continuam representando exclusivamente a
+inversão específica da transmissão introduzida no S02.12.
+
+A compensação permanece confinada ao `ManualDriveService`: a cinemática gera
+setpoints lógicos independentes do hardware e, imediatamente antes da escrita
+física, os fatores Mecanum transformam os comandos de `FL/RL/FR/RR`. A
+polaridade global continua sendo aplicada apenas pelo adaptador EV3. Isso evita
+duplicar correções mecânicas na cinemática, na orientação NOSE/TAIL ou no
+pipeline FIELD-centric.
