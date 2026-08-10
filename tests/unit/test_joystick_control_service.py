@@ -604,3 +604,51 @@ def test_manual_control_rejects_unknown_front_convention():
         assert "front" in str(error)
     else:
         raise AssertionError("Invalid Rover front was accepted")
+
+
+class SnapshotJoystickPort(FakeJoystickPort):
+    def __init__(self, snapshot):
+        super(SnapshotJoystickPort, self).__init__()
+        self.snapshot = dict(snapshot)
+        self.refresh_calls = []
+
+    def refresh_absolute_state(self, axis_codes):
+        self.refresh_calls.append(tuple(axis_codes))
+        return dict(self.snapshot)
+
+
+def test_connection_snapshot_confirms_neutral_without_dispatching_motion():
+    joystick = SnapshotJoystickPort({1: 127, 3: 127})
+    manual = FakeManualDrivePort()
+    service = JoystickControlService(
+        joystick, manual, poll_seconds=0.001
+    )
+
+    snapshot = service._refresh_connection_axis_state()
+
+    assert snapshot == {1: 127, 3: 127}
+    assert joystick.refresh_calls == [(1, 3)]
+    assert service._neutral_required is False
+    assert service._neutral_pending_axes == set()
+    assert manual.drive_calls == []
+    assert manual.mecanum_calls == []
+
+
+def test_connection_snapshot_blocks_non_neutral_mecanum_without_motor_command():
+    joystick = SnapshotJoystickPort({0: 255, 1: 127, 3: 127})
+    manual = FakeManualDrivePort()
+    service = JoystickControlService(
+        joystick, manual,
+        drive_mode=JoystickControlService.DRIVE_MECANUM,
+        centric=JoystickControlService.CENTRIC_CHASSIS,
+        poll_seconds=0.001
+    )
+
+    service._refresh_connection_axis_state()
+
+    assert joystick.refresh_calls == [(0, 1, 3)]
+    assert service._neutral_required is True
+    assert service._neutral_pending_axes == {0}
+    assert service._strafe > 0.0
+    assert manual.drive_calls == []
+    assert manual.mecanum_calls == []

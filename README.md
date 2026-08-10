@@ -550,3 +550,26 @@ física, os fatores Mecanum transformam os comandos de `FL/RL/FR/RR`. A
 polaridade global continua sendo aplicada apenas pelo adaptador EV3. Isso evita
 duplicar correções mecânicas na cinemática, na orientação NOSE/TAIL ou no
 pipeline FIELD-centric.
+
+## S02.24 - Robustez na descoberta dos dispositivos
+
+A descoberta do joystick deixa de confiar apenas no nome `Wireless Controller`
+e passa a aceitar somente um nó `evdev` que exponha os três eixos necessários
+à tração manual: `ABS_X` (0), `ABS_Y` (1) e `ABS_RX` (3). Assim, nós auxiliares
+de controles como o PS4, incluindo interfaces de touch e motion que reutilizam
+o mesmo nome, são fechados e ignorados antes da seleção do gamepad efetivo.
+
+A integração também passa a tratar explicitamente `evdev==1.1.2`: quando
+`InputDevice.absinfo()` não está disponível, o adaptador consulta
+`_input.ioctl_capabilities(fd)` para obter valores absolutos atuais. O mesmo
+mecanismo alimenta snapshots físicos dos eixos após conexão, descartando o
+histórico enfileirado e mantendo a neutral-safety barrier ativa se qualquer
+controle estiver fora do centro, sem emitir comandos de motor durante essa
+validação.
+
+Antes de solicitar uma conexão ativa ao BlueZ, o adaptador aguarda até `4,0 s`
+por uma reconexão passiva do dispositivo já pareado, dentro do timeout total de
+`10,0 s`. Quando a conexão ativa é necessária, `bluetoothctl` é controlado em
+modo interativo e a existência de um nó `evdev` utilizável é tratada como sinal
+autoritativo de prontidão. Falhas passam a incluir diagnóstico do BlueZ e dos
+eixos observados em todos os nós de mesmo nome.

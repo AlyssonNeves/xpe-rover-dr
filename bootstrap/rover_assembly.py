@@ -221,6 +221,9 @@ def build_local_manual_application(operation_mode_service=None,
             connection_timeout_seconds=joystick_config.get(
                 "connection_timeout_seconds", 10.0
             ),
+            passive_reconnect_seconds=joystick_config.get(
+                "passive_reconnect_seconds", 4.0
+            ),
             discovery_poll_seconds=joystick_config.get(
                 "discovery_poll_seconds", 0.25
             )

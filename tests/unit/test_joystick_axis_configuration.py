@@ -57,3 +57,26 @@ def test_auto_connect_requires_a_bluetooth_address():
             "auto_connect": True,
             "device_address": ""
         })
+
+
+def test_passive_reconnect_window_is_exposed_by_joystick_configuration():
+    joystick = rover_config.get_joystick_config()
+
+    assert joystick["passive_reconnect_seconds"] == 4.0
+    assert joystick["passive_reconnect_seconds"] < joystick[
+        "connection_timeout_seconds"
+    ]
+
+
+def test_passive_reconnect_window_must_fit_total_connection_timeout():
+    with pytest.raises(RuntimeError, match="passive_reconnect_seconds"):
+        rover_config.validate_joystick_configuration({
+            "axis_center": 127,
+            "axis_deadzone": 7,
+            "axis_max": 255,
+            "axis_response_intensity": 1.0,
+            "auto_connect": True,
+            "device_address": "AA:BB:CC:DD:EE:FF",
+            "connection_timeout_seconds": 1.0,
+            "passive_reconnect_seconds": 2.0
+        })

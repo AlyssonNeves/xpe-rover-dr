@@ -175,6 +175,9 @@ def validate_joystick_configuration(configuration):
         timeout_seconds = float(
             configuration.get("connection_timeout_seconds", 10.0)
         )
+        passive_reconnect_seconds = float(
+            configuration.get("passive_reconnect_seconds", 4.0)
+        )
         discovery_poll_seconds = float(
             configuration.get("discovery_poll_seconds", 0.25)
         )
@@ -209,6 +212,17 @@ def validate_joystick_configuration(configuration):
                     name
                 )
             )
+    if (not math.isfinite(passive_reconnect_seconds) or
+            passive_reconnect_seconds < 0.0):
+        raise RuntimeError(
+            "joystick.passive_reconnect_seconds must be finite and "
+            "non-negative."
+        )
+    if passive_reconnect_seconds > timeout_seconds:
+        raise RuntimeError(
+            "joystick.passive_reconnect_seconds must not exceed "
+            "connection_timeout_seconds."
+        )
     device_name = str(
         configuration.get("device_name", "Wireless Controller") or ""
     ).strip()
@@ -246,6 +260,7 @@ def validate_joystick_configuration(configuration):
     configuration["auto_connect"] = auto_connect
     configuration["connection_retry_seconds"] = retry_seconds
     configuration["connection_timeout_seconds"] = timeout_seconds
+    configuration["passive_reconnect_seconds"] = passive_reconnect_seconds
     configuration["discovery_poll_seconds"] = discovery_poll_seconds
     configuration["button_codes"] = {
         "emergency_stop": emergency_stop_code,

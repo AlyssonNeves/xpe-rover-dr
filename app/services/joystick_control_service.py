@@ -231,6 +231,7 @@ class JoystickControlService(object):
                     )
                 self._acquired = True
                 self._reset_axis_state_for_connection()
+                self._refresh_connection_axis_state()
                 self.logger.status(
                     "Local manual joystick connected: {}.".format(opened_name)
                 )
@@ -290,6 +291,70 @@ class JoystickControlService(object):
         self._strafe = 0.0
         self._translation = 0.0
         self._rotation = 0.0
+
+    def _refresh_connection_axis_state(self):
+        """Seeds the neutral safety gate from the physical stick position.
+
+        The evdev adapter discards queued movement history and returns a fresh
+        absolute snapshot. No motor command is emitted while this snapshot is
+        applied; movement remains blocked until every active traction axis is
+        neutral. Ports from earlier tests that do not expose the optional
+        snapshot operation keep the pre-S02.24 event-driven behavior.
+        """
+        refresh = getattr(self.joystick_port, "refresh_absolute_state", None)
+        if not callable(refresh):
+            return None
+
+        axis_codes = {self.AXIS_TRACTION, self.AXIS_STEERING}
+        if self.drive_mode == self.DRIVE_MECANUM:
+            axis_codes.add(self.AXIS_DIRECTION_HORIZONTAL)
+        requested_codes = tuple(sorted(axis_codes))
+        snapshot = refresh(requested_codes)
+        if not isinstance(snapshot, dict):
+            raise RuntimeError("Joystick axis snapshot must be a dictionary.")
+        missing = [
+            code for code in requested_codes if code not in snapshot
+        ]
+        if missing:
+            raise RuntimeError(
+                "Joystick axis snapshot is missing code(s): {0}.".format(
+                    ", ".join(str(code) for code in missing)
+                )
+            )
+
+        self._neutral_required = True
+        self._neutral_pending_axes = set(requested_codes)
+        for code in requested_codes:
+            self._apply_axis_snapshot_value(code, snapshot[code])
+        return snapshot
+
+    def _apply_axis_snapshot_value(self, code, raw_value):
+        """Updates internal axis state without dispatching motor commands."""
+        if code == self.AXIS_DIRECTION_HORIZONTAL:
+            self._strafe = self._shaped_stick_axis(raw_value)
+            normalized = self._strafe
+        elif code == self.AXIS_TRACTION:
+            self._translation = -self._shaped_stick_axis(raw_value)
+            normalized = self._translation
+        elif code == self.AXIS_STEERING:
+            self._rotation = self._shaped_stick_axis(raw_value)
+            normalized = self._rotation
+        else:
+            return
+
+        if normalized == 0.0:
+            self._neutral_pending_axes.discard(code)
+
+        controls_are_neutral = (
+            self._translation == 0.0 and
+            self._rotation == 0.0 and
+            (self.drive_mode != self.DRIVE_MECANUM or self._strafe == 0.0)
+        )
+        if not self._neutral_pending_axes and controls_are_neutral:
+            self._neutral_required = False
+            self.logger.status(
+                "Joystick startup snapshot neutral; manual motion enabled."
+            )
 
     def _notify_connection_error(self, message):
         try:

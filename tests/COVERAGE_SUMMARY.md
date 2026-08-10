@@ -181,3 +181,18 @@ gate mínimo de 60%.
 - `ManualDriveService` aplica os fatores após a cinemática lógica e antes do `MotorHardwarePort`.
 - Testes protegem a paridade entre constantes de transmissão, configuração e setpoints enviados ao hardware.
 - A suíte completa possui **260 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.
+
+## S02.24 - Robustez na descoberta dos dispositivos
+
+- Descoberta `evdev` exige `ABS_X` (0), `ABS_Y` (1) e `ABS_RX` (3), ignorando nós auxiliares de mesmo nome.
+- Compatibilidade explícita com `evdev==1.1.2` usa leitura fresca por `ioctl_capabilities(fd)` quando `InputDevice.absinfo()` não existe.
+- `refresh_absolute_state()` descarta histórico enfileirado e falha explicitamente quando qualquer eixo solicitado não pode ser lido.
+- A posição física atual é aplicada à barreira de neutralidade após a conexão sem emissão de comandos de motor.
+- `passive_reconnect_seconds = 4.0` permite recuperação natural do dispositivo pareado antes de uma tentativa ativa pelo BlueZ.
+- A fase passiva e a ativa compartilham o timeout total de conexão de `10.0 s`.
+- `bluetoothctl` é acionado em modo interativo e a prontidão do nó `evdev` prevalece sobre a permanência do processo BlueZ.
+- Falhas incluem saída limpa do BlueZ e diagnóstico dos eixos observados nos nós `Wireless Controller`.
+- Suíte completa: **273 testes aprovados**.
+- Cobertura combinada de linhas e branches: **75%**.
+- Gate de arquitetura: aprovado.
+- Compatibilidade sintática de produção: **Python 3.5** aprovada.
