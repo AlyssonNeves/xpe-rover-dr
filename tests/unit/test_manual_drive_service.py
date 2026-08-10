@@ -150,3 +150,57 @@ def test_second_session_cannot_take_manual_motor_ownership():
 
     assert result["success"] is False
     assert "already owned" in result["error"]
+
+
+class RecordingStatePublisher(object):
+    def __init__(self):
+        self.published = []
+
+    def publish_motor_state(self, motor_code, state):
+        self.published.append((motor_code, dict(state)))
+
+
+def test_direct_drive_publishes_state_through_dedicated_port():
+    hardware = FakeHardware()
+    publisher = RecordingStatePublisher()
+    service = ManualDriveService(
+        hardware, DRIVE, JOYSTICK, default_stop_action="brake",
+        motor_state_publisher_port=publisher
+    )
+    assert service.acquire("session-1")["success"] is True
+    publisher.published[:] = []
+
+    result = service.apply_drive_setpoint("session-1", 500, -400)
+
+    assert result["success"] is True
+    assert [(code, state["speed"]) for code, state in publisher.published] == [
+        ("LLM", 500), ("RLM", -400)
+    ]
+    assert all(
+        state["source"] == "local-manual-direct"
+        for _, state in publisher.published
+    )
+    assert all(
+        state["watchdog_enabled"] is False
+        for _, state in publisher.published
+    )
+
+
+def test_emergency_stop_publishes_stopped_state_without_using_store_directly():
+    hardware = FakeHardware()
+    publisher = RecordingStatePublisher()
+    service = ManualDriveService(
+        hardware, DRIVE, JOYSTICK, default_stop_action="brake",
+        motor_state_publisher_port=publisher
+    )
+    assert service.acquire("session-1")["success"] is True
+    publisher.published[:] = []
+
+    result = service.emergency_stop()
+
+    assert result["success"] is True
+    assert [code for code, _ in publisher.published] == [
+        "LLM", "RLM", "LMM", "RMM"
+    ]
+    assert all(state["speed"] == 0 for _, state in publisher.published)
+    assert all(state["state"] == [] for _, state in publisher.published)

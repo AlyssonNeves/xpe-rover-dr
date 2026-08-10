@@ -33,3 +33,9 @@ do descritor/evdev interrompem imediatamente o movimento, invalidam a sessão
 manual e exigem neutralidade dos eixos antes de uma retomada explícita. A suíte
 completa possui **121 testes aprovados** e cobertura global de **73%**, acima do
 gate mínimo de 60%.
+
+## S02.08 - Fronteiras arquiteturais do controle manual
+
+- Contratos explícitos: `JoystickPort`, `ManualDrivePort`, `MotorHardwarePort` e `MotorStatePublisherPort`.
+- Publicação de estado do controle direto desacoplada do repositório por `MotorStateStorePublisherAdapter`.
+- Testes AST impedem dependências do núcleo manual em adaptadores, `MotorMonitor` e `MotorStateStore`.

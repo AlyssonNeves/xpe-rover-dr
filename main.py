@@ -15,6 +15,7 @@ from adapters.out_ev3_operation_status import Ev3OperationStatusAdapter
 from adapters.out_ev3_motor_hardware import Ev3MotorHardwareAdapter
 from adapters.out_ev3_operator_alert import Ev3OperatorAlertAdapter
 from adapters.out_motor_monitor import MotorMonitorAdapter
+from adapters.out_motor_state_publisher import MotorStateStorePublisherAdapter
 from adapters.out_rover_state_query import RoverStateQueryAdapter
 from adapters.out_sensor_monitor import SensorMonitorAdapter
 from app import rover_config
@@ -91,11 +92,15 @@ def build_application(operation_mode_service=None, joystick_port=None):
             motor_registry=motor_monitor.motor_registry,
             default_stop_action=rover_config.MOTOR_DEFAULT_STOP_ACTION
         )
+        motor_state_publisher_port = MotorStateStorePublisherAdapter(
+            motor_state_store
+        )
         manual_drive_port = ManualDriveService(
             motor_hardware_port=motor_hardware_port,
             drive_config=rover_config.get_drive_config(),
             joystick_config=joystick_config,
-            default_stop_action=rover_config.MOTOR_DEFAULT_STOP_ACTION
+            default_stop_action=rover_config.MOTOR_DEFAULT_STOP_ACTION,
+            motor_state_publisher_port=motor_state_publisher_port
         )
         joystick_control_service = JoystickControlService(
             joystick_port=joystick_port,

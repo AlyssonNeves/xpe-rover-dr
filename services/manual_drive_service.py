@@ -4,6 +4,7 @@
 """Synchronous motor-control service for LOCAL + MANUAL operation."""
 
 import threading
+from datetime import datetime
 
 from ports.manual_drive_port import ManualDrivePort
 
@@ -17,7 +18,8 @@ class ManualDriveService(ManualDrivePort):
     """
 
     def __init__(self, motor_hardware_port, drive_config, joystick_config,
-                 default_stop_action="brake"):
+                 default_stop_action="brake",
+                 motor_state_publisher_port=None):
         if motor_hardware_port is None:
             raise ValueError("motor_hardware_port is required.")
         if not isinstance(drive_config, dict):
@@ -26,6 +28,7 @@ class ManualDriveService(ManualDrivePort):
             raise ValueError("joystick_config is required.")
 
         self._hardware = motor_hardware_port
+        self._state_publisher = motor_state_publisher_port
         self._left_motor_code = drive_config.get("left_motor_code", "LLM")
         self._right_motor_code = drive_config.get("right_motor_code", "RLM")
         self._left_auxiliary_motor_code = joystick_config.get(
@@ -75,6 +78,10 @@ class ManualDriveService(ManualDrivePort):
                         or "Motor hardware is unavailable."
                     )
                     self._stop_codes(connected)
+                    self._publish_state(
+                        motor_code, speed_sp=0, connected=False,
+                        running=False, hardware_error=error
+                    )
                     return {
                         "success": False,
                         "failed_motor_code": motor_code,
@@ -82,6 +89,9 @@ class ManualDriveService(ManualDrivePort):
                         "hardware_error": error
                     }
                 connected.append(motor_code)
+                self._publish_state(
+                    motor_code, speed_sp=0, connected=True, running=False
+                )
 
             self._controlled_motor_codes = controlled
             self._session_id = session_id
@@ -135,6 +145,12 @@ class ManualDriveService(ManualDrivePort):
                 )
                 return self._failure(self._right_motor_code, right_result)
 
+            self._publish_state(
+                self._left_motor_code, left_speed, True, True
+            )
+            self._publish_state(
+                self._right_motor_code, right_speed, True, True
+            )
             return {
                 "success": True,
                 "direct_hardware": True,
@@ -156,15 +172,21 @@ class ManualDriveService(ManualDrivePort):
 
             speed = int(speed_sp)
             if speed == 0:
-                return self._hardware.stop(
+                result = self._hardware.stop(
                     motor_code,
                     stop_action or self._default_stop_action,
                     connected_only=True
                 )
+                if result.get("success"):
+                    self._publish_state(
+                        motor_code, speed_sp=0, connected=True, running=False
+                    )
+                return result
 
             result = self._hardware.run_forever(motor_code, speed)
             if not result.get("success"):
                 return self._failure(motor_code, result)
+            self._publish_state(motor_code, speed, True, True)
             return {
                 "success": True,
                 "direct_hardware": True,
@@ -212,6 +234,17 @@ class ManualDriveService(ManualDrivePort):
                 stop_action or self._default_stop_action,
                 connected_only=True
             )
+            if result.get("success"):
+                self._publish_state(
+                    motor_code, speed_sp=0, connected=True, running=False
+                )
+            else:
+                self._publish_state(
+                    motor_code, speed_sp=0, connected=True, running=False,
+                    hardware_error=(
+                        result.get("hardware_error") or result.get("error")
+                    )
+                )
             if not result.get("success") and first_failure is None:
                 first_failure = self._failure(motor_code, result)
         if first_failure is not None:
@@ -221,6 +254,36 @@ class ManualDriveService(ManualDrivePort):
             "direct_hardware": True,
             "watchdog_enabled": False
         }
+
+    def _publish_state(
+            self, motor_code, speed_sp, connected, running,
+            hardware_error=None):
+        """Publishes state through a port, never through a concrete store."""
+        if self._state_publisher is None:
+            return
+        definition = self._hardware.get_motor_definition(motor_code) or {}
+        snapshot = {
+            "code": motor_code,
+            "name": definition.get("name"),
+            "address": definition.get("address"),
+            "motor_class": definition.get("motor_class"),
+            "polarity": definition.get("polarity"),
+            "speed": int(speed_sp),
+            "state": ["running"] if running else [],
+            "connected": bool(connected),
+            "source": "local-manual-direct",
+            "error": hardware_error,
+            "lifecycle_state": "RUNNING" if running else "IDLE",
+            "command_queue_size": 0,
+            "active_command_id": None,
+            "last_safety_event": None,
+            "manual_control": True,
+            "watchdog_enabled": False,
+            "updated_at": datetime.now().strftime(
+                "%d/%m/%y %H:%M:%S.%f"
+            )[:-3]
+        }
+        self._state_publisher.publish_motor_state(motor_code, snapshot)
 
     @staticmethod
     def _failure(motor_code, result):

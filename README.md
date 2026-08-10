@@ -355,3 +355,10 @@ beep, and the general status screen announces `Rover D R Online` without making
 audio availability a startup requirement. Bluetooth recovery states, startup
 progress screens and the consolidated PBM cache remain reserved for later
 increments.
+
+### S02.08 - Fronteiras arquiteturais do controle manual
+
+O caminho `LOCAL + MANUAL` utiliza contratos explícitos para entrada do joystick,
+controle síncrono, escrita física e publicação de estado. O serviço de controle
+manual não acessa `MotorMonitor`, `MotorStateStore` ou adaptadores concretos;
+estados produzidos pelo caminho direto são publicados por `MotorStatePublisherPort`.
