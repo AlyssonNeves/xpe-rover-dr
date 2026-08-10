@@ -15,23 +15,21 @@ class FakeApplication(object):
 def test_mode_selection_defaults_without_physical_hardware(monkeypatch):
     monkeypatch.setattr(main_module.rover_config, "HARDWARE_ENABLED", False)
     service = main_module._select_operation_mode()
-    assert service.get_mode() == {
-        "command_mode": "LOCAL", "operation_mode": "MANUAL"
-    }
+    assert service.get_mode() == {"command": "LOCAL", "control": "MANUAL"}
 
 
 def test_mode_selection_uses_ev3_selector_in_hardware_mode(monkeypatch):
     monkeypatch.setattr(main_module.rover_config, "HARDWARE_ENABLED", True)
     selector = object()
     monkeypatch.setattr(
-        main_module, "Ev3OperationModeSelectorAdapter", lambda: selector
+        main_module, "Ev3CommandControlSelectorAdapter", lambda: selector
     )
-    selected = {"command_mode": "REMOTE", "operation_mode": "AUTOMATIC"}
+    selected = {"command": "REMOTE", "control": None}
 
     class FakeModeService(object):
-        def __init__(self, selector_port=None):
-            assert selector_port is selector
-        def select(self): return selected
+        def __init__(self, command_control_selector_port=None):
+            assert command_control_selector_port is selector
+        def select_command_control(self): return selected
         def get_mode(self): return dict(selected)
 
     monkeypatch.setattr(main_module, "OperationModeService", FakeModeService)

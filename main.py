@@ -10,7 +10,7 @@ import sys
 from adapters.in_rest_api_server import RestApiServer
 from adapters.out_controller_monitor import ControllerMonitorAdapter
 from adapters.out_drive_service import DriveServiceAdapter
-from adapters.out_ev3_operation_mode_selector import Ev3OperationModeSelectorAdapter
+from adapters.out_ev3_command_control_selector import Ev3CommandControlSelectorAdapter
 from adapters.out_ev3_operation_status import Ev3OperationStatusAdapter
 from adapters.out_ev3_operator_alert import Ev3OperatorAlertAdapter
 from adapters.out_motor_monitor import MotorMonitorAdapter
@@ -19,7 +19,7 @@ from adapters.out_sensor_monitor import SensorMonitorAdapter
 from app import rover_config
 from app.command_service import CommandService
 from app.operation_mode_service import (
-    CommandModes, OperationModes, OperationModeService
+    Commands, Controls, OperationModeService
 )
 from app.rover_application import RoverApplication
 from app.rover_config import REST_HOST, REST_PORT
@@ -76,13 +76,13 @@ def build_application(operation_mode_service=None, joystick_port=None):
         operation_mode_service.get_mode()
         if operation_mode_service is not None
         else {
-            "command_mode": CommandModes.LOCAL,
-            "operation_mode": OperationModes.MANUAL
+            "command": Commands.LOCAL,
+            "control": Controls.MANUAL
         }
     )
     if (joystick_port is not None and
-            selected_mode.get("command_mode") == CommandModes.LOCAL and
-            selected_mode.get("operation_mode") == OperationModes.MANUAL):
+            selected_mode.get("command") == Commands.LOCAL and
+            selected_mode.get("control") == Controls.MANUAL):
         joystick_config = rover_config.get_joystick_config()
         joystick_control_service = JoystickControlService(
             joystick_port=joystick_port,
@@ -192,16 +192,16 @@ def _select_operation_mode():
         return service
 
     service = OperationModeService(
-        selector_port=Ev3OperationModeSelectorAdapter()
+        command_control_selector_port=Ev3CommandControlSelectorAdapter()
     )
     AppLogger.status("Waiting for the operator to select the Rover mode.")
-    selected = service.select()
+    selected = service.select_command_control()
     if selected is None:
         AppLogger.status("Rover startup cancelled by the operator.")
         return None
     AppLogger.status(
         "Selected mode: {}/{}.".format(
-            selected["command_mode"], selected["operation_mode"]
+            selected["command"], selected["control"] or "N/A"
         )
     )
     return service

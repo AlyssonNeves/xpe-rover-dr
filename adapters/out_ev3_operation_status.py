@@ -151,10 +151,10 @@ class Ev3OperationStatusAdapter(object):
             "ip": self._read_ip_address(),
             "joystick": self._read_joystick_status(),
             "command": self._display_value(
-                selected_mode.get("command_mode", "Unavailable")
+                selected_mode.get("command", "Unavailable")
             ),
             "control": self._display_value(
-                selected_mode.get("operation_mode", "Unavailable")
+                selected_mode.get("control") or "N/A"
             )
         }
 

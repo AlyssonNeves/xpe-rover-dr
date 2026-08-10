@@ -18,3 +18,10 @@ de execução/CI e não deve ser versionado.
 O marco S02.03 acrescenta a validação dos assets gráficos PBM e do carregamento das
 telas de seleção de modo do EV3. A suíte completa possui **84 testes aprovados** e cobertura global de **71%**,
 acima do gate mínimo de 60%.
+
+## S02.05
+
+O marco S02.05 separa explicitamente os parâmetros **Command** e **Control**, aplica
+`Control = None` quando o comando é `REMOTE` e valida a navegação por linhas na tela
+gráfica do EV3. A suíte completa possui **100 testes aprovados** e cobertura global de
+**72%**, acima do gate mínimo de 60%.

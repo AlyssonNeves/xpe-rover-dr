@@ -23,6 +23,8 @@ pode ser executado sem hardware EV3 físico.
 - controle manual local por joystick sobre as portas existentes, incluindo tração diferencial, motores auxiliares e parada de emergência.
 - integração Linux `evdev` por adapter dedicado para descoberta e leitura do joystick;
 - telas gráficas PBM para a seleção inicial dos modos no display do EV3, com validação de formato e dimensões.
+- monitoração de bateria, rede, joystick e feedback operacional no display do EV3;
+- seleção explícita de Command & Control, com `Control` não aplicável em `REMOTE` e navegação por linhas no brick.
 
 ## Execução
 

@@ -81,8 +81,8 @@ class Ev3OperationStatusAdapterTests(unittest.TestCase):
     def test_read_values_combines_battery_network_joystick_and_modes(self):
         mode_service = mock.Mock()
         mode_service.get_mode.return_value = {
-            "command_mode": "LOCAL",
-            "operation_mode": "MANUAL"
+            "command": "LOCAL",
+            "control": "MANUAL"
         }
         adapter = Ev3OperationStatusAdapter(mode_service)
 
@@ -104,6 +104,25 @@ class Ev3OperationStatusAdapterTests(unittest.TestCase):
             },
             values
         )
+
+    def test_remote_mode_displays_control_as_not_applicable(self):
+        mode_service = mock.Mock()
+        mode_service.get_mode.return_value = {
+            "command": "REMOTE",
+            "control": None
+        }
+        adapter = Ev3OperationStatusAdapter(mode_service)
+
+        with mock.patch.object(
+                adapter, "_read_battery_percentage", return_value="92%"), \
+                mock.patch.object(
+                    adapter, "_read_ip_address", return_value="192.168.0.10"), \
+                mock.patch.object(
+                    adapter, "_read_joystick_status", return_value="Connected"):
+            values = adapter._read_values()
+
+        self.assertEqual("Remote", values["command"])
+        self.assertEqual("N/A", values["control"])
 
     def test_draw_places_all_five_status_values_and_updates_display(self):
         adapter = Ev3OperationStatusAdapter()
