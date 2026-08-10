@@ -32,6 +32,7 @@ from app.services.startup_error_notifier import StartupErrorNotifier
 from infrastructure.ev3.ev3dev2_motor_gateway import (
     Ev3Dev2MotorGateway, Ev3Dev2MotorGatewayError
 )
+from infrastructure.ev3.screen_image import warm_monochrome_screen_cache
 from infrastructure.logging.app_logger import AppLogger
 from infrastructure.monitoring.controller_monitor import ControllerMonitor
 from infrastructure.monitoring.motor_monitor import MotorMonitor
@@ -261,6 +262,28 @@ def build_standard_application(operation_mode_service=None):
     return application
 
 
+
+def _prepare_ev3_screen_cache():
+    """Preloads ready-to-use PBM screens without runtime conversion."""
+    result = warm_monochrome_screen_cache()
+    AppLogger.status(
+        "EV3 PBM screens ready: {0} screen(s), {1} memory hit(s), "
+        "{2} loaded from cache.".format(
+            result["total"],
+            result["memory_hits"],
+            result["loaded"]
+        )
+    )
+    if result["failed"]:
+        AppLogger.warning(
+            "EV3 screen cache could not load {0} PBM screen(s); affected "
+            "screens will retry during display.".format(
+                len(result["failed"])
+            )
+        )
+    return result
+
+
 def validate_startup_configuration():
     """Validates startup security and reports errors to the EV3 when possible."""
     try:
@@ -316,9 +339,11 @@ def select_operation_mode():
 
 
 def prepare_rover_application():
-    """Validates startup, selects the mode and assembles exactly one graph."""
+    """Validates startup, preloads EV3 screens and assembles one graph."""
     if not validate_startup_configuration():
         return None
+    if rover_config.HARDWARE_ENABLED:
+        _prepare_ev3_screen_cache()
     operation_mode_service = select_operation_mode()
     if operation_mode_service is None:
         return None

@@ -98,6 +98,7 @@ class Ev3CommandControlSelectorAdapterTests(unittest.TestCase):
             self.assertTrue(filename.startswith("Screen 02 - Command Control"))
             path = adapter._asset_path(*modes)
             self.assertTrue(os.path.isfile(path), path)
+            self.assertIn(os.path.join("assets", "screens", "cache"), path)
             background = adapter._load_background(*modes)
             self.assertEqual((178, 128), background.size)
             self.assertEqual("1", background.mode)

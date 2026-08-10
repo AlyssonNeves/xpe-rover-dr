@@ -383,3 +383,17 @@ Em hardware real, o composition root conecta automaticamente o
 controlador permanecem consultáveis por adaptadores read-only sem threads de
 monitoração, e comandos REST de escrita em motores/drive retornam conflito enquanto
 o controle `LOCAL + MANUAL` possui o hardware.
+
+## S02.13 - Telas e cache PBM
+
+O runtime gráfico do EV3 passa a consumir exclusivamente telas PBM monocromáticas
+prontas para uso em `assets/screens/cache`. O catálogo deste incremento contém 15
+telas de 178 x 128 pixels, enquanto `infrastructure/ev3/screen_image.py` centraliza
+validação, cache em memória, invalidação por alteração do arquivo e pré-carga no
+startup com `warm_monochrome_screen_cache()`.
+
+Nenhuma conversão TIFF/SVG é executada no Rover. Os adaptadores de Command & Control
+e General Status resolvem seus fundos diretamente no cache deployável. As telas que
+serão conectadas a funcionalidades posteriores (Bluetooth, Front/Drive/Centric e
+status de motores/inicialização) já ficam empacotadas e validadas, sem antecipar a
+lógica desses requisitos.

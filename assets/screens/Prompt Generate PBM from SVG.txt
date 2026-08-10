@@ -1,0 +1,423 @@
+# Converting SVG Groups into LEGO EV3 PBM Screens
+
+## Role
+
+Act as an expert in vector image processing, SVG files, Pillow, monochrome conversion, and screen generation for the LEGO EV3 display.
+
+Your task is not merely to explain the procedure or generate a program for later execution. You must actually open and process the SVG file provided by the user and deliver the resulting PBM files.
+
+## Objective
+
+Receive an SVG file containing multiple graphic groups and convert each group that represents an independent screen into a separate monochrome PBM file.
+
+At the end, deliver a single ZIP file containing all generated PBM files.
+
+## Input File
+
+The user will provide a file in the following format:
+
+```text
+.svg
+```
+
+The SVG may contain:
+
+* `<g>` groups;
+* nested groups;
+* identifiers in the `id` attribute;
+* names in `inkscape:label`, `aria-label`, or equivalent attributes;
+* vector shapes;
+* text;
+* embedded images;
+* backgrounds;
+* transparency;
+* geometric transformations;
+* hidden elements.
+
+## Screen Identification
+
+Analyze the SVG XML structure and identify the groups that represent independent screens.
+
+Use the following priority:
+
+1. top-level groups directly associated with the main layer;
+2. groups with an `inkscape:label`;
+3. groups with a descriptive `id`;
+4. groups explicitly identified as a screen, page, frame, or equivalent.
+
+Do not automatically convert auxiliary subgroups such as:
+
+* internal icons;
+* isolated text elements;
+* logos;
+* borders;
+* components that belong to a larger screen.
+
+When nested groups exist, consider the outermost group that represents a complete composition as the screen.
+
+If the SVG contains only clearly separated top-level groups, generate one screen for each of those groups.
+
+## Isolating Each Group
+
+For each group identified as a screen:
+
+1. create an independent copy of the SVG;
+2. keep only the corresponding group visible;
+3. preserve any required ancestor elements, including:
+
+   * styles;
+   * definitions;
+   * fonts;
+   * masks;
+   * gradients;
+   * symbols;
+   * filters;
+   * transformations;
+4. hide or remove all other groups;
+5. preserve the original position of the group within the canvas;
+6. do not reposition the group based only on its bounding box;
+7. do not modify icons, text, or logos separately.
+
+Each screen must retain the same framing and coordinate system as the original screen.
+
+## Required Dimensions
+
+Every screen must be exactly:
+
+```text
+178 × 128 pixels
+```
+
+This size is mandatory for compatibility with the LEGO EV3 display.
+
+### Size Adjustment Rules
+
+If the original SVG already has a canvas or aspect ratio equivalent to `178 × 128`:
+
+* render it directly at that resolution;
+* fully preserve positions and proportions.
+
+If the SVG has different dimensions:
+
+* adjust the complete canvas to `178 × 128`;
+* preserve the content aspect ratio;
+* do not distort elements;
+* do not crop any part of the artwork;
+* center the adjusted canvas when necessary;
+* fill unused areas with white.
+
+Do not scale each individual group to fill the entire screen. Scaling must be based on the complete original canvas so that all screens retain consistent relative alignment.
+
+## Transparency Handling
+
+Before monochrome conversion:
+
+1. composite all transparent areas over a white background;
+2. preserve opaque areas normally;
+3. do not convert transparency into black;
+4. remove the alpha channel from the intermediate result.
+
+The rendered result must be equivalent to an RGB image, or an RGBA image already composited over white.
+
+## Intermediate Rendering
+
+Render each isolated group as a raster image with the following dimensions:
+
+```text
+178 × 128 pixels
+```
+
+Use high-quality rendering that preserves:
+
+* text;
+* shapes;
+* lines;
+* stroke widths;
+* transformations;
+* embedded images;
+* original positions.
+
+After rendering, apply exactly the image-processing procedure described below.
+
+## Grayscale Conversion
+
+Convert the entire screen to 8-bit grayscale mode `L`.
+
+Conceptual reference:
+
+```python
+grayscale = source_image.convert("L")
+```
+
+In this mode:
+
+* `0` represents black;
+* `255` represents white;
+* intermediate values represent shades of gray.
+
+The conversion must be applied to the entire screen.
+
+## Monochrome Conversion
+
+Convert the grayscale image into a 1-bit monochrome image.
+
+Floyd–Steinberg dithering must be used.
+
+Conceptual reference:
+
+```python
+monochrome = grayscale.convert(
+    "1",
+    dither=Image.FLOYDSTEINBERG
+)
+```
+
+The final image must contain only:
+
+* black pixels;
+* white pixels.
+
+Do not use:
+
+* a simple fixed threshold;
+* conversion without dithering;
+* grayscale tones in the final file;
+* transparency;
+* a color palette;
+* automatic color inversion.
+
+Floyd–Steinberg dithering must be applied to the entire image.
+
+## Screen Validation
+
+Before saving each file, confirm all of the following:
+
+```text
+Width: 178 pixels
+Height: 128 pixels
+Mode: 1-bit monochrome
+Colors: black and white only
+Format: PBM
+```
+
+Reject or correct any result that:
+
+* has dimensions other than `178 × 128`;
+* remains in RGB, RGBA, grayscale, or palette mode;
+* contains an alpha channel;
+* has been cropped;
+* is empty because of an incorrect group-selection process;
+* is completely black or completely white because of a rendering failure.
+
+A screen may be predominantly white or black only when this accurately reflects the original group content.
+
+## File Naming
+
+Save each PBM file using the corresponding group name.
+
+Use the following priority when determining the name:
+
+1. `inkscape:label`;
+2. `aria-label`;
+3. `id`;
+4. a name or title associated with the group;
+5. a sequential name, only when no name is available.
+
+Examples:
+
+```text
+Screen 01 - Initialization Error.pbm
+Screen 02 - Command Control.pbm
+General Status.pbm
+Battery Warning.pbm
+```
+
+### Filename Sanitization
+
+When creating the filename:
+
+* preserve spaces;
+* preserve uppercase and lowercase letters;
+* preserve numbers;
+* preserve hyphens and underscores;
+* remove characters prohibited in filenames;
+* remove forward slashes `/` and backslashes `\`;
+* remove colons, asterisks, question marks, and quotation marks;
+* remove leading and trailing spaces;
+* replace empty names with `Screen 01`, `Screen 02`, and so on;
+* ensure that no duplicate filenames exist.
+
+If two groups generate the same name, append a numeric suffix:
+
+```text
+General Status.pbm
+General Status 02.pbm
+General Status 03.pbm
+```
+
+Do not use generic names such as:
+
+```text
+group1.pbm
+path123.pbm
+g456.pbm
+```
+
+when a more descriptive label exists in the SVG.
+
+## PBM Format
+
+Save the files as genuine monochrome PBM files.
+
+Preferably, use binary PBM:
+
+```text
+P4
+```
+
+Do not save PNG, TIFF, JPEG, or PGM files and merely rename their extensions to `.pbm`.
+
+Validate the file header and contents to ensure that each file is a real and compatible PBM file.
+
+## ZIP File Structure
+
+Create a single ZIP file with the following structure:
+
+```text
+EV3_PBM_Screens.zip
+├── Screen 01 - Initialization Error.pbm
+├── Screen 02 - Command Control.pbm
+├── Screen 03 - Drive Selection.pbm
+├── ...
+└── conversion_report.txt
+```
+
+The PBM files must be placed directly in the root of the ZIP file, without unnecessary directories.
+
+## Conversion Report
+
+Include the following file in the ZIP:
+
+```text
+conversion_report.txt
+```
+
+The report must include:
+
+* source SVG filename;
+* original SVG dimensions;
+* final dimensions used;
+* number of groups analyzed;
+* number of screens identified;
+* number of PBM files generated;
+* original name of each group;
+* corresponding PBM filename;
+* dimensions of each file;
+* image mode;
+* confirmation that Floyd–Steinberg dithering was used;
+* any warnings or issues encountered.
+
+Example:
+
+```text
+Source file: EV3 Screens.svg
+Original dimensions: 178 × 128
+Final dimensions: 178 × 128
+
+Groups analyzed: 15
+Screens identified: 13
+PBM files generated: 13
+
+1. Group: Screen 01 - Initialization Error
+   File: Screen 01 - Initialization Error.pbm
+   Dimensions: 178 × 128
+   Mode: 1-bit
+   Dithering: Floyd–Steinberg
+   Status: OK
+```
+
+## Visual Verification
+
+Before delivery:
+
+1. open every generated PBM file;
+2. verify that the content matches the correct group;
+3. confirm that text and drawings are visible;
+4. confirm that no elements from other groups appear;
+5. confirm that alignment is consistent across all screens;
+6. confirm that no relevant elements were cropped;
+7. confirm that transparent backgrounds were converted to white;
+8. confirm that all images are exactly `178 × 128`.
+
+When possible, generate an internal visual preview for verification, but do not include extra files in the ZIP unless they are required to demonstrate an error.
+
+## Error Handling
+
+If a group cannot be converted:
+
+* continue processing the remaining groups;
+* record the issue in the report;
+* identify the affected group;
+* clearly explain the reason;
+* do not replace the failed group with an empty screen;
+* do not silently omit the problem.
+
+If no valid groups are identified:
+
+* analyze the layers and nested groups again;
+* search for labels and identifiers;
+* verify whether elements are grouped by layer;
+* do not generate an empty ZIP file;
+* clearly explain why the screens could not be identified.
+
+## Restrictions
+
+Do not provide only a description of the process.
+
+Do not deliver only source code.
+
+Do not ask the user to execute scripts locally.
+
+Do not convert the entire SVG into a single screen unless only one valid screen group exists.
+
+Do not export every individual graphic element as a separate screen.
+
+Do not alter the visual layout of the groups.
+
+Do not use OCR to reconstruct text.
+
+Do not replace fonts or vector elements unless strictly necessary.
+
+Do not add borders, captions, watermarks, or visible numbering to the screens.
+
+Do not rename files using arbitrary names.
+
+## Acceptance Criteria
+
+The task will be considered complete only when:
+
+* every group corresponding to a screen has been processed;
+* every screen has been saved as an independent PBM file;
+* every PBM file is exactly `178 × 128`;
+* every file is in 1-bit monochrome mode;
+* Floyd–Steinberg dithering has been applied;
+* filenames correspond to the group names;
+* every file has been validated;
+* the conversion report is included;
+* a single ZIP file is available for delivery.
+
+## Final Delivery
+
+Deliver the following file directly:
+
+```text
+EV3_PBM_Screens.zip
+```
+
+After generating the file, provide only a concise summary containing:
+
+* number of screens converted;
+* number of errors, if any;
+* confirmation of the `178 × 128` dimensions;
+* confirmation of the monochrome PBM format;
+* a link or attachment for obtaining the ZIP file.

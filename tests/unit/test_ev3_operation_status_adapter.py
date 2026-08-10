@@ -46,6 +46,7 @@ class Ev3OperationStatusAdapterTests(unittest.TestCase):
     def test_general_status_background_is_packaged_as_valid_pbm(self):
         path = Ev3OperationStatusAdapter._asset_path()
         self.assertTrue(os.path.isfile(path), path)
+        self.assertIn(os.path.join("assets", "screens", "cache"), path)
         background = Ev3OperationStatusAdapter._load_background()
         self.assertEqual((178, 128), background.size)
         self.assertEqual("1", background.mode)

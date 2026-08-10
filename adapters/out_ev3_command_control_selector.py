@@ -7,8 +7,8 @@ import time
 
 from infrastructure.ev3.button_feedback import Ev3ButtonFeedback
 from infrastructure.ev3.screen_image import (
-    load_monochrome_screen,
-    screen_asset_path
+    cached_screen_path,
+    load_monochrome_screen
 )
 from app.operation_mode_service import Commands, Controls
 from ports.command_control_selector_port import CommandControlSelectorPort
@@ -110,7 +110,7 @@ class Ev3CommandControlSelectorAdapter(CommandControlSelectorPort):
 
     @classmethod
     def _asset_path(cls, command=Commands.LOCAL, control=Controls.MANUAL):
-        return screen_asset_path(
+        return cached_screen_path(
             cls.BACKGROUND_FILENAMES[cls._background_key(command, control)]
         )
 

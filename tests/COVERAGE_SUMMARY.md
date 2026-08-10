@@ -75,3 +75,12 @@ gate mínimo de 60%.
 - Cinemática lógica Mecanum normalizada cobre avanço, ré, strafe, diagonais e rotação sem embutir polaridade física.
 - Convenção Linux `evdev` de Y negativo para cima é convertida para avanço lógico positivo.
 - A suíte completa possui **171 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.
+
+## S02.13 - Telas e cache PBM
+
+- Os assets executáveis do display EV3 passam a residir em `assets/screens/cache/` como PBMs 1-bit de 178 x 128 pixels.
+- O pacote contém **15 telas PBM** validadas, incluindo os fundos reservados para inicialização, Bluetooth, Front/Drive/Centric e status de motores.
+- `infrastructure/ev3/screen_image.py` centraliza carregamento, validação, cache em memória e invalidação quando o arquivo de origem é alterado.
+- `warm_monochrome_screen_cache()` pré-carrega os PBMs no startup quando o hardware EV3 está habilitado; falhas são reportadas e a tela afetada pode tentar novo carregamento quando utilizada.
+- Não há conversão TIFF/SVG no runtime do Rover; os adaptadores de Command & Control e General Status leem diretamente do cache deployável.
+- A suíte completa possui **179 testes aprovados**, com **74% de cobertura combinada de linhas e branches**.

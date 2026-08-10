@@ -6,7 +6,10 @@
 import socket
 import threading
 
-from infrastructure.ev3.screen_image import load_monochrome_screen, screen_asset_path
+from infrastructure.ev3.screen_image import (
+    cached_screen_path,
+    load_monochrome_screen
+)
 from infrastructure.logging.app_logger import AppLogger
 
 
@@ -100,7 +103,7 @@ class Ev3OperationStatusAdapter(object):
 
     @classmethod
     def _asset_path(cls):
-        return screen_asset_path(cls.BACKGROUND_FILENAME)
+        return cached_screen_path(cls.BACKGROUND_FILENAME)
 
     @classmethod
     def _load_background(cls):
